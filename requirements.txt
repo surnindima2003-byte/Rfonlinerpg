@@ -1,3 +1,4 @@
 aiogram==3.13.1
 SQLAlchemy==2.0.35
 aiosqlite==0.20.0
+greenlet==3.1.1
