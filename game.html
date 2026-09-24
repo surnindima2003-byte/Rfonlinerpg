@@ -399,6 +399,7 @@ textarea.field{min-height:70px;resize:vertical}
     </div>
     <div class="side">
       <button type="button" id="bagBtn">Сумка</button>
+      <button type="button" id="adminBtn" hidden style="color:#F2C14B;border-color:#F2C14B">Админ</button>
     </div>
     <div class="loc-name" id="locName">Ангар</div>
     <div class="zone-tag" id="zoneTag"></div>
@@ -832,7 +833,7 @@ function pushOut(o, r){
 const safeSpot = o => locKey === "lobby" || (npcs[0] && Math.hypot(o.x-npcs[0].x, o.y-npcs[0].y) < 150);
 
 let lastHitBy = "враг";
-function hurtPlayer(dmg, by){ if(by) lastHitBy = by;
+function hurtPlayer(dmg, by){ if(window.NET_GOD) return; if(by) lastHitBy = by;
   if(p.dead || p.inv > 0) return;
   S.hp -= dmg; p.flash = 0.15; Sfx.play("hit"); addText(p.x + (Math.random()*20-10), p.y-28, "-" + dmg, "#E0694A");
   if(S.hp <= 0){
@@ -1226,7 +1227,7 @@ function drawBot(x, y, ang, aim, t, moving, flash){
   ctx.restore();
   if(flash > 0){ ctx.globalAlpha = .55; ctx.fillStyle = "#fff"; circle(0, 0, 22); ctx.fill(); ctx.globalAlpha = 1; }
   ctx.restore();
-  label(S.name, x, y - 32, "#E4DED1");
+  label((window.NET_ADMIN ? "[ADM] " : "") + S.name, x, y - 32, window.NET_ADMIN ? "#F2C14B" : "#E4DED1");
 }
 
 function drawEnemy(e, t){
@@ -1293,6 +1294,7 @@ function drawMinimap(){
   for(const n of npcs){ ctx.fillStyle = n.kind === "portal" || n.kind === "back" ? "#9B7BFF" : (LOBBY_PADS[n.kind] || "#F2A93B"); circle(x + n.x*s, y + n.y*s, 3.5); ctx.fill(); }
   ctx.fillStyle = "#E0694A";
   for(const e of enemies) if(!e.dead && Math.hypot(e.x-p.x, e.y-p.y) < 700) ctx.fillRect(x + e.x*s - 1, y + e.y*s - 1, 2.5, 2.5);
+  if(typeof NET !== "undefined"){ ctx.fillStyle = "#7BC98A"; for(const o of NET.others.values()){ circle(x + o.rx*s, y + o.ry*s, 2.5); ctx.fill(); } }
   ctx.fillStyle = "#fff"; circle(x + p.x*s, y + p.y*s, 3); ctx.fill();
   ctx.restore();
 }
@@ -1310,6 +1312,7 @@ function draw(t){
   for(const s of sparks){ ctx.fillStyle = "#FFB347"; ctx.globalAlpha = s.life*2; ctx.fillRect(s.x, s.y, 3, 3); } ctx.globalAlpha = 1;
   drawDrops();
   for(const e of enemies) if(!e.dead) drawEnemy(e, t);
+  if(typeof drawOthers === "function") drawOthers(t, drawDt);
   if(!p.dead) drawBot(p.x, p.y, p.ang, p.aim, t, p.moving, p.flash);
   if(locKey === "lobby") drawLobbyOverlay(t, drawDt);
   for(const b of bolts){ ctx.fillStyle = "#E0694A"; ctx.shadowColor = "#E0694A"; ctx.shadowBlur = 10; circle(b.x, b.y, 5); ctx.fill(); ctx.shadowBlur = 0; }
@@ -1423,7 +1426,7 @@ function renderPortal(){
   let h = `<div class="list">`;
   for(const [k, L] of Object.entries(LOCS)){
     if(L.safe) continue;
-    const ok = S.level >= L.min;
+    const ok = S.level >= L.min || window.NET_ADMIN;
     const foes = L.npcs.map(n => NPCS[n].name).join(", ");
     h += `<div class="li"><div class="tx">${L.name}<small>С ${L.min} уровня · ${foes}${L.cores ? " · есть энергоядра" : ""}</small></div>
       <button class="act" type="button" data-go="${k}" ${ok ? "" : "disabled"}>${ok ? "Войти" : "Ур. " + L.min}</button></div>`;
@@ -1472,7 +1475,7 @@ function renderBag(){
 $("shBody").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return;
   const d = b.dataset;
-  if(d.chat !== undefined || d.wd || d.wal || d.gs) return;   // кнопки чата и кошелька обрабатываются отдельно
+  if(d.chat !== undefined || d.wd || d.wal || d.gs || d.adm) return;   // кнопки чата и кошелька обрабатываются отдельно
   if(d.tab){ trTab = d.tab; }
   else if(d.qty){ trQty = d.qty === "max" ? "max" : +d.qty; }
   else if(d.buy){
@@ -1674,7 +1677,9 @@ function msgEl(m){
   if(nick === me() || chatCh === "dm") who.disabled = true; else { who.dataset.dm = nick; who.title = "Написать лично"; }
   const lv = document.createElement("span"); lv.className = "lv"; lv.textContent = "ур. " + (+m.lvl || 1);
   const tm = document.createElement("span"); tm.className = "tm"; tm.textContent = fmtTime(m.ts);
-  top.append(who, lv, tm);
+  top.append(who);
+  if(m.admin){ const a = document.createElement("span"); a.className = "lv"; a.style.color = "#F2C14B"; a.textContent = "ADM"; top.append(a); }
+  top.append(lv, tm);
   const tx = document.createElement("div"); tx.className = "tx"; tx.textContent = m.text;
   el.append(top, tx); return el;
 }
@@ -1773,7 +1778,9 @@ async function sendChat(){
   const msg = {ch:chatCh, text:text.slice(0, 200), nick:me(), fac:S.faction, lvl:S.level, uid:chatUid || "", ts:Date.now()};
   if(chatCh === "guild") msg.g = S.guildId;
   if(chatCh === "dm") msg.to = dmTo;
-  if(chatDb){
+  if(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1 && chatCh !== "guild"){
+    NET.ws.send(JSON.stringify({t:"chat", ch:chatCh, text:msg.text, to:msg.to}));
+  } else if(chatDb){
     try{ await chatDb.collection("chat").add(msg); }
     catch(e){ chatError("Не отправлено, попробуй ещё раз"); inp.value = text; chatLastSend = 0; }
   } else { chatLocalMsgs.push({...msg, id:"l" + Math.random(), mine:true}); onChatUpdate(); }
@@ -2393,5 +2400,181 @@ $("shBody").addEventListener("click", e => { const b = e.target.closest("button[
     }
   }catch(e){}
 })();
+// ===================== СЕРВЕР: СОХРАНЕНИЯ, АДМИНКА, ЖИВОЙ МИР =====================
+// Работает только внутри Telegram (есть подпись initData). В превью этот блок молчит.
+const NET = {on:false, admin:false, id:null, ws:null, others:new Map(), god:false};
+window.NET_GOD = false; window.NET_ADMIN = false;
+
+(() => {
+  const TG = window.Telegram && window.Telegram.WebApp;
+  if(!TG || !TG.initData) return;
+  const initData = TG.initData;
+  NET.on = true;
+  const api = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData, ...(body || {})})})
+    .then(r => r.ok ? r.json() : r.text().then(t => ({ok:false, error:t})));
+
+  // ---- сохранения ----
+  let lastPushed = "";
+  function snapshot(){ return {S, W:Wl, ts:S._ts || 0}; }
+  async function push(force){
+    const js = JSON.stringify(snapshot());
+    if(!force && js === lastPushed) return;
+    S._ts = Date.now(); save();
+    const data = snapshot(); lastPushed = JSON.stringify(data);
+    try{ await api("/api/state/save", {data}); }catch(e){ lastPushed = ""; }
+  }
+  setInterval(() => push(false), 10000);
+  document.addEventListener("visibilitychange", () => { if(document.hidden) push(true); });
+
+  // ---- выдачи от администратора ----
+  const GRANT_NAME = {scrap:"лома", cores:"ядер", exp:"опыта", level:"уровней"};
+  function applyGrant(g){
+    const a = +g.payload.amount || 0;
+    if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast("Администратор выдал " + a + " " + GRANT_NAME[g.kind]); }
+    else if(g.kind === "exp"){ S.exp += a; levelUps(); toast("Администратор выдал " + a + " опыта"); }
+    else if(g.kind === "level"){ for(let i = 0; i < a; i++){ S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; } S.hp = stat().maxhp; toast("Администратор поднял уровень до " + S.level); }
+    else if(g.kind === "item" && ITEMS[g.payload.item]){
+      const it = ITEMS[g.payload.item];
+      let got = 0; for(let i = 0; i < a; i++){ if(addItem(S.inv, g.payload.item, 1, INV_MAX, g.payload.grade) || addItem(S.store, g.payload.item, 1, STORE_MAX, g.payload.grade)) got++; }
+      toast("Администратор выдал: " + it.name + (it.type === "gear" ? " (" + GRADES[g.payload.grade].name.toLowerCase() + ")" : "") + (got > 1 ? " ×" + got : "") + (got < a ? ". Не хватило места" : ""));
+    }
+    Sfx.play("level"); save(); push(true);
+    api("/api/grants/ack", {ids:[g.id]});
+  }
+
+  // ---- вход ----
+  api("/api/state/load").then(r => {
+    if(!r || !r.ok) return;
+    NET.admin = window.NET_ADMIN = !!r.admin; NET.id = r.tg.id;
+    const srv = r.save;
+    // на сервере прогресс новее (например, с другого телефона) — берём его
+    if(srv && srv.S && (srv.ts || 0) > (S._ts || 0) && !sessionStorage.getItem("mw-synced")){
+      try{
+        localStorage.setItem("mw-save-v2", JSON.stringify({...srv.S, _ts:srv.ts}));
+        if(srv.W) localStorage.setItem("mw-wallet", JSON.stringify(srv.W));
+        sessionStorage.setItem("mw-synced", "1"); location.reload(); return;
+      }catch(e){}
+    }
+    if(!srv) push(true);
+    (r.grants || []).forEach(applyGrant);
+    if(NET.admin){ $("adminBtn").hidden = false; }
+    connect();
+  }).catch(() => {});
+
+  // ---- живой мир ----
+  let retry = 1000;
+  function connect(){
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+    NET.ws = ws;
+    ws.onopen = () => { retry = 1000; ws.send(JSON.stringify({t:"auth", initData})); };
+    ws.onmessage = ev => {
+      let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
+      if(d.t === "hello"){
+        NET.admin = window.NET_ADMIN = !!d.admin; NET.id = d.id;
+        chatUid = String(d.id); chatDb = null;
+        chatShared = (d.history || []).filter(m => typeof m.text === "string");
+        onChatUpdate();
+      } else if(d.t === "players"){
+        if(d.loc !== locKey){ NET.others.clear(); return; }
+        const seen = new Set();
+        for(const o of d.list || []){
+          seen.add(o.id);
+          const cur = NET.others.get(o.id);
+          if(cur) Object.assign(cur, o); else NET.others.set(o.id, {...o, rx:o.x, ry:o.y});
+        }
+        for(const id of [...NET.others.keys()]) if(!seen.has(id)) NET.others.delete(id);
+      } else if(d.t === "chat" && d.m && typeof d.m.text === "string"){
+        chatShared.push(d.m); if(chatShared.length > 300) chatShared.shift();
+        if(!isMine(d.m)) Sfx.play("msg");
+        if(d.m.ch === "dm" && d.m.to === S.name && d.m.nick !== S.name && !S.dmList.includes(d.m.nick)) S.dmList.push(String(d.m.nick).slice(0, 16));
+        onChatUpdate();
+      } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
+    };
+    ws.onclose = () => { NET.ws = null; NET.others.clear(); setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
+  }
+
+  // своё положение — 8 раз в секунду, пока что-то меняется
+  let lastPos = "", lastSent = 0;
+  setInterval(() => {
+    const ws = NET.ws; if(!ws || ws.readyState !== 1 || !p) return;
+    const eq = {}; for(const k in S.eq) if(S.eq[k]) eq[k] = S.eq[k].g;
+    const msg = {t:"pos", loc:locKey, x:Math.round(p.x), y:Math.round(p.y), ang:+p.ang.toFixed(2), aim:+p.aim.toFixed(2), moving:p.moving, dead:p.dead,
+      nick:S.name, fac:S.faction, lvl:S.level, eq, wpn:S.eq.weapon ? S.eq.weapon.id : ""};
+    const js = JSON.stringify(msg);
+    if(js !== lastPos || Date.now() - lastSent > 2000){ ws.send(js); lastPos = js; lastSent = Date.now(); }
+  }, 125);
+
+  // ---- админ-панель ----
+  let adm = {kind:"scrap", item:"plasma", grade:3};
+  const GEAR_OPTS = Object.keys(ITEMS).filter(k => !ITEMS[k].starter);
+  function adminSheet(){
+    openSheet("Админ-панель", "Права подтверждены сервером", () => {
+      body().innerHTML = `
+        <label class="flabel" for="admTarget">Кому: @ник в Telegram или «me» для себя</label>
+        <input class="field" id="admTarget" value="me" autocapitalize="off" autocomplete="off">
+        <div class="flabel">Ресурсы</div>
+        <div class="seg">${[["scrap","Лом"],["cores","Ядра"],["exp","Опыт"],["level","Уровни"]].map(([k, n]) => `<button type="button" data-adm="kind" data-v="${k}" aria-pressed="${adm.kind === k}">${n}</button>`).join("")}</div>
+        <div class="chatin" style="margin-bottom:14px"><input class="field" id="admAmt" type="number" min="1" value="${adm.kind === "level" ? 5 : 10000}" style="margin:0"><button class="act" type="button" data-adm="give">Выдать</button></div>
+        <div class="flabel">Предмет</div>
+        <select class="field" id="admItem">${GEAR_OPTS.map(k => `<option value="${k}" ${adm.item === k ? "selected" : ""}>${ITEMS[k].name}</option>`).join("")}</select>
+        <div class="pick">${GRADES.map((g, i) => `<button type="button" data-adm="grade" data-v="${i}" aria-pressed="${adm.grade === i}" aria-label="${g.name}"><span class="sw2" style="background:${g.color}"></span></button>`).join("")}</div>
+        <button class="btn pri wide" type="button" data-adm="item">Выдать предмет</button>
+        <div class="set" style="margin-top:8px"><div class="tx">Бессмертие<small>Только для тебя, пока открыта игра</small></div><button class="sw" type="button" role="switch" data-adm="god" aria-checked="${NET.god}" aria-label="Бессмертие"></button></div>
+        <div class="flabel" style="margin-top:6px">Телепорт без ограничений по уровню</div>
+        <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
+        <p class="demo">GRAM выдавать нельзя: это настоящие деньги, их можно только пополнить.</p>`;
+    });
+  }
+  async function admGrant(payload){
+    const target = $("admTarget").value.trim() || "me";
+    const r = await api("/api/admin/grant", {target, ...payload});
+    if(r && r.ok) toast("Выдано @" + (r.target || target) + (r.online ? "" : " (получит при входе)"));
+    else toast((r && r.error) || "Не получилось");
+  }
+  $("shBody").addEventListener("click", e => {
+    const b = e.target.closest("button[data-adm]"); if(!b || !NET.admin) return;
+    const a = b.dataset.adm, v = b.dataset.v;
+    const keep = {t:$("admTarget") && $("admTarget").value, n:$("admAmt") && $("admAmt").value};
+    if(a === "kind"){ adm.kind = v; adminSheet(); $("admTarget").value = keep.t; }
+    else if(a === "grade"){ adm.item = $("admItem").value; adm.grade = +v; adminSheet(); $("admTarget").value = keep.t; $("admAmt").value = keep.n; }
+    else if(a === "give") admGrant({kind:adm.kind, amount:parseInt($("admAmt").value) || 0});
+    else if(a === "item") admGrant({kind:"item", amount:1, item:$("admItem").value, grade:adm.grade});
+    else if(a === "god"){ NET.god = window.NET_GOD = !NET.god; b.setAttribute("aria-checked", String(NET.god)); toast(NET.god ? "Бессмертие включено" : "Бессмертие выключено"); }
+    else if(a === "tp"){ closeSheet(); travel(v); }
+  });
+  $("adminBtn").addEventListener("click", adminSheet);
+})();
+
+// ---- другие пилоты на карте ----
+function drawOthers(t, dt){
+  if(!NET.others.size) return;
+  for(const o of NET.others.values()){
+    if(o.dead) continue;
+    const k = Math.min(1, (dt || 0.016)*10);
+    o.rx += (o.x - o.rx)*k; o.ry += (o.y - o.ry)*k;
+    const F = FACTIONS[o.fac] || FACTIONS.aegis, eq = o.eq || {}, gc = s => eq[s] !== undefined ? gradeColor(eq[s]) : null;
+    ctx.save(); ctx.translate(o.rx, o.ry);
+    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(3, 6, 24, 20, 0, 0, Math.PI*2); ctx.fill();
+    ctx.save(); ctx.rotate(o.ang || 0);
+    const off = o.moving ? (t*60) % 8 : 0;
+    for(const ty of [-22, 13]){
+      ctx.fillStyle = gc("legs") || "#2E3A46"; rr(-20, ty, 40, 9, 3); ctx.fill();
+      ctx.strokeStyle = "#1B232C"; ctx.lineWidth = 2; ctx.beginPath(); for(let i = -20 + off; i < 20; i += 8){ ctx.moveTo(i, ty); ctx.lineTo(i, ty+9); } ctx.stroke();
+    }
+    ctx.fillStyle = F.body; rr(-15, -14, 30, 28, 7); ctx.fill();
+    if(gc("armor")){ ctx.strokeStyle = gc("armor"); ctx.lineWidth = 3; rr(-13, -12, 26, 24, 6); ctx.stroke(); }
+    ctx.fillStyle = F.color; ctx.fillRect(-15, -3, 5, 6);
+    ctx.restore();
+    ctx.save(); ctx.rotate(o.aim || 0);
+    const bl = o.wpn === "plasma" ? 28 : o.wpn === "laser2" ? 25 : 22;
+    ctx.fillStyle = "#2E3A46"; rr(4, -3.5, bl, 7, 2); ctx.fill();
+    ctx.fillStyle = gc("weapon") || F.color; ctx.fillRect(bl, -3.5, 4, 7);
+    ctx.fillStyle = F.dark; circle(0, 0, 11); ctx.fill();
+    ctx.fillStyle = gc("head") || F.color; rr(3, -6, 5, 12, 2); ctx.fill();
+    ctx.restore(); ctx.restore();
+    const name = String(o.nick || "Пилот").slice(0, 16);
+    label((o.admin ? "[ADM] " : "") + name + " · " + (+o.lvl || 1), o.rx, o.ry - 32, o.admin ? "#F2C14B" : F.color);
+  }
+}
 </script>
 </body></html>

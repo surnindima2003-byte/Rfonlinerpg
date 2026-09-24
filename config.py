@@ -10,3 +10,6 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 
 # Порт веб-сервера: Railway передаёт его сам
 PORT = int(os.getenv("PORT", "8080"))
+
+# Администраторы игры: Telegram-ники через запятую, без @
+ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "D0gEx0").split(",") if u.strip()}
