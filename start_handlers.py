@@ -1,13 +1,30 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from sqlalchemy import select
 
 from db import SessionLocal
 from models import Player
 from game_data import FACTIONS, STARTING_STATS
+from config import WEBAPP_URL
 
 router = Router()
+
+
+def play_keyboard():
+    # Кнопка, открывающая игру внутри Telegram
+    if not WEBAPP_URL:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL))]])
+
+
+@router.message(Command("play"))
+async def cmd_play(message: Message):
+    kb = play_keyboard()
+    if kb:
+        await message.answer("Твой робот ждёт в ангаре:", reply_markup=kb)
+    else:
+        await message.answer("Игра пока не подключена: не задан адрес WEBAPP_URL.")
 
 
 def factions_keyboard() -> InlineKeyboardMarkup:
@@ -26,7 +43,8 @@ async def cmd_start(message: Message):
 
         if player:
             await message.answer(
-                f"С возвращением, пилот {player.name}! Введи /profile, чтобы увидеть своего робота."
+                f"С возвращением, пилот {player.name}! Жми «Играть», чтобы открыть ангар.",
+                reply_markup=play_keyboard(),
             )
             return
 
@@ -60,8 +78,11 @@ async def choose_faction(callback: CallbackQuery):
 
     await callback.message.edit_text(
         f"Робот собран и подключён к сети {FACTIONS[faction_key].split(' — ')[0]}.\n\n"
+        "Жми «Играть», чтобы открыть ангар и управлять роботом.\n\n"
         "Команды:\n"
+        "/play — открыть игру\n"
         "/profile — статус робота\n"
-        "/explore — исследовать зону"
+        "/explore — быстрый рейд в чате",
+        reply_markup=play_keyboard(),
     )
     await callback.answer()
