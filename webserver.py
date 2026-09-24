@@ -10,9 +10,12 @@ from aiohttp import web, WSMsgType
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from sqlalchemy import select, func
 
-from config import BOT_TOKEN, ADMIN_USERNAMES
-from db import SessionLocal
-from models import GameSave, Grant
+import re
+import secrets
+
+from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH
+from db import SessionLocal, engine
+from models import Base, GameSave, Grant, Doc, Meta
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
@@ -29,6 +32,22 @@ GEAR_IDS = {
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
 
 log = logging.getLogger("web")
+
+
+# ---------- сброс базы ----------
+def ensure_epoch():
+    """Если метка сброса изменилась, удаляем ВСЕ таблицы и создаём заново (один раз)."""
+    Meta.__table__.create(engine, checkfirst=True)
+    with engine.begin() as conn:
+        row = conn.execute(Meta.__table__.select().where(Meta.key == "epoch")).first()
+        current = row.value if row else None
+    if current == DATA_EPOCH:
+        return
+    log.warning("СБРОС БАЗЫ: эпоха %s -> %s, все данные удаляются", current, DATA_EPOCH)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(Meta.__table__.insert().values(key="epoch", value=DATA_EPOCH))
 
 
 # ---------- проверка игрока по подписи Telegram ----------
@@ -81,7 +100,7 @@ async def api_load(request):
             row.username, row.name = user["username"], user["name"]
             await s.commit()
     save = json.loads(row.data) if row and row.data else None
-    return web.json_response({"ok": True, "admin": user["admin"], "tg": {"id": user["id"], "username": user["username"]},
+    return web.json_response({"ok": True, "epoch": DATA_EPOCH, "admin": user["admin"], "tg": {"id": user["id"], "username": user["username"]},
                               "save": save, "grants": [grant_dict(g) for g in grants]})
 
 
@@ -97,6 +116,15 @@ async def api_save(request):
             row = GameSave(tg_id=user["id"])
             s.add(row)
         row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
+        s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
+        try:
+            row.bm = max(0, min(10_000_000, int(data.get("bm", 0))))
+            row.lvl = max(1, min(999, int(s_.get("level", 1))))
+        except (TypeError, ValueError):
+            pass
+        row.nick = str(s_.get("name", ""))[:16] or user["name"][:16]
+        row.cls = s_.get("cls") if s_.get("cls") in ("guard", "reaper", "sniper", "techno") else ""
+        row.guild_id = str(s_.get("guildId", ""))[:64]
         await s.commit()
     return web.json_response({"ok": True})
 
@@ -148,6 +176,229 @@ async def api_admin_grant(request):
     log.info("Админ @%s выдал %s %s игроку %s", user["username"], kind, payload, target_name)
     delivered = await push_to_player(tg_id, {"t": "grant", "grant": gd})
     return web.json_response({"ok": True, "online": delivered, "target": target_name})
+
+
+# ---------- гильдии: хранилище документов с проверкой прав ----------
+SEG = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
+MAX_DOC = 8_000
+
+
+def parse_path(path):
+    """guilds/{g} | guilds/{g}/{members|requests|log}/{id}. Возвращает (gid, sub, id) или None."""
+    parts = str(path).split("/")
+    if len(parts) == 2 and parts[0] == "guilds" and SEG.match(parts[1]):
+        return parts[1], None, None
+    if len(parts) == 4 and parts[0] == "guilds" and SEG.match(parts[1]) and parts[2] in ("members", "requests", "log") and SEG.match(parts[3]):
+        return parts[1], parts[2], parts[3]
+    return None
+
+
+def parse_col(col):
+    parts = str(col).split("/")
+    if col == "guilds":
+        return True
+    return len(parts) == 3 and parts[0] == "guilds" and SEG.match(parts[1]) and parts[2] in ("members", "requests", "log")
+
+
+async def doc_get(s, path):
+    row = (await s.execute(select(Doc).where(Doc.path == path))).scalar_one_or_none()
+    return (row, json.loads(row.data)) if row else (None, None)
+
+
+async def doc_put(s, path, data):
+    row, _ = await doc_get(s, path)
+    raw = json.dumps(data, ensure_ascii=False)
+    if len(raw.encode()) > MAX_DOC:
+        raise web.HTTPBadRequest(text="doc too big")
+    if not row:
+        row = Doc(path=path, col=path.rsplit("/", 1)[0])
+        s.add(row)
+    row.data, row.updated = raw, int(time.time() * 1000)
+
+
+def deny(msg="нет прав"):
+    raise web.HTTPForbidden(text=msg)
+
+
+async def check_write(s, op, path, data, uid):
+    """Права ролей проверяет сервер: подделать их со страницы нельзя."""
+    p = parse_path(path)
+    if not p:
+        raise web.HTTPBadRequest(text="bad path")
+    gid, sub, did = p
+    _, guild = await doc_get(s, f"guilds/{gid}")
+    _, me = await doc_get(s, f"guilds/{gid}/members/{uid}")
+    my_role = me.get("role") if me else None
+    is_leader = bool(guild) and guild.get("leader") == uid
+
+    if sub is None:  # сама гильдия
+        if op == "set":
+            if guild:
+                deny()
+            if data.get("leader") != uid:
+                deny()
+            name, tag = str(data.get("name", "")).strip().lower(), str(data.get("tag", "")).strip().upper()
+            others = (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all()
+            for o in others:
+                od = json.loads(o.data)
+                if str(od.get("name", "")).lower() == name or str(od.get("tag", "")).upper() == tag:
+                    deny("название или тег заняты")
+            return
+        if not guild:
+            deny()
+        if op == "delete":
+            if not is_leader:
+                deny()
+            return
+        if op == "update":
+            allowed = {"desc", "open", "minLvl", "emblem", "level", "spent", "leader", "leaderNick", "count"} if is_leader else ({"count", "spent"} if me else {"count"})
+            if set(data) - allowed:
+                deny()
+            return
+        deny()
+
+    if not guild:
+        deny("гильдии нет")
+    if sub == "members":
+        if op == "set":
+            if did == uid:
+                role = data.get("role")
+                if role == "leader" and is_leader:
+                    return
+                if role == "member" and (guild.get("open") or is_leader):
+                    return
+                deny("гильдия по заявкам")
+            if my_role in ("leader", "officer") and data.get("role") == "member":
+                _, req = await doc_get(s, f"guilds/{gid}/requests/{did}")
+                if req:
+                    return
+            deny()
+        if op == "update":
+            keys = set(data)
+            if did == uid and keys <= {"donated", "xp", "lvl", "nick", "bm", "role"}:
+                if "role" in keys and not (is_leader or data.get("role") == my_role):
+                    deny()
+                return
+            if is_leader and keys <= {"role"}:
+                return
+            deny()
+        if op == "delete":
+            if did == uid or is_leader:
+                return
+            _, target = await doc_get(s, path)
+            if my_role == "officer" and target and target.get("role") == "member":
+                return
+            deny()
+    if sub == "requests":
+        if op == "set" and did == uid:
+            return
+        if op == "delete" and (did == uid or my_role in ("leader", "officer")):
+            return
+        deny()
+    if sub == "log":
+        if op in ("set", "add") and me:
+            return
+        if op == "delete" and is_leader:
+            return
+        deny()
+    deny()
+
+
+def doc_view(path, data):
+    return {"id": path.rsplit("/", 1)[1], "data": data}
+
+
+async def api_db(request):
+    body, user = await read_auth(request)
+    uid = str(user["id"])
+    op = body.get("op")
+    async with SessionLocal() as s:
+        if op == "get":
+            path = str(body.get("path", ""))
+            if not parse_path(path):
+                raise web.HTTPBadRequest(text="bad path")
+            _, data = await doc_get(s, path)
+            return web.json_response({"ok": True, "exists": data is not None, "data": data})
+        if op == "list":
+            col = str(body.get("col", ""))
+            if not parse_col(col):
+                raise web.HTTPBadRequest(text="bad col")
+            q = body.get("q") or {}
+            rows = (await s.execute(select(Doc).where(Doc.col == col))).scalars().all()
+            docs = [doc_view(r.path, json.loads(r.data)) for r in rows]
+            for f, o, v in (q.get("where") or [])[:5]:
+                if o == "==":
+                    docs = [d for d in docs if d["data"].get(f) == v]
+            if q.get("order"):
+                f, direction = q["order"][0], q["order"][1] if len(q["order"]) > 1 else "asc"
+                docs.sort(key=lambda d: (d["data"].get(f) is None, d["data"].get(f, 0)), reverse=direction == "desc")
+            limit = int(q.get("limit") or 200)
+            return web.json_response({"ok": True, "docs": docs[:min(limit, 200)]})
+        if op in ("set", "update", "delete", "add"):
+            data = body.get("data") if isinstance(body.get("data"), dict) else {}
+            if op == "add":
+                col = str(body.get("col", ""))
+                if not parse_col(col) or col == "guilds":
+                    raise web.HTTPBadRequest(text="bad col")
+                path = f"{col}/a{int(time.time()*1000):x}{secrets.token_hex(3)}"
+            else:
+                path = str(body.get("path", ""))
+            await check_write(s, "add" if op == "add" else op, path, data, uid)
+            if op == "delete":
+                row, _ = await doc_get(s, path)
+                if row:
+                    await s.execute(Doc.__table__.delete().where(Doc.path == path))
+            elif op == "update":
+                row, cur = await doc_get(s, path)
+                if cur is None:
+                    raise web.HTTPNotFound(text="no doc")
+                await doc_put(s, path, {**cur, **data})
+            else:
+                await doc_put(s, path, data)
+            await s.commit()
+            return web.json_response({"ok": True, "id": path.rsplit("/", 1)[1]})
+    raise web.HTTPBadRequest(text="bad op")
+
+
+# ---------- рейтинг по боевой мощи ----------
+async def api_top(request):
+    body, user = await read_auth(request)
+    kind = body.get("kind")
+    async with SessionLocal() as s:
+        guild_rows = (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all()
+        guilds = {r.path.split("/")[1]: json.loads(r.data) for r in guild_rows}
+        if kind == "players":
+            rows = (await s.execute(select(GameSave).where(GameSave.bm > 0).order_by(GameSave.bm.desc()).limit(100))).scalars().all()
+            me = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+            my_rank = None
+            if me and me.bm > 0:
+                my_rank = (await s.execute(select(func.count()).select_from(GameSave).where(GameSave.bm > me.bm))).scalar() + 1
+            items = [{"id": str(r.tg_id), "nick": r.nick or r.name[:16], "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
+                      "tag": (guilds.get(r.guild_id) or {}).get("tag", "")} for r in rows]
+            return web.json_response({"ok": True, "items": items, "me": {"rank": my_rank, "bm": me.bm if me else 0}})
+        if kind == "guilds":
+            member_rows = (await s.execute(select(Doc).where(Doc.col.like("guilds/%/members")))).scalars().all()
+            uids = {}
+            for r in member_rows:
+                gid = r.path.split("/")[1]
+                uid = r.path.rsplit("/", 1)[1]
+                if uid.isdigit():
+                    uids.setdefault(gid, []).append(int(uid))
+            all_ids = [i for lst in uids.values() for i in lst]
+            bms = {}
+            if all_ids:
+                for tg_id, bm in (await s.execute(select(GameSave.tg_id, GameSave.bm).where(GameSave.tg_id.in_(all_ids)))).all():
+                    bms[tg_id] = bm or 0
+            items = []
+            for gid, g in guilds.items():
+                members = uids.get(gid, [])
+                items.append({"id": gid, "name": g.get("name", ""), "tag": g.get("tag", ""), "emblem": g.get("emblem"),
+                              "level": g.get("level", 1), "count": len(members), "bm": sum(bms.get(m, 0) for m in members)})
+            items.sort(key=lambda x: x["bm"], reverse=True)
+            my_gid = next((gid for gid, lst in uids.items() if user["id"] in lst), None)
+            my_rank = next((i + 1 for i, it in enumerate(items) if it["id"] == my_gid), None)
+            return web.json_response({"ok": True, "items": items[:50], "me": {"rank": my_rank, "id": my_gid}})
+    raise web.HTTPBadRequest(text="bad kind")
 
 
 # ---------- живой мир: WebSocket ----------
@@ -273,6 +524,7 @@ async def world_loop():
 
 
 async def start_web(port: int):
+    ensure_epoch()
     app = web.Application(client_max_size=512 * 1024)
     app.router.add_get("/", game_page)
     app.router.add_get("/health", health)
@@ -280,6 +532,8 @@ async def start_web(port: int):
     app.router.add_post("/api/state/save", api_save)
     app.router.add_post("/api/grants/ack", api_ack)
     app.router.add_post("/api/admin/grant", api_admin_grant)
+    app.router.add_post("/api/db", api_db)
+    app.router.add_post("/api/top", api_top)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()

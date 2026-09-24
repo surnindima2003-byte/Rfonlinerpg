@@ -37,6 +37,12 @@ class GameSave(Base):
     name: Mapped[str] = mapped_column(String(64), default="")
     data: Mapped[str] = mapped_column(Text, default="")
     updated: Mapped[int] = mapped_column(BigInteger, default=0)
+    # поля для рейтинга (берутся из сохранения)
+    nick: Mapped[str] = mapped_column(String(32), default="")
+    lvl: Mapped[int] = mapped_column(Integer, default=1)
+    cls: Mapped[str] = mapped_column(String(16), default="")
+    bm: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
+    guild_id: Mapped[str] = mapped_column(String(64), default="")
 
 
 class Grant(Base):
@@ -50,3 +56,21 @@ class Grant(Base):
     by_admin: Mapped[str] = mapped_column(String(64), default="")
     created: Mapped[int] = mapped_column(BigInteger, default=0)
     applied: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Doc(Base):
+    """Документы гильдий: guilds/{id}, guilds/{id}/members/{uid}, .../requests/{uid}, .../log/{id}."""
+    __tablename__ = "docs"
+
+    path: Mapped[str] = mapped_column(String(256), primary_key=True)
+    col: Mapped[str] = mapped_column(String(200), index=True)
+    data: Mapped[str] = mapped_column(Text, default="{}")
+    updated: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class Meta(Base):
+    """Служебные значения, например номер «эпохи» базы после сброса."""
+    __tablename__ = "meta"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")

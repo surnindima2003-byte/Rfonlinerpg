@@ -13,3 +13,9 @@ PORT = int(os.getenv("PORT", "8080"))
 
 # Администраторы игры: Telegram-ники через запятую, без @
 ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "D0gEx0").split(",") if u.strip()}
+
+# Сброс базы: сервер сносит все таблицы, когда эта метка меняется.
+# Чтобы снова обнулить игру, поменяй WIPE_TOKEN в Railway → Variables (например на wipe-2).
+SCHEMA_VERSION = "3"
+WIPE_TOKEN = os.getenv("WIPE_TOKEN", "wipe-1")
+DATA_EPOCH = f"{SCHEMA_VERSION}:{WIPE_TOKEN}"
