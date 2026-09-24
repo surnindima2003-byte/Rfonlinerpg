@@ -122,7 +122,11 @@ async def api_save(request):
             row.lvl = max(1, min(999, int(s_.get("level", 1))))
         except (TypeError, ValueError):
             pass
-        row.nick = str(s_.get("name", ""))[:16] or user["name"][:16]
+        new_nick = str(s_.get("name", ""))[:16]
+        if new_nick and new_nick != row.nick:
+            clash = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == new_nick.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
+            if not clash:
+                row.nick = new_nick
         row.cls = s_.get("cls") if s_.get("cls") in ("guard", "reaper", "sniper", "techno") else ""
         row.guild_id = str(s_.get("guildId", ""))[:64]
         await s.commit()
@@ -360,6 +364,34 @@ async def api_db(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
+# ---------- позывной: проверка, что имя свободно ----------
+RESERVED_NICKS = {"пилот", "pilot", "admin", "админ", "administrator", "администратор", "moderator", "модератор", "system", "система"}
+
+
+def valid_nick(name):
+    return 3 <= len(name) <= 16 and name == name.strip() and "  " not in name and all(ch.isalnum() or ch in "_- " for ch in name)
+
+
+async def api_name(request):
+    body, user = await read_auth(request)
+    name = str(body.get("name", "")).strip()
+    if not valid_nick(name):
+        return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
+    if name.lower() in RESERVED_NICKS:
+        return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
+    async with SessionLocal() as s:
+        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
+        if taken:
+            return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
+        row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+        if not row:
+            row = GameSave(tg_id=user["id"], username=user["username"], name=user["name"], data="", updated=int(time.time()))
+            s.add(row)
+        row.nick = name
+        await s.commit()
+    return web.json_response({"ok": True})
+
+
 # ---------- рейтинг по боевой мощи ----------
 async def api_top(request):
     body, user = await read_auth(request)
@@ -426,13 +458,18 @@ def clean_pos(d, info):
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
         info["cls"] = d.get("cls") if d.get("cls") in CLASSES else ""
+        # гильдия над головой: тег, название, эмблема
+        info["gt"] = str(d.get("gt", ""))[:4]
+        info["gn"] = str(d.get("gn", ""))[:20]
+        info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
+        info["gc"] = d.get("gc") if isinstance(d.get("gc"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", d.get("gc")) else ""
         info["seen"] = time.time()
     except (TypeError, ValueError):
         pass
 
 
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "admin")}
+    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "admin")}
 
 
 async def push_to_player(tg_id, payload):
@@ -534,6 +571,7 @@ async def start_web(port: int):
     app.router.add_post("/api/admin/grant", api_admin_grant)
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
+    app.router.add_post("/api/name", api_name)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
