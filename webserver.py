@@ -27,7 +27,7 @@ GEAR_IDS = {
     "st_head", "st_weapon", "st_module", "st_armor", "st_core", "st_legs",
     "laser1", "laser2", "plasma", "sensor1", "sensor2", "plate1", "plate2",
     "tracks1", "tracks2", "servo", "shieldgen", "reactor1", "reactor2",
-    "kit_s", "kit_l", "wire", "plate", "chip",
+    "kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti",
 }
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
 
@@ -591,6 +591,8 @@ def clean_pos(d, info):
         # гильдия над головой: тег, название, эмблема
         info["hp"] = max(0, min(100000, int(d.get("hp", 0))))
         info["mhp"] = max(1, min(100000, int(d.get("mhp", 1))))
+        info["cp"] = max(0, min(1000000, int(d.get("cp", 0))))
+        info["mcp"] = max(1, min(1000000, int(d.get("mcp", 1))))
         info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
@@ -602,7 +604,7 @@ def clean_pos(d, info):
 
 
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "bm", "admin")}
+    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "cp", "mcp", "bm", "admin")}
 
 
 async def push_to_player(tg_id, payload):
