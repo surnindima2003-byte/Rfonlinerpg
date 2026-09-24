@@ -437,6 +437,136 @@ async def api_top(request):
 clients = {}                 # ws -> данные игрока
 chat_history = deque(maxlen=60)
 
+# ---------- пати (до 4 игроков, живёт в памяти сервера) ----------
+PARTY_MAX = 4
+parties = {}                 # id пати -> {"id", "leader", "members": [tg_id, ...]}
+member_party = {}            # tg_id -> id пати
+invites = {}                 # tg_id приглашённого -> {tg_id пригласившего: время}
+last_heal = {}               # tg_id -> время последнего лечения
+
+
+def online(uid):
+    return next((i for i in clients.values() if i.get("id") == uid), None)
+
+
+def party_payload(pid):
+    pt = parties.get(pid)
+    if not pt:
+        return None
+    members = []
+    for uid in pt["members"]:
+        i = online(uid) or {}
+        members.append({"id": uid, "nick": i.get("nick", "?"), "lvl": i.get("lvl", 1), "cls": i.get("cls", ""),
+                        "hp": i.get("hp", 0), "mhp": i.get("mhp", 1), "loc": i.get("loc", ""), "online": bool(i)})
+    return {"id": pid, "leader": pt["leader"], "members": members}
+
+
+async def send_party(pid, extra_uids=()):
+    payload = {"t": "party", "party": party_payload(pid)}
+    targets = set(parties.get(pid, {}).get("members", [])) | set(extra_uids)
+    for uid in targets:
+        await push_to_player(uid, payload if uid in parties.get(pid, {}).get("members", []) else {"t": "party", "party": None})
+
+
+async def party_leave(uid, kicked=False):
+    pid = member_party.pop(uid, None)
+    if not pid or pid not in parties:
+        return
+    pt = parties[pid]
+    if uid in pt["members"]:
+        pt["members"].remove(uid)
+    await push_to_player(uid, {"t": "party", "party": None})
+    if kicked:
+        await push_to_player(uid, {"t": "pinfo", "text": "Тебя исключили из пати"})
+    if len(pt["members"]) <= 1:
+        for rest in pt["members"]:
+            member_party.pop(rest, None)
+            await push_to_player(rest, {"t": "party", "party": None})
+            await push_to_player(rest, {"t": "pinfo", "text": "Пати распущена"})
+        parties.pop(pid, None)
+        return
+    if pt["leader"] == uid:
+        pt["leader"] = pt["members"][0]
+    await send_party(pid)
+
+
+async def handle_party(d, info):
+    t, uid = d.get("t"), info["id"]
+    try:
+        other = int(d.get("to") or d.get("from") or d.get("id") or 0)
+    except (TypeError, ValueError):
+        other = 0
+    if t == "pinv":
+        tgt = online(other)
+        if not tgt or other == uid:
+            return await push_to_player(uid, {"t": "pinfo", "text": "Игрок не в сети"})
+        if other in member_party:
+            return await push_to_player(uid, {"t": "pinfo", "text": "Игрок уже в пати"})
+        pid = member_party.get(uid)
+        if pid and (parties[pid]["leader"] != uid):
+            return await push_to_player(uid, {"t": "pinfo", "text": "Приглашать может только лидер пати"})
+        if pid and len(parties[pid]["members"]) >= PARTY_MAX:
+            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        invites.setdefault(other, {})[uid] = time.time()
+        await push_to_player(other, {"t": "pinv", "from": {"id": uid, "nick": info["nick"], "lvl": info["lvl"], "cls": info.get("cls", "")}})
+        await push_to_player(uid, {"t": "pinfo", "text": "Приглашение отправлено"})
+    elif t == "pacc":
+        ts = invites.get(uid, {}).pop(other, None)
+        if not ts or time.time() - ts > 60 or not online(other):
+            return await push_to_player(uid, {"t": "pinfo", "text": "Приглашение устарело"})
+        pid = member_party.get(other)
+        if not pid:
+            pid = f"p{other}-{int(time.time())}"
+            parties[pid] = {"id": pid, "leader": other, "members": [other]}
+            member_party[other] = pid
+        if len(parties[pid]["members"]) >= PARTY_MAX:
+            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        if uid in member_party:
+            await party_leave(uid)
+        parties[pid]["members"].append(uid)
+        member_party[uid] = pid
+        await send_party(pid)
+    elif t == "pdec":
+        if invites.get(uid, {}).pop(other, None):
+            await push_to_player(other, {"t": "pinfo", "text": info["nick"] + " отклонил приглашение"})
+    elif t == "pleave":
+        await party_leave(uid)
+    elif t == "pkick":
+        pid = member_party.get(uid)
+        if pid and parties[pid]["leader"] == uid and other in parties[pid]["members"] and other != uid:
+            await party_leave(other, kicked=True)
+    elif t == "heal":
+        pid = member_party.get(uid)
+        tgt = online(other)
+        if not pid or not tgt or member_party.get(other) != pid or other == uid:
+            return
+        if tgt["loc"] != info["loc"] or ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 380:
+            return
+        if time.time() - last_heal.get(uid, 0) < 10:
+            return
+        last_heal[uid] = time.time()
+        try:
+            amount = int(d.get("amount", 0))
+        except (TypeError, ValueError):
+            amount = 0
+        amount = max(1, min(amount, 20 + 5 * info["lvl"], 400))
+        await push_to_player(other, {"t": "healed", "from": info["nick"], "amount": amount})
+    elif t == "pxp":
+        pid = member_party.get(uid)
+        if not pid:
+            return
+        try:
+            amount = max(0, min(int(d.get("amount", 0)), 500))
+        except (TypeError, ValueError):
+            return
+        share = amount * 4 // 10
+        if share <= 0:
+            return
+        for m in parties[pid]["members"]:
+            i = online(m)
+            if m != uid and i and i["loc"] == info["loc"]:
+                await push_to_player(m, {"t": "pxp", "amount": share, "from": info["nick"]})
+
 
 def clean_pos(d, info):
     """Берём из сообщения только допустимые поля, чтобы нельзя было прислать мусор другим игрокам."""
@@ -459,6 +589,9 @@ def clean_pos(d, info):
         info["wpn"] = str(d.get("wpn", ""))[:12]
         info["cls"] = d.get("cls") if d.get("cls") in CLASSES else ""
         # гильдия над головой: тег, название, эмблема
+        info["hp"] = max(0, min(100000, int(d.get("hp", 0))))
+        info["mhp"] = max(1, min(100000, int(d.get("mhp", 1))))
+        info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
@@ -469,7 +602,7 @@ def clean_pos(d, info):
 
 
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "admin")}
+    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "bm", "admin")}
 
 
 async def push_to_player(tg_id, payload):
@@ -522,6 +655,8 @@ async def ws_handler(request):
                 continue
             if t == "pos":
                 clean_pos(d, info)
+            elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
+                await handle_party(d, info)
             elif t == "chat":
                 now = time.time()
                 text = str(d.get("text", "")).strip()[:200]
@@ -540,13 +675,20 @@ async def ws_handler(request):
                     await broadcast({"t": "chat", "m": m}, only=lambda i: i["nick"] == to or i["id"] == info["id"])
     finally:
         clients.pop(ws, None)
+        if info and not online(info["id"]):
+            await party_leave(info["id"])
     return ws
 
 
 async def world_loop():
-    """10 раз в секунду рассылаем каждому игроку остальных пилотов в его локации."""
+    """10 раз в секунду рассылаем каждому игроку остальных пилотов в его локации, раз в секунду — состав пати."""
+    tick = 0
     while True:
         await asyncio.sleep(0.1)
+        tick += 1
+        if tick % 10 == 0:
+            for pid in list(parties):
+                await send_party(pid)
         by_loc = {}
         for info in clients.values():
             by_loc.setdefault(info["loc"], []).append(info)
