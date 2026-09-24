@@ -18,6 +18,7 @@ GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "scrapfields", "reactor_ruins", "iron_canyon"}
 FACTIONS = {"aegis", "vex", "core"}
+CLASSES = {"", "guard", "reaper", "sniper", "techno"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
 GEAR_IDS = {
     "st_head", "st_weapon", "st_module", "st_armor", "st_core", "st_legs",
@@ -173,13 +174,14 @@ def clean_pos(d, info):
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
+        info["cls"] = d.get("cls") if d.get("cls") in CLASSES else ""
         info["seen"] = time.time()
     except (TypeError, ValueError):
         pass
 
 
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "admin")}
+    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "admin")}
 
 
 async def push_to_player(tg_id, payload):
