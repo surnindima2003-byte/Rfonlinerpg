@@ -88,13 +88,13 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .ench-table div.cur{outline:2px solid #F2C14B}
 .ench-table b{display:block;font-size:12px}.bar.xp{height:4px}.bar.xp i{background:#5FD4E8}
 .hud-res{display:flex;gap:10px;font-size:12px;margin-top:5px;opacity:.9}
-.side{position:absolute;left:8px;top:84px;display:flex;flex-direction:column;gap:6px}
+.side{position:absolute;left:8px;top:calc(var(--hb, 120px) + 6px);display:flex;flex-direction:column;gap:6px}
 .side button{background:rgba(20,27,34,.82);border:1px solid #34414E;color:#E4DED1;border-radius:10px;padding:6px 10px;font-size:12px;text-align:left}
 .loc-name{position:absolute;right:8px;top:103px;width:96px;text-align:center;color:#E4DED1;font-size:11px;opacity:.8;pointer-events:none}
 .zone-tag{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);color:#E4DED1;font:20px 'Russo One',sans-serif;opacity:0;transition:opacity .6s;pointer-events:none;text-shadow:0 2px 8px #000;text-align:center;white-space:nowrap}
 .zone-tag small{display:block;font:13px Rubik,sans-serif;opacity:.8}
 .zone-tag.show{opacity:1}
-.talk{position:absolute;left:50%;top:176px;transform:translateX(-50%);border:1px solid var(--faction);background:rgba(20,27,34,.9);color:#E4DED1;border-radius:12px;padding:10px 18px;font:14px 'Russo One',sans-serif;box-shadow:0 0 18px rgba(242,169,59,.25);white-space:nowrap}
+.talk{position:absolute;left:8px;bottom:62px;border:1px solid var(--faction);background:rgba(20,27,34,.9);color:#E4DED1;border-radius:12px;padding:10px 18px;font:14px 'Russo One',sans-serif;box-shadow:0 0 18px rgba(242,169,59,.25);white-space:nowrap}
 .talk[hidden]{display:none}
 .stick{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid rgba(228,222,209,.25);background:rgba(20,27,34,.35);pointer-events:none;display:none}
 .stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(228,222,209,.35);border:2px solid rgba(228,222,209,.5)}
@@ -428,8 +428,11 @@ button.li{width:100%;font:inherit;color:inherit}
 
 /* ---- меню под мини-картой ---- */
 .gmenu{position:absolute;right:8px;top:122px;width:108px;display:flex;flex-direction:column;gap:6px;z-index:3}
-.gm-list{display:flex;flex-direction:column;gap:6px}
+.gm-list{position:absolute;right:0;top:46px;width:236px;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:rgba(12,17,23,.96);border:1px solid #2E3B49;border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.55);z-index:4}
 .gm-list[hidden]{display:none}
+.gm-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3}
+.gm-list[hidden] + .gm-back{display:none}
+.gm-toggle{position:relative;z-index:4}
 .gm-b{display:flex;align-items:center;gap:7px;background:linear-gradient(180deg,rgba(24,33,43,.95),rgba(14,20,27,.95));border:1px solid #2E3B49;border-left:3px solid var(--c);border-radius:10px;padding:8px 9px;color:var(--c);font:12px 'Russo One',sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.35);text-align:left}
 .gm-b svg{width:17px;height:17px;flex:none}
 .gm-b span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -439,7 +442,7 @@ button.li{width:100%;font:inherit;color:inherit}
 @keyframes gmIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
 
 /* ---- таргет и пати ---- */
-.tframe{position:absolute;left:calc(50% - 30px);top:84px;transform:translateX(-50%);width:196px;background:rgba(16,22,28,.92);border:1px solid #34414E;border-radius:12px;padding:7px 8px;color:#E4DED1;z-index:2}
+.tframe{position:absolute;left:100px;right:124px;top:calc(var(--hb, 120px) + 6px);min-width:150px;background:rgba(16,22,28,.92);border:1px solid #34414E;border-radius:12px;padding:7px 8px;color:#E4DED1;z-index:2}
 .tframe[hidden]{display:none}
 .tf-top{display:flex;align-items:center;gap:7px}
 .tf-ic{width:28px;height:28px;border-radius:8px;background:#1B232C;display:grid;place-items:center;flex:none;overflow:hidden}
@@ -458,7 +461,7 @@ button.li{width:100%;font:inherit;color:inherit}
 .tf-acts button[data-tf="heal"]{border-color:#7BC98A;color:#7BC98A}
 .tf-acts button[data-tf="invite"]{border-color:var(--faction);color:var(--faction)}
 .tf-acts button:disabled{opacity:.5}
-.pframes{position:absolute;left:8px;top:150px;width:112px;display:flex;flex-direction:column;gap:5px;z-index:2}
+.pframes{position:absolute;left:8px;top:calc(var(--hb, 120px) + 100px);width:112px;display:flex;flex-direction:column;gap:5px;z-index:2}
 .pframes[hidden]{display:none}
 .pf{display:grid;grid-template-columns:1fr auto;gap:2px 4px;background:rgba(16,22,28,.88);border:1px solid #34414E;border-radius:9px;padding:5px 7px;text-align:left;color:#E4DED1}
 .pf.far{opacity:.6}
@@ -746,6 +749,7 @@ textarea.field{min-height:70px;resize:vertical}
         <button type="button" class="gm-b" data-gm="season" style="--c:#5FD4E8"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Сезон</span></button>
         <button type="button" class="gm-b" data-gm="codex" style="--c:#9B7BFF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg><span>Кодекс</span></button>
       </div>
+      <div class="gm-back" id="gmBack"></div>
     </div>
     <div class="pframes" id="pframes" hidden></div>
     <div class="tframe" id="tframe" hidden>
@@ -1312,7 +1316,7 @@ const safeSpot = o => locKey === "lobby" || (npcs[0] && Math.hypot(o.x-npcs[0].x
 let lastHitBy = "враг";
 function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy = by;
   const stp = stat(); dmg = Math.max(1, Math.round(dmg*(1 - stp.dmgRed)));
-  if(src && !src.dead && stp.thorns && Math.random() < stp.thorns && typeof hitEnemy === "function") hitEnemy(src, stp.atk*0.5, "aoe");
+  if(src && !src.dead && stp.thorns && los(p.x, p.y, src.x, src.y) && Math.random() < stp.thorns && typeof hitEnemy === "function") hitEnemy(src, stp.atk*0.5, "aoe");
   if(p.dead || p.inv > 0) return;
   S.hp -= dmg; p.flash = 0.15; Sfx.play("hit"); addText(p.x + (Math.random()*20-10), p.y-28, "-" + dmg, "#E0694A");
   if(S.hp <= 0){
@@ -1337,7 +1341,7 @@ function killEnemy(e){
 }
 function nearestEnemy(range){
   let best = null, bd = range;
-  for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x-p.x, e.y-p.y); if(d < bd){ bd = d; best = e; } }
+  for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x-p.x, e.y-p.y); if(d < bd && los(p.x, p.y, e.x, e.y)){ bd = d; best = e; } }
   return best;
 }
 
@@ -1384,7 +1388,7 @@ function update(dt){
   const RANGE = CP.range + st.range;
   const locked = typeof lockedEnemy === "function" ? lockedEnemy() : null;
   const t = locKey === "lobby" ? null : (locked && Math.hypot(locked.x-p.x, locked.y-p.y) < Math.max(RANGE, 240) + 160 ? locked : nearestEnemy(Math.max(RANGE, 240) + (auto ? 40 : 0))); p.target = t;
-  const inReach = t && Math.hypot(t.x-p.x, t.y-p.y) <= RANGE + NPCS[t.type].r + (auto ? 10 : 0);
+  const inReach = t && Math.hypot(t.x-p.x, t.y-p.y) <= RANGE + NPCS[t.type].r + (auto ? 10 : 0) && los(p.x, p.y, t.x, t.y);
   const wantAim = t ? Math.atan2(t.y-p.y, t.x-p.x) : p.ang;
   const da2 = ((wantAim - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += da2*Math.min(1, dt*16);
   if(CP.melee && auto && t && !inReach && !p.moving && stick.id === null){ const a = Math.atan2(t.y-p.y, t.x-p.x); const ax = p.x, ay = p.y; p.x += Math.cos(a)*speed*dt; p.y += Math.sin(a)*speed*dt; p.ang = a; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); }
@@ -1438,13 +1442,13 @@ function updateEnemies(dt, st){
     e.cd -= dt; e.lunge -= dt;
     const dx = p.x-e.x, dy = p.y-e.y, d = Math.hypot(dx,dy);
     const safe = p.dead || safeSpot(p);
-    if(!safe && d < 240) e.chase = true;
-    if(safe || d > 480) e.chase = false;
+    if(!safe && d < 240 && !e.room) e.chase = true;             // в подземельях моб агрится только когда его ударили
+    if(safe || d > (e.room ? 560 : 480)) e.chase = false;
     let vx = 0, vy = 0;
     if(e.chase){
       e.ang = Math.atan2(dy,dx);
       if(d > k.range*0.85){ vx = dx/d*k.speed; vy = dy/d*k.speed; }
-      if(d <= k.range && e.cd <= 0){
+      if(d <= k.range && e.cd <= 0 && los(e.x, e.y, p.x, p.y)){
         e.cd = 1.3; const dmg = Math.max(1, Math.round(k.atk - st.def*(1 + buffV("def"))));
         if(k.ranged) bolts.push({x:e.x, y:e.y, vx:dx/d*330, vy:dy/d*330, dmg, life:1.2, by:k.name, src:e});
         else { hurtPlayer(dmg, k.name, e); e.lunge = 0.15; }
@@ -1776,7 +1780,7 @@ function drawEnemy(e, t){
     if(!k.dungeon) label(k.name, e.x, e.y - k.r - 20, "#E4DED1");
   }
   // у мобов подземелья всегда видны уровень и имя; цвет — насколько он опасен для тебя
-  if(k.dungeon && (p.target === e || e.hp < e.max || Math.hypot(e.x - p.x, e.y - p.y) < 150 || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
+  if(k.dungeon && (p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
     const col = S.level >= k.lvl ? "#E4DED1" : S.level + 3 >= k.lvl ? "#F2A93B" : "#E0694A";
     nameText(T(k.name), e.x, e.y - k.r - 20, col, "600 11px Rubik, sans-serif");
     nameText(T("Уровень") + " " + k.lvl, e.x, e.y - k.r - 33, "#93A0AC", "10px Rubik, sans-serif");
@@ -3189,7 +3193,7 @@ function useSkill(i){
     case "strike": { const t = need(C.range + 60); if(!t) return;
       hitEnemy(t, atk*s.mult, s.big ? "plasma" : C.melee ? "strike-m" : "beam"); if(s.stun) t.stun = s.stun; break; }
     case "aoe": {
-      for(const e of enemies){ if(e.dead) continue; if(Math.hypot(e.x-p.x, e.y-p.y) < s.radius + NPCS[e.type].r){ hitEnemy(e, atk*s.mult, "aoe"); if(s.stun && !e.dead) e.stun = s.stun; } }
+      for(const e of enemies){ if(e.dead) continue; if(Math.hypot(e.x-p.x, e.y-p.y) < s.radius + NPCS[e.type].r && los(p.x, p.y, e.x, e.y)){ hitEnemy(e, atk*s.mult, "aoe"); if(s.stun && !e.dead) e.stun = s.stun; } }
       CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius, life:.45, max:.45, c:C.color}); p.atkT = 0.25; break; }
     case "buff": CB.buffs[s.buff] = {v:s.v, t:s.dur, max:s.dur}; addText(p.x, p.y - 44, s.name, C.color); break;
     case "leap": { const t = need(s.dist); if(!t) return;
@@ -3207,7 +3211,7 @@ function useSkill(i){
       } else { p.dashT = s.dist/1150; p.dx = Math.cos(a); p.dy = Math.sin(a); }
       p.inv = 0.3; break; }
     case "volley": {
-      const list = enemies.filter(e => !e.dead && Math.hypot(e.x-p.x, e.y-p.y) < C.range + 40).sort((a, b) => Math.hypot(a.x-p.x, a.y-p.y) - Math.hypot(b.x-p.x, b.y-p.y)).slice(0, s.n);
+      const list = enemies.filter(e => !e.dead && Math.hypot(e.x-p.x, e.y-p.y) < C.range + 40 && los(p.x, p.y, e.x, e.y)).sort((a, b) => Math.hypot(a.x-p.x, a.y-p.y) - Math.hypot(b.x-p.x, b.y-p.y)).slice(0, s.n);
       if(!list.length || locKey === "lobby"){ toast("Нет цели рядом"); return; }
       list.forEach(e => hitEnemy(e, atk*s.mult, "beam")); break; }
     case "burst": { const t = need(C.range + 40); if(!t) return;
@@ -3573,6 +3577,13 @@ $("scrTop").addEventListener("click", e => {
 function topTabOpened(){ topData = {players:null, guilds:null}; refreshTop(); }
 
 // ---- меню под мини-картой ----
+$("gmBack").addEventListener("click", () => { $("gmList").hidden = true; $("gmToggle").setAttribute("aria-expanded", "false"); });
+// раскладка HUD: элементы под карточкой персонажа подстраиваются под её реальную высоту
+(function hudLayout(){
+  const hud = document.querySelector(".hud"); if(!hud) return;
+  const upd = () => { const h = hud.offsetTop + hud.offsetHeight; hud.parentElement.style.setProperty("--hb", h + "px"); };
+  upd(); window.addEventListener("resize", upd); setInterval(upd, 1500);
+})();
 $("gmToggle").addEventListener("click", () => {
   const list = $("gmList"), open = list.hidden;
   list.hidden = !open; $("gmToggle").setAttribute("aria-expanded", String(open)); Sfx.play("ui");
@@ -4933,6 +4944,13 @@ function walkable(x, y, m){
   if(!(LOCS[locKey] && LOCS[locKey].dungeon)) return true;
   for(const r of dgRects) if(x >= r.x + m && x <= r.x + r.w - m && y >= r.y + m && y <= r.y + r.h - m) return true;
   return false;
+}
+// прямая видимость: луч между точками не должен проходить через стену (только в подземельях)
+function los(x1, y1, x2, y2){
+  if(!(LOCS[locKey] && LOCS[locKey].dungeon)) return true;
+  const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1)/10);
+  for(let i = 1; i < n; i++){ if(!walkable(x1 + (x2 - x1)*i/n, y1 + (y2 - y1)*i/n, 0)) return false; }
+  return true;
 }
 // скольжение вдоль стены: если шаг увёл в стену, пробуем сдвиг только по одной оси
 function slide(o, ox, oy, r){
