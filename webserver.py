@@ -16,6 +16,8 @@ import secrets
 from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH
 from db import SessionLocal, engine
 from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
+import gram
+from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
@@ -408,7 +410,7 @@ def clean_item(it):
 
 
 def lot_view(r):
-    return {"id": r.id, "seller_id": str(r.seller_id), "seller": r.seller_nick, "item": json.loads(r.item), "price": r.price, "ts": r.created * 1000}
+    return {"id": r.id, "seller_id": str(r.seller_id), "seller": r.seller_nick, "item": json.loads(r.item), "price": gram.g(r.price), "ts": r.created * 1000}
 
 
 async def api_market(request):
@@ -422,17 +424,17 @@ async def api_market(request):
         if op == "mine":
             rows = (await s.execute(select(MarketLot).where(MarketLot.seller_id == uid).order_by(MarketLot.created.desc()))).scalars().all()
             hist = (await s.execute(select(MarketHist).where(MarketHist.tg_id == uid).order_by(MarketHist.ts.desc()).limit(60))).scalars().all()
-            bought = sum(x.price for x in hist if x.kind == "buy")
-            sold = sum(x.price for x in hist if x.kind == "sell")
+            bought = gram.g(sum(x.price for x in hist if x.kind == "buy"))
+            sold = gram.g(sum(x.price for x in hist if x.kind == "sell"))
             return web.json_response({"ok": True, "lots": [lot_view(r) for r in rows], "bought": bought, "sold": sold,
-                                      "hist": [{"kind": x.kind, "item": json.loads(x.item), "price": x.price, "other": x.other, "ts": x.ts * 1000} for x in hist]})
+                                      "hist": [{"kind": x.kind, "item": json.loads(x.item), "price": gram.g(x.price), "other": x.other, "ts": x.ts * 1000} for x in hist]})
         if op == "create":
             item = clean_item(body.get("item"))
             try:
-                price = int(body.get("price", 0))
+                price = int(round(float(body.get("price", 0)) * gram.NANO))     # цена в GRAM → нано-GRAM
             except (TypeError, ValueError):
                 price = 0
-            if not item or price < 1 or price > 10_000_000:
+            if not item or price < gram.NANO // 100 or price > 100_000 * gram.NANO:
                 return web.json_response({"ok": False, "error": "Неверный лот"})
             count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
             if count >= 20:
@@ -461,19 +463,30 @@ async def api_market(request):
                 return web.json_response({"ok": False, "error": "Нельзя купить свой лот"})
             buyer = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
             buyer_nick = (buyer.nick if buyer and buyer.nick else user["name"])[:16]
+            # оплата GRAM с серверного баланса: покупатель платит, продавец получает за вычетом комиссии
+            if not await gram.move(s, uid, -lot.price, "market_buy", f"mkb:{lot_id}", "Маркет: покупка"):
+                return web.json_response({"ok": False, "error": "Не хватает GRAM"})
+            payout = max(1, int(lot.price * (1 - MARKET_FEE)))
+            await gram.move(s, lot.seller_id, payout, "market_sell", f"mks:{lot_id}", "Маркет: продажа")
             await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
             now_ = int(time.time())
             s.add(MarketHist(tg_id=uid, kind="buy", item=lot.item, price=lot.price, other="@" + lot.seller_nick, ts=now_))
             s.add(MarketHist(tg_id=lot.seller_id, kind="sell", item=lot.item, price=lot.price, other="@" + buyer_nick, ts=now_))
-            payout = max(1, int(lot.price * (1 - MARKET_FEE)))
-            g = Grant(tg_id=lot.seller_id, kind="scrap", payload=json.dumps({"amount": payout}), by_admin="market", created=now_)
-            s.add(g)
             await s.commit()
-            gd = grant_dict(g)
     if op == "buy":
-        await push_to_player(lot.seller_id, {"t": "grant", "grant": gd})
+        await push_to_player(lot.seller_id, {"t": "gram", "text": f"Маркет: лот продан, +{gram.g(payout)} GRAM", "refresh": True})
         return web.json_response({"ok": True, "item": item})
     raise web.HTTPBadRequest(text="bad op")
+
+
+# ---------- TON Connect: манифест и иконка игры ----------
+async def tonconnect_manifest(request):
+    base = (WEBAPP_URL or f"{request.scheme}://{request.host}/").rstrip("/")
+    return web.json_response({"url": base, "name": "MetalWar", "iconUrl": base + "/icon.png"}, headers={"Access-Control-Allow-Origin": "*"})
+
+
+async def icon_png(request):
+    return web.FileResponse(Path(__file__).parent / "icon.png", headers={"Access-Control-Allow-Origin": "*"})
 
 
 # ---------- рейтинг по боевой мощи ----------
@@ -807,9 +820,14 @@ async def start_web(port: int):
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
     app.router.add_post("/api/market/{op}", api_market)
+    app.router.add_get("/tonconnect-manifest.json", tonconnect_manifest)
+    app.router.add_get("/icon.png", icon_png)
+    gram.setup(app)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
     asyncio.create_task(world_loop())
+    await gram.migrate_market_to_gram()
+    asyncio.create_task(gram.deposit_watcher())
     log.info("Игра доступна на порту %s", port)

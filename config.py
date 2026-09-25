@@ -19,3 +19,13 @@ ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERN
 SCHEMA_VERSION = "3"
 WIPE_TOKEN = os.getenv("WIPE_TOKEN", "wipe-1")
 DATA_EPOCH = f"{SCHEMA_VERSION}:{WIPE_TOKEN}"
+
+# ---- GRAM (бывший Toncoin), сеть TON ----
+# TON_NETWORK: testnet — тестовая сеть без реальных денег, mainnet — основная.
+TON_NETWORK = os.getenv("TON_NETWORK", "testnet").strip().lower()
+# Адрес кошелька игры, на который игроки переводят GRAM (сид-фраза на сервере НЕ нужна).
+GAME_WALLET = os.getenv("GAME_WALLET", "").strip()
+# Ключ API toncenter.com (бесплатный, из @tonapibot) — без него лимит 1 запрос в секунду.
+TONCENTER_KEY = os.getenv("TONCENTER_KEY", "").strip()
+GRAM_WITHDRAW_MIN = float(os.getenv("GRAM_WITHDRAW_MIN", "1"))
+GRAM_WITHDRAW_FEE = float(os.getenv("GRAM_WITHDRAW_FEE", "0.10"))

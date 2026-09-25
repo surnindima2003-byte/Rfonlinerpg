@@ -99,3 +99,43 @@ class MarketHist(Base):
     price: Mapped[int] = mapped_column(BigInteger, default=0)
     other: Mapped[str] = mapped_column(String(40), default="")
     ts: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class GramWallet(Base):
+    """Серверный баланс GRAM игрока в нано-GRAM (1 GRAM = 1 000 000 000)."""
+    __tablename__ = "gram_wallets"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    memo: Mapped[str] = mapped_column(String(24), unique=True, index=True)
+    balance: Mapped[int] = mapped_column(BigInteger, default=0)
+    spent: Mapped[int] = mapped_column(BigInteger, default=0)       # потрачено в магазине — для VIP
+    created: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class GramTx(Base):
+    """Журнал всех движений GRAM. ref уникален — один перевод не зачисляется дважды."""
+    __tablename__ = "gram_tx"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    amount: Mapped[int] = mapped_column(BigInteger, default=0)      # со знаком: + зачисление, − списание
+    ref: Mapped[str] = mapped_column(String(160), unique=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class GramWithdrawal(Base):
+    """Заявка на вывод. Сумма списывается сразу, выплату подтверждает администратор."""
+    __tablename__ = "gram_withdrawals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    nick: Mapped[str] = mapped_column(String(32), default="")
+    address: Mapped[str] = mapped_column(String(80))
+    amount: Mapped[int] = mapped_column(BigInteger)                 # списано с баланса
+    payout: Mapped[int] = mapped_column(BigInteger)                 # к выплате после комиссии
+    status: Mapped[str] = mapped_column(String(12), default="pending")
+    tx_hash: Mapped[str] = mapped_column(String(120), default="")
+    created: Mapped[int] = mapped_column(BigInteger, default=0)
+    updated: Mapped[int] = mapped_column(BigInteger, default=0)
