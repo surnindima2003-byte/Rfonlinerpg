@@ -743,6 +743,12 @@ async def ws_handler(request):
                 clean_pos(d, info)
             elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
                 await handle_party(d, info)
+            elif t == "emote":
+                eid = str(d.get("id", ""))[:10]
+                if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
+                    info["emo_t"] = time.time()
+                    await broadcast({"t": "emote", "from": info["id"], "id": eid},
+                                    only=lambda i: i["loc"] == info["loc"] and i["id"] != info["id"])
             elif t == "chat":
                 now = time.time()
                 text = str(d.get("text", "")).strip()[:200]
