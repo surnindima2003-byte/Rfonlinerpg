@@ -17,7 +17,7 @@ from sqlalchemy import select, func
 
 from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE
 from db import SessionLocal
-from models import GramWallet, GramTx, GramWithdrawal, GameSave, Meta
+from models import GramWallet, GramTx, GramWithdrawal, GameSave, Meta, Referral, RefEarn
 
 log = logging.getLogger("gram")
 NANO = 1_000_000_000
@@ -48,6 +48,50 @@ async def move(s, uid, amount, kind, ref, note=""):
     w.balance += amount
     s.add(GramTx(tg_id=uid, kind=kind, amount=amount, ref=ref, note=note[:200], ts=int(time.time())))
     return True
+
+
+# ---------- реферальная система ----------
+REF_RATES = {1: 0.05, 2: 0.02}          # 5% с покупок друга, 2% с покупок друзей друга
+BOT_USERNAME = {"name": ""}             # заполняет main.py при запуске
+
+
+async def bind_referral(uid, inviter_id):
+    """Привязать нового игрока к пригласившему. Только один раз, не себя, без замкнутого круга."""
+    if not inviter_id or inviter_id == uid:
+        return False
+    async with SessionLocal() as s:
+        if (await s.execute(select(Referral).where(Referral.tg_id == uid))).scalar_one_or_none():
+            return False
+        save = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+        if save and save.data and save.updated and time.time() - save.updated > 3600 and (save.lvl or 1) > 3:
+            return False                                   # старых игроков задним числом не привязываем
+        up = (await s.execute(select(Referral).where(Referral.tg_id == inviter_id))).scalar_one_or_none()
+        if up and up.inviter_id == uid:
+            return False                                   # A пригласил B, B не может пригласить A
+        if not (await s.execute(select(GameSave).where(GameSave.tg_id == inviter_id))).scalar_one_or_none():
+            return False                                   # пригласивший должен быть игроком
+        s.add(Referral(tg_id=uid, inviter_id=inviter_id, created=int(time.time())))
+        await s.commit()
+    log.info("Реферал: %s приглашён игроком %s", uid, inviter_id)
+    return True
+
+
+async def pay_referrals(s, buyer, spent_nano):
+    """Бонус из выручки игры: 5% пригласившему, 2% пригласившему пригласившего."""
+    from webserver import push_to_player
+    notes = []
+    cur, level = buyer, 1
+    while level <= 2:
+        row = (await s.execute(select(Referral).where(Referral.tg_id == cur))).scalar_one_or_none()
+        if not row:
+            break
+        bonus = int(spent_nano * REF_RATES[level])
+        if bonus > 0:
+            await move(s, row.inviter_id, bonus, "ref", f"ref{level}:{buyer}:{time.time_ns()}", f"Реферальный бонус {int(REF_RATES[level]*100)}%")
+            s.add(RefEarn(inviter_id=row.inviter_id, friend_id=buyer, level=level, amount=bonus, ts=int(time.time())))
+            notes.append((row.inviter_id, bonus))
+        cur, level = row.inviter_id, level + 1
+    return notes
 
 
 # ---------- наблюдатель входящих переводов ----------
@@ -122,7 +166,10 @@ async def api_gram(request):
             if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
             w.spent += nano
+            notes = await pay_referrals(s, uid, nano)
             await s.commit()
+            for who, bonus in notes:
+                await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent)})
         if op == "withdraw":
             address = str(body.get("address", "")).strip()
@@ -145,6 +192,20 @@ async def api_gram(request):
                                  payout=int(nano * (1 - GRAM_WITHDRAW_FEE)), created=int(time.time()), updated=int(time.time())))
             await s.commit()
             return web.json_response({"ok": True, "balance": g(w.balance)})
+        if op == "ref":
+            direct = (await s.execute(select(Referral).where(Referral.inviter_id == uid).order_by(Referral.created.desc()))).scalars().all()
+            ids = [r.tg_id for r in direct]
+            second = (await s.execute(select(func.count()).select_from(Referral).where(Referral.inviter_id.in_(ids)))).scalar() if ids else 0
+            earned = (await s.execute(select(func.coalesce(func.sum(RefEarn.amount), 0)).where(RefEarn.inviter_id == uid))).scalar()
+            per = {}
+            for fid, lvl_, amt in (await s.execute(select(RefEarn.friend_id, RefEarn.level, func.sum(RefEarn.amount)).where(RefEarn.inviter_id == uid).group_by(RefEarn.friend_id, RefEarn.level))).all():
+                per[fid] = per.get(fid, 0) + (amt or 0)
+            saves = {r.tg_id: r for r in (await s.execute(select(GameSave).where(GameSave.tg_id.in_(ids)))).scalars().all()} if ids else {}
+            friends = [{"nick": (saves[f].nick if f in saves and saves[f].nick else "Пилот"), "lvl": (saves[f].lvl if f in saves else 1),
+                        "earned": g(per.get(f, 0)), "ts": r.created * 1000} for f, r in zip(ids, direct)]
+            name = BOT_USERNAME["name"]
+            link = f"https://t.me/{name}?start=ref_{uid}" if name else ""
+            return web.json_response({"ok": True, "link": link, "count": len(ids), "second": second, "earned": g(earned), "friends": friends[:100]})
     raise web.HTTPBadRequest(text="bad op")
 
 

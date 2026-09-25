@@ -139,3 +139,24 @@ class GramWithdrawal(Base):
     tx_hash: Mapped[str] = mapped_column(String(120), default="")
     created: Mapped[int] = mapped_column(BigInteger, default=0)
     updated: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class Referral(Base):
+    """Кто пригласил игрока (один пригласивший на игрока, навсегда)."""
+    __tablename__ = "referrals"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    inviter_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    created: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class RefEarn(Base):
+    """Реферальные начисления: 5% с покупок друга (уровень 1), 2% с покупок друзей друзей (уровень 2)."""
+    __tablename__ = "ref_earn"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    inviter_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    friend_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    level: Mapped[int] = mapped_column(Integer, default=1)
+    amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)

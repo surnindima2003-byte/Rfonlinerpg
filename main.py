@@ -24,6 +24,11 @@ async def main():
 
     # страница игры, API и живой мир на том же сервере
     await start_web(PORT)
+    try:
+        import gram
+        gram.BOT_USERNAME["name"] = (await bot.get_me()).username or ""
+    except Exception as e:
+        logging.warning("Не удалось узнать имя бота: %s", e)
     logging.info("Администраторы игры: %s", ", ".join("@" + a for a in ADMIN_USERNAMES) or "не заданы")
 
     if WEBAPP_URL:

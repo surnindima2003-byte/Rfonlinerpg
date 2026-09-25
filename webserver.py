@@ -65,7 +65,7 @@ def auth(init_data: str):
         return None
     u = data.user
     username = (u.username or "").lower()
-    return {"id": u.id, "username": username, "name": u.first_name or "Пилот",
+    return {"id": u.id, "username": username, "name": u.first_name or "Пилот", "start": str(data.start_param or "")[:64],
             "admin": username in ADMIN_USERNAMES}
 
 
@@ -95,6 +95,9 @@ async def health(request):
 
 async def api_load(request):
     _, user = await read_auth(request)
+    m = re.fullmatch(r"ref_(\d{3,15})", user.get("start", ""))
+    if m:
+        await gram.bind_referral(user["id"], int(m.group(1)))
     async with SessionLocal() as s:
         row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
         grants = (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.applied == False))).scalars().all()  # noqa: E712

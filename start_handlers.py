@@ -37,6 +37,12 @@ def factions_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    # реферальная ссылка: t.me/бот?start=ref_<id пригласившего>
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[1].startswith("ref_") and parts[1][4:].isdigit():
+        import gram
+        if await gram.bind_referral(message.from_user.id, int(parts[1][4:])):
+            await message.answer("🤝 Ты пришёл по приглашению друга. Удачной охоты, пилот!")
     async with SessionLocal() as session:
         result = await session.execute(select(Player).where(Player.tg_id == message.from_user.id))
         player = result.scalar_one_or_none()
