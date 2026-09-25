@@ -15,7 +15,7 @@ import secrets
 
 from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH
 from db import SessionLocal, engine
-from models import Base, GameSave, Grant, Doc, Meta
+from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
@@ -393,6 +393,89 @@ async def api_name(request):
     return web.json_response({"ok": True})
 
 
+# ---------- маркет: торговля между игроками за лом ----------
+MARKET_FEE = 0.05
+ITEM_ID = re.compile(r"^[a-z0-9_]{2,24}$")
+
+
+def clean_item(it):
+    if not isinstance(it, dict) or not ITEM_ID.match(str(it.get("id", ""))):
+        return None
+    try:
+        return {"id": it["id"], "g": max(0, min(3, int(it.get("g", 0)))), "e": max(0, min(15, int(it.get("e", 0)))), "n": max(1, min(999, int(it.get("n", 1))))}
+    except (TypeError, ValueError):
+        return None
+
+
+def lot_view(r):
+    return {"id": r.id, "seller_id": str(r.seller_id), "seller": r.seller_nick, "item": json.loads(r.item), "price": r.price, "ts": r.created * 1000}
+
+
+async def api_market(request):
+    body, user = await read_auth(request)
+    op = request.match_info["op"]
+    uid = user["id"]
+    async with SessionLocal() as s:
+        if op == "list":
+            rows = (await s.execute(select(MarketLot).order_by(MarketLot.created.desc()).limit(200))).scalars().all()
+            return web.json_response({"ok": True, "lots": [lot_view(r) for r in rows]})
+        if op == "mine":
+            rows = (await s.execute(select(MarketLot).where(MarketLot.seller_id == uid).order_by(MarketLot.created.desc()))).scalars().all()
+            hist = (await s.execute(select(MarketHist).where(MarketHist.tg_id == uid).order_by(MarketHist.ts.desc()).limit(60))).scalars().all()
+            bought = sum(x.price for x in hist if x.kind == "buy")
+            sold = sum(x.price for x in hist if x.kind == "sell")
+            return web.json_response({"ok": True, "lots": [lot_view(r) for r in rows], "bought": bought, "sold": sold,
+                                      "hist": [{"kind": x.kind, "item": json.loads(x.item), "price": x.price, "other": x.other, "ts": x.ts * 1000} for x in hist]})
+        if op == "create":
+            item = clean_item(body.get("item"))
+            try:
+                price = int(body.get("price", 0))
+            except (TypeError, ValueError):
+                price = 0
+            if not item or price < 1 or price > 10_000_000:
+                return web.json_response({"ok": False, "error": "Неверный лот"})
+            count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
+            if count >= 20:
+                return web.json_response({"ok": False, "error": "Не больше 20 лотов одновременно"})
+            save_row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+            nick = (save_row.nick if save_row and save_row.nick else user["name"])[:16]
+            s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(item), price=price, created=int(time.time())))
+            await s.commit()
+            return web.json_response({"ok": True})
+        if op in ("buy", "cancel"):
+            try:
+                lot_id = int(body.get("id"))
+            except (TypeError, ValueError):
+                return web.json_response({"ok": False, "error": "Нет такого лота"})
+            lot = (await s.execute(select(MarketLot).where(MarketLot.id == lot_id))).scalar_one_or_none()
+            if not lot:
+                return web.json_response({"ok": False, "error": "Лот уже продан или снят"})
+            item = json.loads(lot.item)
+            if op == "cancel":
+                if lot.seller_id != uid:
+                    return web.json_response({"ok": False, "error": "Это не твой лот"})
+                await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+                await s.commit()
+                return web.json_response({"ok": True, "item": item})
+            if lot.seller_id == uid:
+                return web.json_response({"ok": False, "error": "Нельзя купить свой лот"})
+            buyer = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+            buyer_nick = (buyer.nick if buyer and buyer.nick else user["name"])[:16]
+            await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+            now_ = int(time.time())
+            s.add(MarketHist(tg_id=uid, kind="buy", item=lot.item, price=lot.price, other="@" + lot.seller_nick, ts=now_))
+            s.add(MarketHist(tg_id=lot.seller_id, kind="sell", item=lot.item, price=lot.price, other="@" + buyer_nick, ts=now_))
+            payout = max(1, int(lot.price * (1 - MARKET_FEE)))
+            g = Grant(tg_id=lot.seller_id, kind="scrap", payload=json.dumps({"amount": payout}), by_admin="market", created=now_)
+            s.add(g)
+            await s.commit()
+            gd = grant_dict(g)
+    if op == "buy":
+        await push_to_player(lot.seller_id, {"t": "grant", "grant": gd})
+        return web.json_response({"ok": True, "item": item})
+    raise web.HTTPBadRequest(text="bad op")
+
+
 # ---------- рейтинг по боевой мощи ----------
 async def api_top(request):
     body, user = await read_auth(request)
@@ -576,7 +659,7 @@ def clean_pos(d, info):
         if loc in LOCS:
             info["loc"] = loc
         for k in ("x", "y"):
-            info[k] = max(0.0, min(4000.0, float(d.get(k, 0))))
+            info[k] = max(0.0, min(8000.0, float(d.get(k, 0))))
         for k in ("ang", "aim"):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
@@ -717,6 +800,7 @@ async def start_web(port: int):
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
+    app.router.add_post("/api/market/{op}", api_market)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()

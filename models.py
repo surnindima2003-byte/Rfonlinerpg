@@ -74,3 +74,28 @@ class Meta(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class MarketLot(Base):
+    """Лот маркета: предмет продавца, выставленный за лом."""
+    __tablename__ = "market_lots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    seller_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    seller_nick: Mapped[str] = mapped_column(String(32), default="")
+    item: Mapped[str] = mapped_column(Text, default="{}")
+    price: Mapped[int] = mapped_column(BigInteger, default=0)
+    created: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class MarketHist(Base):
+    """История сделок: покупки и продажи игрока."""
+    __tablename__ = "market_hist"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    kind: Mapped[str] = mapped_column(String(8))
+    item: Mapped[str] = mapped_column(Text, default="{}")
+    price: Mapped[int] = mapped_column(BigInteger, default=0)
+    other: Mapped[str] = mapped_column(String(40), default="")
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)
