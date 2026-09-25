@@ -19,7 +19,7 @@ from models import Base, GameSave, Grant, Doc, Meta
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "scrapfields", "reactor_ruins", "iron_canyon"}
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon"}
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
