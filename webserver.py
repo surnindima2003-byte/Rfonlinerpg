@@ -19,7 +19,7 @@ from models import Base, GameSave, Grant, Doc, Meta
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "scrapfields", "reactor_ruins", "iron_canyon"}
+LOCS = {"lobby", "sector1", "scrapfields", "reactor_ruins", "iron_canyon"}
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -575,7 +575,7 @@ def clean_pos(d, info):
         if loc in LOCS:
             info["loc"] = loc
         for k in ("x", "y"):
-            info[k] = max(0.0, min(3000.0, float(d.get(k, 0))))
+            info[k] = max(0.0, min(4000.0, float(d.get(k, 0))))
         for k in ("ang", "aim"):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
