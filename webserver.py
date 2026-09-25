@@ -160,7 +160,8 @@ async def api_admin_grant(request):
     payload = {"amount": amount}
     if kind == "item":
         item, grade = body.get("item"), body.get("grade", 0)
-        if item not in GEAR_IDS or grade not in (0, 1, 2, 3):
+        is_book = isinstance(item, str) and re.fullmatch(r"b[kp]_[a-z]{2,20}", item)
+        if (item not in GEAR_IDS and not is_book) or grade not in (0, 1, 2, 3):
             return web.json_response({"ok": False, "error": "Неизвестный предмет или грейд"})
         payload.update(item=item, grade=grade)
 
