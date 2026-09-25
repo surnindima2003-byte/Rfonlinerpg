@@ -535,6 +535,24 @@ async def api_top(request):
 
 # ---------- живой мир: WebSocket ----------
 clients = {}                 # ws -> данные игрока
+last_seen = {}               # tg_id -> время выхода из игры (для «заходил в …»)
+
+
+async def api_presence(request):
+    """Кто из списка сейчас в игре и когда каждый заходил последний раз."""
+    body, user = await read_auth(request)
+    ids = [int(x) for x in (body.get("ids") or []) if str(x).isdigit()][:200]
+    online = {i.get("id") for i in clients.values()}
+    out = {}
+    if ids:
+        async with SessionLocal() as s:
+            rows = (await s.execute(select(GameSave.tg_id, GameSave.updated).where(GameSave.tg_id.in_(ids)))).all()
+        db = {a: (b or 0) for a, b in rows}
+        now_ = int(time.time())
+        for i in ids:
+            on = i in online
+            out[str(i)] = {"online": on, "last": (now_ if on else max(db.get(i, 0), int(last_seen.get(i, 0)))) * 1000}
+    return web.json_response({"ok": True, "p": out})
 chat_history = deque(maxlen=60)
 
 # ---------- пати (до 4 игроков, живёт в памяти сервера) ----------
@@ -783,6 +801,8 @@ async def ws_handler(request):
                     await broadcast({"t": "chat", "m": m}, only=lambda i: i["nick"] == to or i["id"] == info["id"])
     finally:
         clients.pop(ws, None)
+        if info:
+            last_seen[info["id"]] = time.time()
         if info and not online(info["id"]):
             await party_leave(info["id"])
     return ws
@@ -822,6 +842,7 @@ async def start_web(port: int):
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
+    app.router.add_post("/api/presence", api_presence)
     app.router.add_post("/api/market/{op}", api_market)
     app.router.add_get("/tonconnect-manifest.json", tonconnect_manifest)
     app.router.add_get("/icon.png", icon_png)
