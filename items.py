@@ -140,6 +140,8 @@ async def api_items(request):
                     if time.time() - _boss_t.get(uid, 0) < BOSS_GAP:
                         continue                               # главари не могут умирать слишком часто
                     _boss_t[uid], mult = time.time(), BOSS_LOOT
+                import pvp
+                await pvp.mob_killed(uid, me)
                 for d in roll(lv, mult):
                     item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
                     item["i"] = i

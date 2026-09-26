@@ -196,3 +196,15 @@ class SphereBal(Base):
     owner: Mapped[int] = mapped_column(BigInteger, index=True)
     item: Mapped[str] = mapped_column(String(12))
     n: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PvpStat(Base):
+    """PvP: победы, поражения, карма (убийства невиновных) и рейтинг."""
+    __tablename__ = "pvp_stats"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    kills: Mapped[int] = mapped_column(Integer, default=0)
+    deaths: Mapped[int] = mapped_column(Integer, default=0)
+    pk: Mapped[int] = mapped_column(Integer, default=0)            # убито невиновных
+    karma: Mapped[int] = mapped_column(Integer, default=0)
+    rating: Mapped[int] = mapped_column(Integer, default=1000)

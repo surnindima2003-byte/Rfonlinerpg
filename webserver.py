@@ -18,6 +18,7 @@ from db import SessionLocal, engine
 from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 import gram
 import items
+import pvp
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -737,7 +738,7 @@ def clean_pos(d, info):
 
 
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "cp", "mcp", "bm", "admin")}
+    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "cp", "mcp", "bm", "admin")} | {"kr": info.get("kr", 0), "fl": 1 if pvp.flagged(info) else 0}
 
 
 async def push_to_player(tg_id, payload):
@@ -786,7 +787,8 @@ async def ws_handler(request):
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
                         "nick": user["name"][:16], "fac": "aegis", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time()}
                 clients[ws] = info
-                await ws.send_json({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history)})
+                await pvp.load_karma(info)
+                await ws.send_json({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"]})
                 continue
             if t == "pos":
                 clean_pos(d, info)
@@ -808,16 +810,26 @@ async def ws_handler(request):
                 pid = member_party.get(info["id"])
                 if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
                     continue                                   # союзников не бьём
+                if not pvp.can_fight(info, tgt):
+                    continue                                   # защита новичков: до 10-го уровня PvP нет
+                skill = bool(d.get("skill"))
+                if skill and time.time() - info.get("pvp_sk", 0) < 0.8:
+                    continue                                   # умения по игрокам — не чаще раза в 0,8 с
                 info["pvp_t"] = time.time()
-                dmg = max(1, min(dmg, 40 + info["lvl"] * 8))
-                await push_to_player(to, {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit"))})
+                if skill:
+                    info["pvp_sk"] = time.time()
+                dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
+                pvp.on_hit(info, tgt)
+                await push_to_player(to, {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit")), "skill": skill})
             elif t == "pvp_dead":
                 try:
                     killer = online(int(d.get("by")))
                 except (TypeError, ValueError):
                     killer = None
-                if killer and killer["loc"] == info["loc"] and info["loc"] not in SAFE_LOCS:
-                    await push_to_player(killer["id"], {"t": "pvp_kill", "nick": info["nick"]})
+                if killer and killer["loc"] == info["loc"] and info["loc"] not in SAFE_LOCS and time.time() - killer.get("pvp_t", 0) < 15:
+                    to_killer, to_victim = await pvp.on_death(info, killer)
+                    await push_to_player(killer["id"], to_killer)
+                    await ws.send_json(to_victim)
             elif t == "emote":
                 eid = str(d.get("id", ""))[:10]
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
@@ -889,6 +901,7 @@ async def start_web(port: int):
     app.router.add_get("/icon.png", icon_png)
     gram.setup(app)
     items.setup(app)
+    pvp.setup(app)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
