@@ -21,7 +21,8 @@ from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon"}
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear"}
+SAFE_LOCS = {"lobby", "arena_fear"}          # здесь PvP нет никогда
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -467,10 +468,16 @@ async def api_market(request):
             buyer = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
             buyer_nick = (buyer.nick if buyer and buyer.nick else user["name"])[:16]
             # оплата GRAM с серверного баланса: покупатель платит, продавец получает за вычетом комиссии
+            bw = await gram.wallet_of(s, uid)
+            from_locked = min(bw.locked or 0, lot.price)          # игровые GRAM из звёзд тратятся первыми
             if not await gram.move(s, uid, -lot.price, "market_buy", f"mkb:{lot_id}", "Маркет: покупка"):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
+            bw.locked = max(0, (bw.locked or 0) - from_locked)
             payout = max(1, int(lot.price * (1 - MARKET_FEE)))
             await gram.move(s, lot.seller_id, payout, "market_sell", f"mks:{lot_id}", "Маркет: продажа")
+            # игровые GRAM покупателя остаются игровыми и у продавца: через маркет звёзды не превратить в выводимые GRAM
+            sw = await gram.wallet_of(s, lot.seller_id)
+            sw.locked = (sw.locked or 0) + int(from_locked * (1 - MARKET_FEE))
             await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
             now_ = int(time.time())
             s.add(MarketHist(tg_id=uid, kind="buy", item=lot.item, price=lot.price, other="@" + lot.seller_nick, ts=now_))
@@ -777,6 +784,32 @@ async def ws_handler(request):
                 clean_pos(d, info)
             elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
                 await handle_party(d, info)
+            elif t == "pvp":
+                # удар по игроку: та же PvP-локация, рядом, не чаще 3 раз в секунду, урон не выше предела по уровню
+                try:
+                    to, dmg = int(d.get("to")), int(d.get("dmg", 0))
+                except (TypeError, ValueError):
+                    continue
+                tgt = online(to)
+                if not tgt or to == info["id"] or info["loc"] in SAFE_LOCS or tgt["loc"] != info["loc"]:
+                    continue
+                if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
+                    continue
+                if time.time() - info.get("pvp_t", 0) < 0.3:
+                    continue
+                pid = member_party.get(info["id"])
+                if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
+                    continue                                   # союзников не бьём
+                info["pvp_t"] = time.time()
+                dmg = max(1, min(dmg, 40 + info["lvl"] * 8))
+                await push_to_player(to, {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit"))})
+            elif t == "pvp_dead":
+                try:
+                    killer = online(int(d.get("by")))
+                except (TypeError, ValueError):
+                    killer = None
+                if killer and killer["loc"] == info["loc"] and info["loc"] not in SAFE_LOCS:
+                    await push_to_player(killer["id"], {"t": "pvp_kill", "nick": info["nick"]})
             elif t == "emote":
                 eid = str(d.get("id", ""))[:10]
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:

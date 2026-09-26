@@ -15,9 +15,9 @@ import aiohttp
 from aiohttp import web
 from sqlalchemy import select, func
 
-from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE
+from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE, STAR_USD, GRAM_USD, STAR_PACKS
 from db import SessionLocal
-from models import GramWallet, GramTx, GramWithdrawal, GameSave, Meta, Referral, RefEarn
+from models import GramWallet, GramTx, GramWithdrawal, GameSave, Meta, Referral, RefEarn, StarPayment
 
 log = logging.getLogger("gram")
 NANO = 1_000_000_000
@@ -94,6 +94,41 @@ async def pay_referrals(s, buyer, spent_nano):
     return notes
 
 
+# ---------- пополнение звёздами ----------
+BOT = {"bot": None}                       # заполняет main.py
+
+
+async def credit_stars(uid, stars, charge_id):
+    """Зачислить GRAM за оплату звёздами. Возвращает сумму в нано-GRAM или 0, если платёж уже учтён."""
+    nano = int(stars * STAR_USD / GRAM_USD * NANO)
+    async with SessionLocal() as s:
+        if (await s.execute(select(StarPayment).where(StarPayment.charge_id == charge_id))).scalar_one_or_none():
+            return 0
+        s.add(StarPayment(charge_id=charge_id, tg_id=uid, stars=stars, gram=nano, ts=int(time.time())))
+        w = await wallet_of(s, uid)
+        await move(s, uid, nano, "stars", "stars:" + charge_id, f"Пополнение: {stars} ⭐")
+        w.locked = (w.locked or 0) + nano
+        await s.commit()
+    log.info("Звёзды: игрок %s, %s ⭐ → %s GRAM", uid, stars, g(nano))
+    try:
+        from webserver import push_to_player
+        await push_to_player(uid, {"t": "gram", "text": f"Пополнение: +{g(nano)} GRAM за {stars} ⭐"})
+    except Exception:
+        pass
+    return nano
+
+
+async def migrate_locked_column():
+    """Добавить колонку locked в уже существующую таблицу кошельков (SQLite не делает это сам)."""
+    from db import engine
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(gram_wallets)")).fetchall()]
+        if cols and "locked" not in cols:
+            conn.execute(text("ALTER TABLE gram_wallets ADD COLUMN locked BIGINT DEFAULT 0"))
+            log.info("Кошельки: добавлена колонка locked")
+
+
 # ---------- наблюдатель входящих переводов ----------
 async def deposit_watcher():
     if not GAME_WALLET:
@@ -154,6 +189,8 @@ async def api_gram(request):
             hist = (await s.execute(select(GramTx).where(GramTx.tg_id == uid).order_by(GramTx.ts.desc()).limit(40))).scalars().all()
             wds = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.tg_id == uid).order_by(GramWithdrawal.created.desc()).limit(10))).scalars().all()
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "memo": w.memo, "address": GAME_WALLET, "network": TON_NETWORK,
+                                      "locked": g(min(w.balance, w.locked or 0)), "withdrawable": g(max(0, w.balance - (w.locked or 0))),
+                                      "star_rate": STAR_USD / GRAM_USD, "star_packs": STAR_PACKS,
                                       "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE,
                                       "hist": [{"kind": x.kind, "amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in hist],
                                       "wds": [{"id": x.id, "amount": g(x.amount), "payout": g(x.payout), "address": x.address, "status": x.status, "ts": x.created * 1000} for x in wds]})
@@ -165,6 +202,7 @@ async def api_gram(request):
             nano = int(round(price * NANO))
             if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
+            w.locked = max(0, (w.locked or 0) - nano)          # сначала тратятся игровые GRAM из звёзд
             w.spent += nano
             notes = await pay_referrals(s, uid, nano)
             await s.commit()
@@ -185,6 +223,8 @@ async def api_gram(request):
             if pending >= 3:
                 return web.json_response({"ok": False, "error": "Не больше трёх заявок одновременно"})
             nano = int(round(amount * NANO))
+            if nano > w.balance - (w.locked or 0):
+                return web.json_response({"ok": False, "error": f"Для вывода доступно {g(max(0, w.balance - (w.locked or 0)))} GRAM. GRAM из звёзд вывести нельзя"})
             if not await move(s, uid, -nano, "withdraw", f"wd:{uid}:{time.time_ns()}", "Заявка на вывод"):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
             save = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
@@ -192,6 +232,21 @@ async def api_gram(request):
                                  payout=int(nano * (1 - GRAM_WITHDRAW_FEE)), created=int(time.time()), updated=int(time.time())))
             await s.commit()
             return web.json_response({"ok": True, "balance": g(w.balance)})
+        if op == "stars":
+            try:
+                stars = int(body.get("stars", 0))
+            except (TypeError, ValueError):
+                stars = 0
+            if stars not in STAR_PACKS:
+                return web.json_response({"ok": False, "error": "Нет такого пакета"})
+            if not BOT["bot"]:
+                return web.json_response({"ok": False, "error": "Бот ещё запускается, попробуй через минуту"})
+            from aiogram.types import LabeledPrice
+            gram_amount = stars * STAR_USD / GRAM_USD
+            link = await BOT["bot"].create_invoice_link(
+                title=f"{gram_amount:.2f} GRAM", description=f"Пополнение игрового баланса MetalWar: {stars} ⭐ → {gram_amount:.4f} GRAM",
+                payload=f"stars:{uid}:{stars}", currency="XTR", prices=[LabeledPrice(label=f"{gram_amount:.2f} GRAM", amount=stars)])
+            return web.json_response({"ok": True, "link": link})
         if op == "ref":
             direct = (await s.execute(select(Referral).where(Referral.inviter_id == uid).order_by(Referral.created.desc()))).scalars().all()
             ids = [r.tg_id for r in direct]

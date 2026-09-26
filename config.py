@@ -29,3 +29,8 @@ GAME_WALLET = os.getenv("GAME_WALLET", "").strip()
 TONCENTER_KEY = os.getenv("TONCENTER_KEY", "").strip()
 GRAM_WITHDRAW_MIN = float(os.getenv("GRAM_WITHDRAW_MIN", "1"))
 GRAM_WITHDRAW_FEE = float(os.getenv("GRAM_WITHDRAW_FEE", "0.10"))
+
+# Пополнение звёздами: 1 ⭐ = STAR_USD долларов (выплата Telegram разработчику), 1 GRAM = GRAM_USD долларов
+STAR_USD = float(os.getenv("STAR_USD", "0.013"))
+GRAM_USD = float(os.getenv("GRAM_USD", "1.55"))
+STAR_PACKS = [50, 100, 250, 500, 1000, 2500]

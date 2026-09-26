@@ -10,6 +10,7 @@ from webserver import start_web
 import start_handlers as start
 import profile_handlers as profile
 import explore_handlers as explore
+import stars_handlers as stars
 
 
 async def main():
@@ -21,8 +22,12 @@ async def main():
     dp.include_router(start.router)
     dp.include_router(profile.router)
     dp.include_router(explore.router)
+    dp.include_router(stars.router)
 
     # страница игры, API и живой мир на том же сервере
+    import gram
+    await gram.migrate_locked_column()
+    gram.BOT["bot"] = bot
     await start_web(PORT)
     try:
         import gram

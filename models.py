@@ -109,6 +109,7 @@ class GramWallet(Base):
     memo: Mapped[str] = mapped_column(String(24), unique=True, index=True)
     balance: Mapped[int] = mapped_column(BigInteger, default=0)
     spent: Mapped[int] = mapped_column(BigInteger, default=0)       # потрачено в магазине — для VIP
+    locked: Mapped[int] = mapped_column(BigInteger, default=0)      # GRAM из звёзд: тратить можно, выводить нельзя
     created: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
@@ -159,4 +160,15 @@ class RefEarn(Base):
     friend_id: Mapped[int] = mapped_column(BigInteger, index=True)
     level: Mapped[int] = mapped_column(Integer, default=1)
     amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class StarPayment(Base):
+    """Оплата звёздами. charge_id уникален: один платёж зачисляется один раз, по нему же делается возврат."""
+    __tablename__ = "star_payments"
+
+    charge_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    stars: Mapped[int] = mapped_column(Integer, default=0)
+    gram: Mapped[int] = mapped_column(BigInteger, default=0)
     ts: Mapped[int] = mapped_column(BigInteger, default=0)
