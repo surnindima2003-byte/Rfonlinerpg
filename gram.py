@@ -123,7 +123,8 @@ async def migrate_locked_column():
     from db import engine
     from sqlalchemy import text
     with engine.begin() as conn:
-        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(gram_wallets)")).fetchall()]
+        from sqlalchemy import inspect
+        cols = [c["name"] for c in inspect(conn).get_columns("gram_wallets")]
         if cols and "locked" not in cols:
             conn.execute(text("ALTER TABLE gram_wallets ADD COLUMN locked BIGINT DEFAULT 0"))
             log.info("Кошельки: добавлена колонка locked")
@@ -205,10 +206,12 @@ async def api_gram(request):
             w.locked = max(0, (w.locked or 0) - nano)          # сначала тратятся игровые GRAM из звёзд
             w.spent += nano
             notes = await pay_referrals(s, uid, nano)
+            import items
+            minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
             await s.commit()
             for who, bonus in notes:
                 await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
-            return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent)})
+            return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "items": minted})
         if op == "withdraw":
             address = str(body.get("address", "")).strip()
             try:

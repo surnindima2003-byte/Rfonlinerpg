@@ -13,10 +13,11 @@ from sqlalchemy import select, func
 import re
 import secrets
 
-from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH
+from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH, ENV_NAME
 from db import SessionLocal, engine
 from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 import gram
+import items
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -106,7 +107,7 @@ async def api_load(request):
             row.username, row.name = user["username"], user["name"]
             await s.commit()
     save = json.loads(row.data) if row and row.data else None
-    return web.json_response({"ok": True, "epoch": DATA_EPOCH, "admin": user["admin"], "tg": {"id": user["id"], "username": user["username"]},
+    return web.json_response({"ok": True, "epoch": DATA_EPOCH, "env": ENV_NAME, "admin": user["admin"], "tg": {"id": user["id"], "username": user["username"]},
                               "save": save, "grants": [grant_dict(g) for g in grants]})
 
 
@@ -443,9 +444,14 @@ async def api_market(request):
             count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
             if count >= 20:
                 return web.json_response({"ok": False, "error": "Не больше 20 лотов одновременно"})
+            if isinstance(body.get("item"), dict) and body["item"].get("uid"):
+                item["uid"] = str(body["item"]["uid"])[:24]
+            real, err = await items.escrow_for_market(s, uid, item)     # только вещи из реестра сервера
+            if err:
+                return web.json_response({"ok": False, "error": err})
             save_row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
             nick = (save_row.nick if save_row and save_row.nick else user["name"])[:16]
-            s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(item), price=price, created=int(time.time())))
+            s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(real), price=price, created=int(time.time())))
             await s.commit()
             return web.json_response({"ok": True})
         if op in ("buy", "cancel"):
@@ -461,6 +467,7 @@ async def api_market(request):
                 if lot.seller_id != uid:
                     return web.json_response({"ok": False, "error": "Это не твой лот"})
                 await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+                await items.market_transfer(s, item, uid)                 # вещь возвращается продавцу
                 await s.commit()
                 return web.json_response({"ok": True, "item": item})
             if lot.seller_id == uid:
@@ -479,6 +486,7 @@ async def api_market(request):
             sw = await gram.wallet_of(s, lot.seller_id)
             sw.locked = (sw.locked or 0) + int(from_locked * (1 - MARKET_FEE))
             await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+            await items.market_transfer(s, item, uid)                     # вещь переходит покупателю
             now_ = int(time.time())
             s.add(MarketHist(tg_id=uid, kind="buy", item=lot.item, price=lot.price, other="@" + lot.seller_nick, ts=now_))
             s.add(MarketHist(tg_id=lot.seller_id, kind="sell", item=lot.item, price=lot.price, other="@" + buyer_nick, ts=now_))
@@ -880,11 +888,13 @@ async def start_web(port: int):
     app.router.add_get("/tonconnect-manifest.json", tonconnect_manifest)
     app.router.add_get("/icon.png", icon_png)
     gram.setup(app)
+    items.setup(app)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
     asyncio.create_task(world_loop())
     await gram.migrate_market_to_gram()
+    await items.migrate_market_registry()
     asyncio.create_task(gram.deposit_watcher())
     log.info("Игра доступна на порту %s", port)

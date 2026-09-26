@@ -29,6 +29,8 @@ async def main():
     await gram.migrate_locked_column()
     gram.BOT["bot"] = bot
     await start_web(PORT)
+    import backup
+    asyncio.create_task(backup.backup_loop())
     try:
         import gram
         gram.BOT_USERNAME["name"] = (await bot.get_me()).username or ""

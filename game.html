@@ -598,6 +598,11 @@ button.li{width:100%;font:inherit;color:inherit}
 /* название локации под мини-картой: одна строка, не залезает под «Меню» */
 .loc-name{white-space:nowrap !important;overflow:hidden;text-overflow:ellipsis;width:118px !important;right:4px !important;font-size:10.5px !important;line-height:1.2 !important}
 
+/* ---- реестр вещей и тестовый сервер ---- */
+.regb{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+.regb.ok{color:var(--ok)}
+.envbadge{position:fixed;left:50%;top:0;transform:translateX(-50%);z-index:50;background:#E0463A;color:#fff;font:10px 'Russo One',sans-serif;letter-spacing:1px;padding:2px 10px;border-radius:0 0 8px 8px;pointer-events:none}
+
 /* ---- разделы меню ---- */
 .vip-head{text-align:center;font:34px 'Russo One',sans-serif;color:#F2A93B;text-shadow:0 0 18px rgba(242,169,59,.45);margin:4px 0 10px}
 .vip-prog{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);gap:8px}
@@ -1204,7 +1209,7 @@ function combatPower(){
 // ---- инвентарь ----
 const count = (list, id) => list.filter(x => x.id === id && ITEMS[id].type !== "gear").reduce((a,x) => a + x.n, 0);
 const have = id => id === "scrap" ? S.scrap : id === "cores" ? S.cores : count(S.inv, id);
-function addItem(list, id, n, max, g, e){
+function addItem(list, id, n, max, g, e, uid){
   const stackable = ITEMS[id].type !== "gear";
   if(stackable){
     const ex = list.find(x => x.id === id);
@@ -1213,7 +1218,7 @@ function addItem(list, id, n, max, g, e){
     list.push({id, n}); return n;
   }
   let added = 0;
-  while(added < n && list.length < max){ list.push({id, n:1, g:g||0, e:e||0}); added++; }
+  while(added < n && list.length < max){ const it = {id, n:1, g:g||0, e:e||0}; if(uid) it.uid = uid; list.push(it); added++; }
   return added;
 }
 function removeItem(list, id, n){
@@ -1550,7 +1555,7 @@ function update(dt){
     if(dist > 130) d.stuck = false;
     if(dist < 24 && !d.stuck){
       if(d.kind === "scrap" || d.kind === "cores"){ Sfx.play("pick"); S[d.kind] += d.amt; addText(p.x, p.y-40, "+" + d.amt + (d.kind === "scrap" ? " лома" : " ядро"), d.kind === "scrap" ? "#C9D1D8" : "#5FD4E8"); d.got = true; }
-      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g)){ addText(p.x, p.y-40, ITEMS[d.kind].name, d.g !== undefined ? gradeColor(d.g) : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
+      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); addText(p.x, p.y-40, ITEMS[d.kind].name, d.g !== undefined ? gradeColor(d.g) : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
       else { d.stuck = true; if(fullWarnT <= 0){ toast("Сумка заполнена. Освободи место на складе или продай"); fullWarnT = 4; } }
     }
   }
@@ -2091,7 +2096,7 @@ function transferItem(i, k){
   const from = stTab === "inv" ? S.inv : S.store, to = stTab === "inv" ? S.store : S.inv, max = stTab === "inv" ? STORE_MAX : INV_MAX;
   const x = from[i]; if(!x) return;
   k = Math.max(1, Math.min(x.n || 1, k || x.n || 1));
-  if(!addItem(to, x.id, k, max, x.g, x.e)){ toast(stTab === "inv" ? "Склад заполнен" : "Сумка заполнена"); return; }
+  if(!addItem(to, x.id, k, max, x.g, x.e, x.uid)){ toast(stTab === "inv" ? "Склад заполнен" : "Сумка заполнена"); return; }
   if(ITEMS[x.id].type === "gear" || k >= x.n) from.splice(i, 1); else x.n -= k;
   toast((stTab === "inv" ? "На склад: " : "В сумку: ") + ITEMS[x.id].name + (k > 1 ? " ×" + k : ""));
 }
@@ -2130,14 +2135,14 @@ function equipAt(i){
   const x = S.inv[i]; if(!x) return false; const it = ITEMS[x.id];
   if(it.lvl && S.level < it.lvl){ toast("Нужен " + it.lvl + " уровень"); return false; }
   const old = S.eq[it.slot];
-  S.inv.splice(i, 1); S.eq[it.slot] = {id:x.id, g:x.g||0, e:x.e||0};
-  if(old) S.inv.splice(i, 0, {id:old.id, n:1, g:old.g, e:old.e||0});
+  S.inv.splice(i, 1); S.eq[it.slot] = {id:x.id, g:x.g||0, e:x.e||0, ...(x.uid ? {uid:x.uid} : {})};
+  if(old) S.inv.splice(i, 0, {id:old.id, n:1, g:old.g, e:old.e||0, ...(old.uid ? {uid:old.uid} : {})});
   S.hp = Math.min(S.hp, stat().maxhp);
   toast("Надето: " + it.name); save(); return true;
 }
 function unequip(slot){
   const e = S.eq[slot]; if(!e) return false;
-  if(!addItem(S.inv, e.id, 1, INV_MAX, e.g, e.e)){ toast("Сумка заполнена"); return false; }
+  if(!addItem(S.inv, e.id, 1, INV_MAX, e.g, e.e, e.uid)){ toast("Сумка заполнена"); return false; }
   S.eq[slot] = null; S.hp = Math.min(S.hp, stat().maxhp); toast("Снято: " + ITEMS[e.id].name); save(); return true;
 }
 
@@ -2182,6 +2187,7 @@ $("shBody").addEventListener("click", e => {
   }
   else if(d.sell !== undefined){
     const x = S.inv[+d.sell]; if(!x || ITEMS[x.id].nosell) return; const n = Math.min(+d.n, x.n);
+    if(typeof regGone === "function"){ if(x.uid) regGone([x.uid]); else if(x.id === "sph_cu" || x.id === "sph_ti") regUseSph(x.id, n); }
     S.scrap += sellPrice(x)*n; toast("Продано за " + sellPrice(x)*n + " лома");
     if(ITEMS[x.id].type === "gear") S.inv.splice(+d.sell, 1); else removeItem(S.inv, x.id, n);
   }
@@ -5040,14 +5046,14 @@ function renderEnchant(){
     <p class="hint">До +3 заточка безопасна для любых сфер. Каждый уровень даёт +${Math.round(ENCH_STEP*100)}% к характеристикам вещи.</p>`;
 }
 
-function doEnchant(){
+function doEnchant(forced){
   const x = enchGet(); if(!x || enchBusy) return;
   const e = x.e || 0; if(e >= ENCH_MAX || !have(enchSph)) return;
   enchBusy = true; removeItem(S.inv, enchSph, 1);
   const el = $("enchItem"); el.classList.remove("ok", "fail"); el.classList.add("flash"); Sfx.play("portal");
   $("enchRes").textContent = "…";
   setTimeout(() => {
-    const chance = ENCH_CHANCE[e], ok = Math.random()*100 < chance, it = ITEMS[x.id];
+    const chance = ENCH_CHANCE[e], ok = forced ? forced === "ok" : Math.random()*100 < chance, it = ITEMS[x.id];
     if(ok){
       x.e = e + 1; enchResult = `<span style="color:var(--ok)">Успех! ${it.name} +${x.e}</span>`;
       Sfx.play("level"); if(Sfx.haptic) Sfx.haptic("heavy");
@@ -5154,9 +5160,11 @@ function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
   const vb = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
-  for(const it of D.items) if(Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
+  const srv = typeof regOnline === "function" && regOnline();
+  if(srv) regKill(e);                                   // ценный лут решает сервер
+  for(const it of D.items) if(!(srv && (it.id === "sph_cu" || it.id === "sph_ti")) && Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
   // снаряжение: один бросок на грейд, шанс = шанс вещи × число вещей
-  if(D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
+  if(!srv && D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
     if(p && Math.random() < p*D.gear.pool.length*(1 + vb.drop))
       drops.push({x:e.x - 12, y:e.y + 12, kind:D.gear.pool[Math.floor(Math.random()*D.gear.pool.length)], amt:1, g, t:0});
   });
@@ -5608,6 +5616,7 @@ function codexSlot(cid, i){
   const idx = S.inv.findIndex(x => x.id === s.id && (x.g || 0) === c.g && (x.e || 0) >= s.e);
   if(idx < 0){ toast("Нужен предмет: " + ITEMS[s.id].name + " (" + GRADES[c.g].name.toLowerCase() + (s.e ? ", +" + s.e : "") + ") в сумке"); cxArm = null; renderCodex(); return; }
   if(cxArm !== cid + ":" + i){ cxArm = cid + ":" + i; toast("Нажми ещё раз, чтобы вложить предмет навсегда"); renderCodex(); return; }
+  if(S.inv[idx].uid && typeof regGone === "function") regGone([S.inv[idx].uid]);
   S.inv.splice(idx, 1); f[i] = true; cxArm = null; Sfx.play("pick");
   if(codexDone(c)){ toast("Набор завершён: +" + c.val + " " + STAT_RU[c.stat]); Sfx.play("level"); }
   save(); renderCodex();
@@ -5682,7 +5691,7 @@ function renderMarket(){
 }
 function mkNewSheet(){
   openSheet("Выставить лот", "Выбери предмет из сумки", () => {
-    const items = S.inv.map((x, i) => [x, i]).filter(([x]) => ITEMS[x.id] && ITEMS[x.id].type !== "stuff");
+    const items = S.inv.map((x, i) => [x, i]).filter(([x]) => ITEMS[x.id] && ITEMS[x.id].type !== "stuff" && (!mkOnline() || typeof regTradable !== "function" || regTradable(x) > 0));
     body().innerHTML = `<div class="mklist">${items.map(([x, i]) => `<button type="button" class="mkrow pick" data-mkpick="${i}"><div class="ic" style="position:relative">${icon(x.id, x.g)}${encBadge(x)}</div><div class="tx"><b style="color:${ITEMS[x.id].type === "gear" ? gradeColor(x.g) : "var(--text)"}">${mkItemName(x)}${x.n > 1 ? " ×" + x.n : ""}</b></div></button>`).join("") || `<div class="empty">Сумка пуста</div>`}</div>
       <div id="mkForm"></div><button class="btn wide" type="button" data-mkback="1">← Маркет</button>`;
   });
@@ -5690,7 +5699,7 @@ function mkNewSheet(){
 function mkForm(i){
   const x = S.inv[i]; if(!x) return;
   const sug = Math.max(0.05, Math.round(sellPrice(x)/200*100)/100);
-  $("mkForm").innerHTML = `<section class="pcard"><b>${mkItemName(x)}</b>${x.n > 1 ? `<label class="flabel">Количество (из ${x.n})</label><input class="field" id="mkN" type="number" min="1" max="${x.n}" value="${x.n}">` : ""}
+  $("mkForm").innerHTML = `<section class="pcard"><b>${mkItemName(x)}</b>${(() => { const lim = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n; return lim > 1 ? `<label class="flabel">Количество (можно продать ${lim})</label><input class="field" id="mkN" type="number" min="1" max="${lim}" value="${lim}">` : ""; })()}
     <label class="flabel">Цена за лот, GRAM</label><input class="field" id="mkP" type="number" min="0.01" step="0.01" value="${sug}">
     <button class="btn pri wide" type="button" data-mkcreate="${i}">Выставить</button></section>`;
   ["mkN", "mkP"].forEach(id => { const el = $(id); if(el) el.addEventListener("keydown", e => e.stopPropagation()); });
@@ -5698,14 +5707,16 @@ function mkForm(i){
 }
 async function mkCreate(i){
   const x = S.inv[i]; if(!x) return;
-  const n = Math.max(1, Math.min(x.n, parseInt(($("mkN") || {}).value) || x.n)), price = Math.round(Math.max(0.01, Math.min(100000, parseFloat($("mkP").value) || 0))*100)/100;
-  const item = {id:x.id, g:x.g || 0, e:x.e || 0, n};
+  const lim = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n;
+  const n = Math.max(1, Math.min(lim, parseInt(($("mkN") || {}).value) || lim)), price = Math.round(Math.max(0.01, Math.min(100000, parseFloat($("mkP").value) || 0))*100)/100;
+  const item = {id:x.id, g:x.g || 0, e:x.e || 0, n, ...(x.uid ? {uid:x.uid} : {})};
   if(ITEMS[x.id].type === "gear") S.inv.splice(i, 1); else removeItem(S.inv, x.id, n);
+  if(mkOnline() && !x.uid && typeof regAddSph === "function" && (x.id === "sph_cu" || x.id === "sph_ti")) regAddSph(x.id, -n);
   try{
     if(mkOnline()) await mkApi("create", {item, price});
     else { mkLocal().mine.unshift({id:"m" + Date.now(), seller:S.name, item, price, ts:Date.now()}); }
     save(); toast("Лот выставлен"); mkTab = "mine"; openMarket();
-  }catch(e){ addItem(S.inv, item.id, item.n, INV_MAX, item.g, item.e); save(); toast(e.message); }
+  }catch(e){ addItem(S.inv, item.id, item.n, INV_MAX, item.g, item.e, item.uid); if(mkOnline() && !item.uid && typeof regAddSph === "function" && (item.id === "sph_cu" || item.id === "sph_ti")) regAddSph(item.id, item.n); save(); toast(e.message); }
 }
 async function mkBuy(id){
   const lot = (mkData.lots || []).find(l => String(l.id) === String(id)); if(!lot || gramBal() < lot.price) return;
@@ -5713,7 +5724,8 @@ async function mkBuy(id){
     let item = lot.item;
     if(mkOnline()){ item = (await mkApi("buy", {id:lot.id})).item; await gramLoad(); }
     else { Wl.gram = +(Wl.gram - lot.price).toFixed(4); saveW(); const L = mkLocal(); L.lots = L.lots.filter(l => l.id !== lot.id); L.hist.unshift({kind:"buy", item, price:lot.price, other:"@" + lot.seller, ts:Date.now()}); L.bought = +(L.bought + lot.price).toFixed(4); }
-    addItem(S.inv, item.id, item.n || 1, INV_MAX, item.g, item.e) || addItem(S.store, item.id, item.n || 1, STORE_MAX, item.g, item.e);
+    addItem(S.inv, item.id, item.n || 1, INV_MAX, item.g, item.e, item.uid) || addItem(S.store, item.id, item.n || 1, STORE_MAX, item.g, item.e, item.uid);
+    if(item.reg && typeof regAddSph === "function") regAddSph(item.id, item.n || 1);
     save(); toast("Куплено: " + mkItemName(item)); Sfx.play("pick");
   }catch(e){ toast(e.message); }
   await mkLoad(); renderMarket();
@@ -5723,7 +5735,8 @@ async function mkCancel(id){
     let item;
     if(mkOnline()) item = (await mkApi("cancel", {id})).item;
     else { const L = mkLocal(), lot = L.mine.find(l => String(l.id) === String(id)); L.mine = L.mine.filter(l => l !== lot); item = lot.item; }
-    addItem(S.inv, item.id, item.n || 1, INV_MAX, item.g, item.e) || addItem(S.store, item.id, item.n || 1, STORE_MAX, item.g, item.e);
+    addItem(S.inv, item.id, item.n || 1, INV_MAX, item.g, item.e, item.uid) || addItem(S.store, item.id, item.n || 1, STORE_MAX, item.g, item.e, item.uid);
+    if(item.reg && typeof regAddSph === "function") regAddSph(item.id, item.n || 1);
     save(); toast("Лот снят, предмет вернулся");
   }catch(e){ toast(e.message); }
   await mkLoad(); renderMarket();
@@ -5731,7 +5744,13 @@ async function mkCancel(id){
 
 function finishPack(pk, before){
   if(pk.once) S.bought[pk.once + (pk.once === "season" ? seasonId() : "")] = true;
-  giveReward(pk.rew); toast("Куплено: " + pk.name); Sfx.play("level");
+  const minted = pk._minted || []; pk._minted = null;
+  giveReward(pk.rew.filter(r => !minted.some(m => m.id === r.id)));      // вещи с сервера выдаются ниже, с номерами
+  for(const m of minted){
+    if(m.uid) addItem(S.inv, m.id, 1, INV_MAX, m.g, m.e, m.uid) || addItem(S.store, m.id, 1, STORE_MAX, m.g, m.e, m.uid);
+    else { addItem(S.inv, m.id, m.n, INV_MAX) || addItem(S.store, m.id, m.n, STORE_MAX); if(m.reg && typeof regAddSph === "function") regAddSph(m.id, m.n); }
+  }
+  save(); toast("Куплено: " + pk.name); Sfx.play("level");
   if(vipLevel() > before) toast("Новый уровень VIP: " + vipLevel());
   openShop();
 }
@@ -5955,6 +5974,7 @@ async function gramBuyPack(pk){
   const r = await NET.api("/api/gram/spend", {pack:pk.id});
   if(!r || !r.ok){ toast((r && r.error) || "Не получилось"); return false; }
   G.bal = Wl.gram = r.balance; G.spent = S.vipSpent = r.spent;
+  pk._minted = r.items || [];
   return true;
 }
 
@@ -6091,6 +6111,102 @@ renderTargetFrame = function(){
   const sub = $("tfSub");
   if(sub && pvpZone()) sub.textContent += isFriend(o) ? " · союзник" : " · ⚔ PvP";
 };
+// ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
+// В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
+// Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
+const REG = {on:false, sph:{sph_cu:0, sph_ti:0}, uids:new Set()};
+const regOnline = () => typeof NET !== "undefined" && NET.on && NET.id && NET.ws && NET.ws.readyState === 1;
+const regApi = (op, body) => NET.api("/api/items/" + op, body || {});
+
+// сверка с сервером: номера, которых у игрока уже нет (проданы, разрушены), снимаются
+async function regSync(){
+  if(!(typeof NET !== "undefined" && NET.on && NET.id)) return;
+  try{
+    const r = await regApi("state"); if(!r || !r.ok) return;
+    REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = {sph_cu:r.sph.sph_cu || 0, sph_ti:r.sph.sph_ti || 0};
+    const byUid = Object.fromEntries(r.items.map(x => [x.uid, x]));
+    const fix = x => { if(!x || !x.uid) return; const s = byUid[x.uid]; if(!s || s.id !== x.id){ delete x.uid; return; } x.g = s.g; x.e = s.e; };
+    [...S.inv, ...S.store, ...Object.values(S.eq)].forEach(fix);
+    save();
+  }catch(e){}
+}
+if(typeof NET !== "undefined" && NET.ready) NET.ready.then(() => setTimeout(regSync, 1500));
+
+// убийства копятся и уходят на сервер пачкой раз в 1,2 с; сервер бросает ценный лут и возвращает вещи с номерами
+const killQ = [];
+function regKill(e){ if(killQ.length < 60) killQ.push({mob:e.type, loc:locKey, x:Math.round(e.x), y:Math.round(e.y)}); }
+setInterval(() => {
+  if(!killQ.length || !regOnline()) return;
+  const batch = killQ.splice(0, killQ.length);
+  regApi("kill", {kills:batch.map(k => ({mob:k.mob, loc:k.loc}))}).then(r => {
+    if(!r || !r.ok || !r.drops) return;
+    for(const d of r.drops){
+      const k = batch[d.i] || batch[0];
+      if(!k || k.loc !== locKey) continue;
+      drops.push({x:k.x + Math.random()*30 - 15, y:k.y + Math.random()*30 - 15, kind:d.id, amt:d.n || 1, g:d.g, e:d.e, uid:d.uid, reg:!!d.reg, t:0});
+      if(d.uid) REG.uids.add(d.uid);
+    }
+  }).catch(() => {});
+}, 1200);
+function regAddSph(id, n){ REG.sph[id] = Math.max(0, (REG.sph[id] || 0) + n); }
+// учтённых сфер не может быть больше, чем их лежит в сумке: лишние списываются и на сервере
+function regClampSph(){
+  if(!REG.on) return;
+  for(const id of ["sph_cu", "sph_ti"]){
+    const extra = (REG.sph[id] || 0) - have(id);
+    if(extra > 0){ REG.sph[id] -= extra; regApi("gone", {sph:{[id]:extra}}); }
+  }
+}
+function regUseSph(id, n){ if(!REG.on) return; const use = Math.min(REG.sph[id] || 0, n); if(use > 0){ REG.sph[id] -= use; regApi("gone", {sph:{[id]:use}}); } }
+function regGone(uids){ uids = uids.filter(Boolean); if(!REG.on || !uids.length) return; uids.forEach(u => REG.uids.delete(u)); regApi("gone", {uids}); }
+// сколько штук этого предмета можно продать за GRAM
+function regTradable(x){
+  if(ITEMS[x.id].type === "gear") return x.uid ? 1 : 0;
+  if(x.id === "sph_cu" || x.id === "sph_ti") return Math.min(x.n, REG.sph[x.id] || 0);
+  return 0;
+}
+
+// ---- заточка: вещь с номером точится на сервере учтённой сферой ----
+const _doEnchantLocal = doEnchant;
+doEnchant = async function(){
+  const x = enchGet(); if(!x || enchBusy) return;
+  if(!(REG.on && x.uid)) { _doEnchantLocal(); regClampSph(); return; }
+  if((REG.sph[enchSph] || 0) < 1){
+    // учтённых сфер нет: заточка пройдёт как обычно, но вещь станет привязанной
+    if(!doEnchant._warned || doEnchant._warned !== x.uid){ doEnchant._warned = x.uid; toast("Учтённых сфер нет: после заточки вещь нельзя будет продать за GRAM. Нажми ещё раз"); return; }
+    regGone([x.uid]); delete x.uid; save(); _doEnchantLocal(); regClampSph(); return;
+  }
+  const b = body().querySelector('[data-ench="go"]'); if(b) b.disabled = true;
+  let r;
+  try{ r = await regApi("enchant", {uid:x.uid, sphere:enchSph}); }catch(e){ r = null; }
+  if(b) b.disabled = false;
+  if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
+  REG.sph[enchSph] = r.sph;
+  _doEnchantLocal(r.result === "ok" ? "ok" : "fail");
+  if(r.result === "ok") x.e = r.e;
+};
+
+// ---- подсказка в карточке вещи: можно ли продать за GRAM ----
+function regBadge(x){
+  if(!REG.on || !x) return "";
+  const t = regTradable(x);
+  if(ITEMS[x.id].type === "gear") return t ? `<span class="regb ok">⇄ можно продать за GRAM</span>` : `<span class="regb">🔒 привязана: нельзя продать за GRAM</span>`;
+  if(x.id === "sph_cu" || x.id === "sph_ti") return `<span class="regb ${t ? "ok" : ""}">${t ? "⇄ за GRAM можно продать " + t + " шт." : "🔒 нельзя продать за GRAM"}</span>`;
+  return "";
+}
+new MutationObserver(() => {
+  if(!REG.on || typeof bagSel === "undefined" || bagSel === null) return;
+  const sh = $("shBody"), x = S.inv[bagSel];
+  if(!x || !$("shTitle").textContent.match(/Сумка|Bag|Сумк|Bolsa|Çanta/)) return;
+  const det = sh.querySelector(".detail .tx, .bagdetail .tx, .li.sel .tx"); if(!det || det.querySelector(".regb")) return;
+  det.insertAdjacentHTML("beforeend", regBadge(x));
+}).observe($("shBody"), {childList:true, subtree:true});
+
+// ---- метка тестового сервера ----
+if(typeof NET !== "undefined" && NET.ready) NET.ready.then(async () => {
+  try{ const r = await NET.api("/api/state/load", {}); if(r && r.env && r.env !== "production"){
+    const b = document.createElement("div"); b.className = "envbadge"; b.textContent = "ТЕСТОВЫЙ СЕРВЕР"; document.body.appendChild(b); } }catch(e){}
+});
 // ===================== УПРАВЛЕНИЕ: ДЖОЙСТИК, СТИКЕРЫ, РАСПОЛОЖЕНИЕ КНОПОК =====================
 S.settings.joyAlpha = S.settings.joyAlpha ?? 0.66;
 S.settings.joySize = S.settings.joySize ?? 1;

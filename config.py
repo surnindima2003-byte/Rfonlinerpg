@@ -34,3 +34,8 @@ GRAM_WITHDRAW_FEE = float(os.getenv("GRAM_WITHDRAW_FEE", "0.10"))
 STAR_USD = float(os.getenv("STAR_USD", "0.013"))
 GRAM_USD = float(os.getenv("GRAM_USD", "1.55"))
 STAR_PACKS = [50, 100, 250, 500, 1000, 2500]
+
+# Имя окружения: production (боевой сервер) или staging (тестовый). На тестовом в игре видна метка.
+ENV_NAME = os.getenv("ENV_NAME", "production")
+# Папка для ежедневных резервных копий (на томе Railway)
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backups")

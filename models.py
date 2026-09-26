@@ -172,3 +172,27 @@ class StarPayment(Base):
     stars: Mapped[int] = mapped_column(Integer, default=0)
     gram: Mapped[int] = mapped_column(BigInteger, default=0)
     ts: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class ItemInst(Base):
+    """Зарегистрированная сервером вещь: выпала по решению сервера или куплена за GRAM. Только такие продаются за GRAM."""
+    __tablename__ = "item_inst"
+
+    uid: Mapped[str] = mapped_column(String(24), primary_key=True)
+    owner: Mapped[int] = mapped_column(BigInteger, index=True)
+    item: Mapped[str] = mapped_column(String(24))
+    g: Mapped[int] = mapped_column(Integer, default=0)
+    e: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(8), default="inv", index=True)   # inv | market | gone
+    source: Mapped[str] = mapped_column(String(12), default="drop")
+    created: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class SphereBal(Base):
+    """Сколько сфер заточки у игрока выпало по решению сервера (их можно продавать за GRAM)."""
+    __tablename__ = "sphere_bal"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner: Mapped[int] = mapped_column(BigInteger, index=True)
+    item: Mapped[str] = mapped_column(String(12))
+    n: Mapped[int] = mapped_column(Integer, default=0)
