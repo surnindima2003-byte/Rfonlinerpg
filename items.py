@@ -41,8 +41,12 @@ def gear_per(lv):
     return [0, 0, P(0.0001), P(0.00001)]
 
 
+BOSS_LOOT, BOSS_GAP = 150, 40                   # главарь: шансы ×150, не чаще одного на игрока раз в 40 с
+_boss_t = {}
+
+
 def mob_level(mob, loc):
-    m = re.fullmatch(r"dg(\d{1,2})", mob or "")
+    m = re.fullmatch(r"d[gb](\d{1,2})", mob or "")
     if m:
         lv = int(m.group(1))
         lo, hi = DUNGEON_RANGE.get(loc, (0, -1))
@@ -52,16 +56,16 @@ def mob_level(mob, loc):
     return None
 
 
-def roll(lv):
-    """Бросок ценного лута за одного убитого моба."""
+def roll(lv, mult=1):
+    """Бросок ценного лута за одного убитого моба (mult > 1 — главарь)."""
     out, s = [], lv - 1
     pool = [g for g, need in GEAR if need <= lv + 2]
     for grade, per in enumerate(gear_per(lv)):
-        if per and random.random() < per * len(pool):
+        if per and random.random() < min(0.5, per * mult) * len(pool):
             out.append({"kind": "gear", "id": random.choice(pool), "g": grade})
-    if random.random() < P(0.0033 + 0.000036 * s):
+    if random.random() < min(0.9, P(0.0033 + 0.000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_cu", "n": 1})
-    if random.random() < P(0.00033 + 0.0000036 * s):
+    if random.random() < min(0.9, P(0.00033 + 0.0000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_ti", "n": 1})
     return out
 
@@ -131,7 +135,12 @@ async def api_items(request):
                 lv = mob_level(mob, loc)
                 if not me or me.get("loc") != loc or lv is None or lv > (save or 1) + 12 or not allow_kill(uid):
                     continue                                   # не в этой локации, слишком сильный моб или слишком часто
-                for d in roll(lv):
+                mult = 1
+                if mob.startswith("db"):
+                    if time.time() - _boss_t.get(uid, 0) < BOSS_GAP:
+                        continue                               # главари не могут умирать слишком часто
+                    _boss_t[uid], mult = time.time(), BOSS_LOOT
+                for d in roll(lv, mult):
                     item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
                     item["i"] = i
                     drops.append(item)
