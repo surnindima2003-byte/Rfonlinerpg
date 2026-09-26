@@ -444,6 +444,12 @@ button.li{width:100%;font:inherit;color:inherit}
 .gm-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3}
 .gm-list[hidden] + .gm-back{display:none}
 .gm-toggle{position:relative;z-index:4}
+.mb-ic .mb{transform-box:view-box;transform-origin:12px 12px;transition:transform .32s cubic-bezier(.45,1.5,.5,1)}
+.gm-toggle[aria-expanded="true"] .mb{transform:rotate(90deg)}
+.gm-toggle[aria-expanded="true"] .mb2{transition-delay:.08s}
+.gm-toggle[aria-expanded="true"] .mb3{transition-delay:.16s}
+.gm-toggle[aria-expanded="false"] .mb1{transition-delay:.16s}
+.gm-toggle[aria-expanded="false"] .mb2{transition-delay:.08s}
 .gm-b{display:flex;align-items:center;gap:7px;background:linear-gradient(180deg,rgba(24,33,43,.95),rgba(14,20,27,.95));border:1px solid #2E3B49;border-left:3px solid var(--c);border-radius:10px;padding:8px 9px;color:var(--c);font:12px 'Russo One',sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.35);text-align:left}
 .gm-b svg{width:17px;height:17px;flex:none}
 .gm-b span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -588,6 +594,9 @@ button.li{width:100%;font:inherit;color:inherit}
 .starpack:disabled{opacity:.5}
 .wsplit{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin:6px 0 2px}
 .wsplit b{color:var(--text)}
+
+/* название локации под мини-картой: одна строка, не залезает под «Меню» */
+.loc-name{white-space:nowrap !important;overflow:hidden;text-overflow:ellipsis;width:118px !important;right:4px !important;font-size:10.5px !important;line-height:1.2 !important}
 
 /* ---- разделы меню ---- */
 .vip-head{text-align:center;font:34px 'Russo One',sans-serif;color:#F2A93B;text-shadow:0 0 18px rgba(242,169,59,.45);margin:4px 0 10px}
@@ -849,7 +858,7 @@ textarea.field{min-height:70px;resize:vertical}
     </div>
     <div class="loc-name" id="locName">Ангар</div>
     <div class="gmenu" id="gmenu">
-      <button type="button" class="gm-b gm-toggle" id="gmToggle" aria-expanded="false" style="--c:#F2A93B"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 5v14M12 5v14M16 5v14"/></svg><span>Меню</span></button>
+      <button type="button" class="gm-b gm-toggle" id="gmToggle" aria-expanded="false" style="--c:#F2A93B"><svg class="mb-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path class="mb mb1" d="M5 7h14"/><path class="mb mb2" d="M5 12h14"/><path class="mb mb3" d="M5 17h14"/></svg><span>Меню</span></button>
       <div class="gm-list" id="gmList" hidden>
         <button type="button" class="gm-b" data-gm="rating" style="--c:#F2A93B"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Рейтинг</span></button>
         <button type="button" class="gm-b" data-gm="vip" style="--c:#F2C14B"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 18 3-18"/></svg><span>VIP</span></button>
@@ -5114,32 +5123,43 @@ NPCS.scrap_crawler.lvl = 1; NPCS.rogue_drone.lvl = 2; NPCS.sentry_bot.lvl = 4; N
 
 // ---- таблица дропа в духе Lineage: лом всегда, материалы часто, сферы и ядра редко,
 //      снаряжение и книги — очень редко. Одна функция и для выпадения, и для экрана карты ----
-const DG_GRADE_ODDS = L => L <= 5 ? [90, 9.3, 0.69, 0.01] : L <= 10 ? [80, 17, 2.9, 0.1] : L <= 15 ? [68, 26, 5.6, 0.4] : L <= 20 ? [55, 33, 11, 1] : L <= 30 ? [42, 38, 17, 3] : [30, 40, 25, 5];
+// ---- таблица выпадения по образцу LIBERTY: лом 30%, всё остальное — сотые и тысячные доли процента ----
+const P = pct => pct/100;                                  // проценты → вероятность
+const SCRAP_CHANCE = 0.30;
+// снаряжение: шанс на КАЖДУЮ вещь; низкие уровни — обычный грейд, выше — только более редкие грейды и реже
+function gearPer(lv){
+  if(lv <= 10) return [P(0.0028 + 0.00008*(lv - 1)), 0, 0, 0];
+  if(lv <= 20) return [0, P(0.0001), 0, 0];
+  if(lv <= 30) return [0, P(0.00012), P(0.00002), 0];
+  return [0, 0, P(0.0001), P(0.00001)];
+}
 function mobDrops(type, loc){
-  const k = NPCS[type], L = LOCS[loc] || {}, lv = k.lvl || L.min || 1;
-  const out = {exp:k.exp, scrap:k.scrap, items:[], gear:null};
-  // материалы: частые, по 1–2 штуки
-  for(const [id, c] of Object.entries(k.loot || {})) out.items.push({id, chance:+(Math.min(0.6, c*0.9 + 0.1)).toFixed(3), sect:"mat", amt:[1, 2]});
-  out.items.push({id:"kit_s", chance:0.03, sect:"mat"});
-  if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:+(L.cores ? L.cores*0.5 : 0.06 + 0.006*lv).toFixed(3), sect:"sph"});
-  out.items.push({id:"sph_cu", chance:+(0.004 + 0.0004*lv).toFixed(5), sect:"sph"});
-  out.items.push({id:"sph_ti", chance:+(0.0004 + 0.00004*lv).toFixed(6), sect:"sph"});
-  // книги: общий шанс делится между всеми книгами
-  const bookTotal = (k.dungeon ? 0.004 : 0.002) + 0.0003*lv;
-  const perBook = +(bookTotal/BOOK_IDS.length).toFixed(7);
-  for(const b of BOOK_IDS) out.items.push({id:b, chance:perBook, sect:ITEMS[b].pas ? "bookp" : "book"});
-  // снаряжение
-  const pool = GEAR_IDS.filter(id => (ITEMS[id].lvl || 1) <= lv + 2);
-  out.gear = {chance:0.012 + 0.0008*lv, pool, odds:DG_GRADE_ODDS(lv)};
+  const k = NPCS[type], L = LOCS[loc] || {}, lv = k.lvl || L.min || 1, s = lv - 1;
+  const out = {exp:k.exp, scrap:k.scrap, scrapChance:SCRAP_CHANCE, items:[], gear:null};
+  // материалы — как «ключи» в LIBERTY: 0,13% на 1 ур., растёт с уровнем; более редкие — реже
+  const base = 0.13 + 0.0079*s;
+  for(const [id, c] of Object.entries(k.loot || {})) out.items.push({id, chance:P(+(base*Math.max(0.3, Math.min(1, c/0.4))).toFixed(4)), sect:"mat"});
+  out.items.push({id:"kit_s", chance:P(+(0.0267 + 0.0015*s).toFixed(4)), sect:"mat"});
+  if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:P(+(0.02 + 0.001*s).toFixed(4)), sect:"sph"});
+  // сферы — как «камень обычной заточки»: 0,0033% на 1 ур.
+  out.items.push({id:"sph_cu", chance:P(+(0.0033 + 0.000036*s).toFixed(6)), sect:"sph"});
+  out.items.push({id:"sph_ti", chance:P(+(0.00033 + 0.0000036*s).toFixed(7)), sect:"sph"});
+  // книги: 0,0001% каждая, книги навыков с 11 ур. — 0,0002%
+  for(const b of BOOK_IDS) out.items.push({id:b, chance:P(ITEMS[b].pas ? 0.0001 : lv > 10 ? 0.0002 : 0.0001), sect:ITEMS[b].pas ? "bookp" : "book"});
+  const pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= lv + 2);
+  out.gear = {pool, per:gearPer(lv)};
   return out;
 }
 function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
   const vb = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
-  drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
+  if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   for(const it of D.items) if(Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
-  if(D.gear && D.gear.pool.length && Math.random() < D.gear.chance)
-    drops.push({x:e.x - 12, y:e.y + 12, kind:D.gear.pool[Math.floor(Math.random()*D.gear.pool.length)], amt:1, g:rollGrade(D.gear.odds), t:0});
+  // снаряжение: один бросок на грейд, шанс = шанс вещи × число вещей
+  if(D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
+    if(p && Math.random() < p*D.gear.pool.length*(1 + vb.drop))
+      drops.push({x:e.x - 12, y:e.y + 12, kind:D.gear.pool[Math.floor(Math.random()*D.gear.pool.length)], amt:1, g, t:0});
+  });
 }
 
 // ---- геометрия ----
@@ -5311,7 +5331,7 @@ function renderMapScreen(){
     <div class="moblist">${types.length ? types.map(mobCard).join("") : `<div class="pcard"><div class="empty">Здесь нет врагов<small>Отправляйся через портал в ангаре</small></div></div>`}</div>`;
   drawMapCanvas();
 }
-const pctF = c => { const v = c*100; return (v >= 1 ? +v.toFixed(1) : v >= 0.1 ? +v.toFixed(2) : v >= 0.001 ? +v.toFixed(4) : +v.toFixed(6)) + "%"; };
+const pctF = c => { const v = c*100; return (v >= 1 ? +v.toFixed(1) : v >= 0.1 ? +v.toFixed(2) : v >= 0.0001 ? +v.toFixed(4) : +v.toFixed(6)) + "%"; };
 function mobCard(type){
   const k = NPCS[type], open = mapOpenType === type, lv = k.lvl || 1;
   const dot = S.level >= lv ? "#7BC98A" : S.level + 3 >= lv ? "#F2A93B" : "#E0694A";
@@ -5319,16 +5339,15 @@ function mobCard(type){
   if(open){
     const D = mobDrops(type, locKey), row = (ic, name, val, col) => `<div class="droprow"><span class="dic">${ic}</span><span class="dn" ${col ? `style="color:${col}"` : ""}>${name}</span><span class="dv" ${col ? `style="color:${col}"` : ""}>${val}</span></div>`;
     h += `<div class="mobstats"><span>Прочность <b>${k.hp}</b></span><span>Атака <b>${k.atk}</b></span><span>Броня <b>${k.def || 0}</b></span><span>Скорость <b>${k.speed}</b></span><span>${k.ranged ? "Дальний бой" : "Ближний бой"}</span></div>`;
-    h += `<div class="dsect">Награда</div>` + row("", "Опыт", `<b style="color:#B8F2A0">${D.exp} XP</b>`) + row("", "Лом", `${D.scrap[0]}–${D.scrap[1]} · 100%`);
+    h += `<div class="dsect">Награда</div>` + row("", "Опыт", `<b style="color:#B8F2A0">${D.exp} XP</b>`) + row("", "Лом", `${D.scrap[0]}–${D.scrap[1]} · ${Math.round(D.scrapChance*100)}%`);
     const mats = D.items.filter(i => i.sect === "mat"), sph = D.items.filter(i => i.sect === "sph");
     if(mats.length) h += `<div class="dsect">Материалы и расходники</div>` + mats.map(i => row(icon(i.id), ITEMS[i.id].name, (i.amt ? "×" + i.amt[0] + "–" + i.amt[1] : "×1") + " · " + pctF(i.chance))).join("");
     if(sph.length) h += `<div class="dsect">Сферы и ядра</div>` + sph.map(i => row(i.id === "cores" ? `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="#2E3A46"/><circle cx="16" cy="16" r="5" fill="#5FD4E8"/></svg>` : icon(i.id), i.id === "cores" ? "Энергоядро" : ITEMS[i.id].name, "×1 · " + pctF(i.chance))).join("");
     const bookRow = i => { const it = ITEMS[i.id], cn = it.cls ? CLASSES[it.cls].name : "общая"; return row(icon(i.id), `${it.name} <span class="muted">(${cn})</span>`, "×1 · " + pctF(i.chance), it.cls === S.cls ? "#F2C14B" : ""); };
     const bk = D.items.filter(i => i.sect === "book"), bp = D.items.filter(i => i.sect === "bookp");
     const lateBooks = `${bk.length ? `<div class="dsect">Книги навыков (все классы)</div>` + bk.map(bookRow).join("") : ""}${bp.length ? `<div class="dsect">Книги пассивок (все классы)</div>` + bp.map(bookRow).join("") : ""}`;
-    if(D.gear) D.gear.odds.forEach((o, g) => {
-      if(!o) return;
-      const per = D.gear.chance*o/100/D.gear.pool.length;
+    if(D.gear) D.gear.per.forEach((per, g) => {
+      if(!per) return;
       h += `<div class="dsect">Снаряжение (${GRADES[g].name.toLowerCase()})</div>` + D.gear.pool.map(id => row(icon(id, g), ITEMS[id].name, "×1 · " + pctF(per), g ? GRADES[g].color : "")).join("");
     });
     h += lateBooks;
