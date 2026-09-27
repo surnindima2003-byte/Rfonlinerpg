@@ -1,10 +1,14 @@
+import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy import Boolean, create_engine, inspect, select, text
+from sqlalchemy import Boolean, create_engine, event, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
+import metrics
 from config import DB_URL
+
 from models import Base
 
 log = logging.getLogger("db")
@@ -15,16 +19,70 @@ PG_URL = os.getenv("DATABASE_URL", "").strip()
 SQLITE_URL = DB_URL.replace("+aiosqlite", "")
 IS_PG = PG_URL.startswith(("postgres://", "postgresql://"))
 
+# Пул соединений. Значения стартовые — подбираются по метрикам /metrics (sql.*), а не «на всякий случай больше».
+POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+POOL_TIMEOUT = float(os.getenv("DB_POOL_TIMEOUT", "3"))
+STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "5000"))
+
 if IS_PG:
     URL = PG_URL.replace("postgres://", "postgresql+psycopg2://", 1).replace("postgresql://", "postgresql+psycopg2://", 1)
-    engine = create_engine(URL, pool_pre_ping=True, pool_size=5, max_overflow=5)
+    engine = create_engine(
+        URL, pool_pre_ping=True, pool_size=POOL_SIZE, max_overflow=MAX_OVERFLOW,
+        pool_timeout=POOL_TIMEOUT, pool_recycle=1800,
+        # зависший запрос не держит соединение вечно
+        connect_args={"connect_timeout": 5, "options": f"-c statement_timeout={STATEMENT_TIMEOUT_MS} -c lock_timeout=3000"},
+    )
 else:
-    engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False, "timeout": 5},
+                           pool_size=POOL_SIZE, max_overflow=MAX_OVERFLOW, pool_timeout=POOL_TIMEOUT)
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _):
+        # WAL: чтение не ждёт запись. Для разработки; под нагрузкой — только PostgreSQL.
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+
 _Session = sessionmaker(engine, expire_on_commit=False)
+
+# Отдельные потоки для базы: запрос ждёт ответа PostgreSQL в потоке, а event loop
+# в это время продолжает обслуживать чат, удары и heartbeat всех игроков.
+_db_pool = ThreadPoolExecutor(max_workers=POOL_SIZE + MAX_OVERFLOW, thread_name_prefix="db")
+_inflight = 0
+
+
+async def run_db(fn, *args, label="sql"):
+    """Выполнить синхронную функцию базы в потоке, с метриками."""
+    global _inflight
+    _inflight += 1
+    metrics.gauge("sql.inflight", _inflight)
+    t0 = asyncio.get_running_loop().time()
+    try:
+        return await asyncio.get_running_loop().run_in_executor(_db_pool, lambda: fn(*args))
+    except Exception:
+        metrics.inc("sql.errors")
+        raise
+    finally:
+        _inflight -= 1
+        metrics.observe(label, (asyncio.get_running_loop().time() - t0) * 1000)
+
+
+def _buffered(result):
+    """Забираем строки прямо в потоке базы, чтобы чтение результата не ходило в сеть из event loop."""
+    try:
+        if result.returns_rows:
+            return result.freeze()()
+    except Exception:
+        pass
+    return result
 
 
 class AsyncLikeSession:
-    """Обёртка, чтобы остальной код (async with / await) работал без изменений."""
+    """Прежний интерфейс (async with / await s.execute / s.add / await s.commit), но запросы
+    выполняются в потоках базы и больше не блокируют event loop."""
 
     def __init__(self):
         self._s = _Session()
@@ -33,18 +91,44 @@ class AsyncLikeSession:
         return self
 
     async def __aexit__(self, exc_type, *exc):
-        if exc_type:
-            self._s.rollback()          # при ошибке ничего не записываем наполовину
-        self._s.close()
+        s = self._s
 
-    async def execute(self, stmt):
-        return self._s.execute(stmt)
+        def finish():
+            if exc_type:
+                s.rollback()          # при ошибке ничего не записываем наполовину
+            s.close()
+        await run_db(finish, label="sql.close")
+
+    async def execute(self, stmt, *args, **kw):
+        s = self._s
+        return await run_db(lambda: _buffered(s.execute(stmt, *args, **kw)), label="sql")
+
+    async def scalar(self, stmt, *args, **kw):
+        s = self._s
+        return await run_db(lambda: s.scalar(stmt, *args, **kw), label="sql")
+
+    async def get(self, entity, ident):
+        s = self._s
+        return await run_db(lambda: s.get(entity, ident), label="sql")
 
     def add(self, obj):
         self._s.add(obj)
 
+    def add_all(self, objs):
+        self._s.add_all(objs)
+
+    async def delete(self, obj):
+        s = self._s
+        await run_db(lambda: s.delete(obj), label="sql")
+
+    async def flush(self):
+        await run_db(self._s.flush, label="sql")
+
     async def commit(self):
-        self._s.commit()
+        await run_db(self._s.commit, label="sql.commit")
+
+    async def rollback(self):
+        await run_db(self._s.rollback, label="sql")
 
 
 def SessionLocal():
@@ -88,6 +172,25 @@ def migrate_sqlite_to_pg():
 
 
 async def init_db():
-    Base.metadata.create_all(engine)
-    migrate_sqlite_to_pg()
-    log.info("База данных: %s", "PostgreSQL" if IS_PG else "SQLite")
+    await run_db(Base.metadata.create_all, engine, label="sql.migrate")
+    await run_db(migrate_sqlite_to_pg, label="sql.migrate")
+    log.info("База данных: %s (пул %s+%s)", "PostgreSQL" if IS_PG else "SQLite", POOL_SIZE, MAX_OVERFLOW)
+    if not IS_PG and os.getenv("ENV_NAME", "production") == "production":
+        log.warning("Боевой сервер на SQLite: при 100 игроках нужна PostgreSQL (подключи её в Railway)")
+
+
+async def db_ping(timeout=2.0):
+    """Для /ready: база отвечает."""
+    def ping():
+        with engine.connect() as c:
+            c.execute(text("SELECT 1"))
+    try:
+        await asyncio.wait_for(run_db(ping, label="sql.ping"), timeout)
+        return True
+    except Exception:
+        return False
+
+
+def dispose():
+    engine.dispose()
+    _db_pool.shutdown(wait=False, cancel_futures=True)

@@ -39,3 +39,22 @@ STAR_PACKS = [50, 100, 250, 500, 1000, 2500]
 ENV_NAME = os.getenv("ENV_NAME", "production")
 # Папка для ежедневных резервных копий (на томе Railway)
 BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backups")
+
+# ---- Живой мир и нагрузка (см. docs/server-load-plan.md) ----
+# Частота рассылки позиций. 10 — как было; 5 вдвое снижает трафик, если клиент плавно интерполирует.
+WORLD_HZ = max(1, min(20, int(os.getenv("WORLD_HZ", "10"))))
+# Радиус видимости в пикселях мира: игрокам шлём только тех, кто ближе. 0 — всю локацию (как было).
+VIEW_RADIUS = float(os.getenv("VIEW_RADIUS", "0"))
+# Сколько вкладок одного игрока держим одновременно
+WS_MAX_PER_UID = int(os.getenv("WS_MAX_PER_UID", "3"))
+# Входящие сообщения с одного сокета: в среднем в секунду и допустимый всплеск
+WS_IN_RATE = float(os.getenv("WS_IN_RATE", "60"))
+WS_IN_BURST = float(os.getenv("WS_IN_BURST", "120"))
+# Сколько секунд ждём авторизацию после открытия сокета
+WS_AUTH_TIMEOUT = float(os.getenv("WS_AUTH_TIMEOUT", "5"))
+# Токен для /metrics. Пустой — эндпоинт выключен.
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "").strip()
+# Нагрузочный тест: работает ТОЛЬКО на staging при LOADTEST=1. Боты используют выдуманные id от LOADTEST_UID_BASE
+# и получают снятый предел уровня, чтобы проверять PvP. На production этот режим не включается никогда.
+LOADTEST = ENV_NAME == "staging" and os.getenv("LOADTEST", "") == "1"
+LOADTEST_UID_BASE = 9_100_000_000_000

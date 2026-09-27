@@ -14,6 +14,47 @@ FLAG_SEC = 30            # напавший на «чистого» пилота
 KARMA_DECAY_KILLS = 20   # каждые 20 убитых мобов снимают 1 карму
 _pair_t = {}             # (убийца, жертва) -> время: рейтинг за одного и того же не чаще раза в 10 мин
 _mob_kills = {}
+_hits = {}               # (нападающий, цель) -> [время последнего удара, урон за бой]
+_deaths = {}             # жертва -> время последней засчитанной смерти (защита от повторов)
+HIT_WINDOW = 15          # смерть засчитывается, если убийца бил именно эту цель последние 15 с
+DEATH_DEDUP = 5          # повторный pvp_dead той же жертвы в течение 5 с — дубль, игнорируем
+
+
+def record_hit(attacker_id, target_id, dmg):
+    """Сервер запоминает подтверждённые удары: потом по ним проверяется заявка о смерти."""
+    now = time.time()
+    h = _hits.get((attacker_id, target_id))
+    if not h or now - h[0] > HIT_WINDOW:
+        h = [now, 0]
+        _hits[(attacker_id, target_id)] = h
+    h[0] = now
+    h[1] += dmg
+
+
+def claim_death(victim_id, killer_id):
+    """True — смерть можно засчитать (один раз). Проверка синхронная, поэтому гонок в одном процессе нет."""
+    now = time.time()
+    h = _hits.get((killer_id, victim_id))
+    if not h or now - h[0] > HIT_WINDOW:
+        return False
+    if now - _deaths.get(victim_id, 0) < DEATH_DEDUP:
+        return False
+    _deaths[victim_id] = now
+    _hits.pop((killer_id, victim_id), None)
+    return True
+
+
+def cleanup(online_ids):
+    """Раз в минуту: убираем старые пары, удары и отметки смертей, чтобы словари не росли."""
+    now = time.time()
+    for k in [k for k, t in _pair_t.items() if now - t > 600]:
+        _pair_t.pop(k, None)
+    for k in [k for k, h in _hits.items() if now - h[0] > HIT_WINDOW * 2]:
+        _hits.pop(k, None)
+    for k in [k for k, t in _deaths.items() if now - t > 60]:
+        _deaths.pop(k, None)
+    for k in [k for k in _mob_kills if k not in online_ids and not _mob_kills[k]]:
+        _mob_kills.pop(k, None)
 
 
 async def stat_of(s, uid):

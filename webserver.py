@@ -14,7 +14,11 @@ import re
 import secrets
 
 from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH, ENV_NAME
-from db import SessionLocal, engine
+from config import (WORLD_HZ, VIEW_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BURST, WS_AUTH_TIMEOUT,
+                    METRICS_TOKEN, LOADTEST, LOADTEST_UID_BASE)
+from db import SessionLocal, engine, db_ping, dispose as db_dispose
+import metrics
+import realtime
 from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 import gram
 import items
@@ -100,6 +104,40 @@ async def game_page(request):
 
 async def health(request):
     return web.Response(text="ok")
+
+
+async def live(request):
+    """Процесс жив и event loop отвечает."""
+    return web.Response(text="ok")
+
+
+async def ready(request):
+    """Готов принимать игроков: старт завершён, база отвечает, фоновые задачи живы."""
+    problems = []
+    if not STATE["ready"] or STATE["stopping"]:
+        problems.append("starting" if not STATE["stopping"] else "stopping")
+    for name in ("world", "cleanup"):
+        t = STATE["tasks"].get(name)
+        if not t or t.done():
+            problems.append(f"task {name} down")
+    if not await db_ping():
+        problems.append("db")
+    if problems:
+        return web.json_response({"ok": False, "problems": problems}, status=503)
+    return web.json_response({"ok": True, "players": len(hub.conns)})
+
+
+async def metrics_page(request):
+    """Метрики в JSON. Доступ: заголовок X-Metrics-Token или ?token=. Без METRICS_TOKEN эндпоинта нет."""
+    token = request.headers.get("X-Metrics-Token") or request.query.get("token", "")
+    if not METRICS_TOKEN or not secrets.compare_digest(token, METRICS_TOKEN):
+        raise web.HTTPNotFound()
+    hub.gauges()
+    data = metrics.summary()
+    data["env"] = ENV_NAME
+    data["world_hz"] = WORLD_HZ
+    data["view_radius"] = VIEW_RADIUS
+    return web.json_response(data)
 
 
 async def api_load(request):
@@ -564,15 +602,16 @@ async def api_top(request):
 
 
 # ---------- живой мир: WebSocket ----------
-clients = {}                 # ws -> данные игрока
+hub = realtime.Hub(max_per_uid=WS_MAX_PER_UID)
+clients = {}                 # ws -> данные игрока (совместимость со старым кодом; ведётся вместе с hub)
 last_seen = {}               # tg_id -> время выхода из игры (для «заходил в …»)
+STATE = {"ready": False, "stopping": False, "tasks": {}, "runner": None}
 
 
 async def api_presence(request):
     """Кто из списка сейчас в игре и когда каждый заходил последний раз."""
     body, user = await read_auth(request)
     ids = [int(x) for x in (body.get("ids") or []) if str(x).isdigit()][:200]
-    online = {i.get("id") for i in clients.values()}
     out = {}
     if ids:
         async with SessionLocal() as s:
@@ -580,10 +619,11 @@ async def api_presence(request):
         db = {a: (b or 0) for a, b in rows}
         now_ = int(time.time())
         for i in ids:
-            on = i in online
+            on = hub.is_online(i)
             out[str(i)] = {"online": on, "last": (now_ if on else max(db.get(i, 0), int(last_seen.get(i, 0)))) * 1000}
     return web.json_response({"ok": True, "p": out})
 chat_history = deque(maxlen=60)
+chat_seq = [0]               # монотонный номер сообщения чата
 
 # ---------- пати (до 4 игроков, живёт в памяти сервера) ----------
 PARTY_MAX = 4
@@ -594,7 +634,8 @@ last_heal = {}               # tg_id -> время последнего лече
 
 
 def online(uid):
-    return next((i for i in clients.values() if i.get("id") == uid), None)
+    """Данные игрока в сети или None. Теперь через индекс, без перебора всех соединений."""
+    return hub.info_of(uid)
 
 
 def party_payload(pid):
@@ -610,10 +651,10 @@ def party_payload(pid):
 
 
 async def send_party(pid, extra_uids=()):
-    payload = {"t": "party", "party": party_payload(pid)}
-    targets = set(parties.get(pid, {}).get("members", [])) | set(extra_uids)
-    for uid in targets:
-        await push_to_player(uid, payload if uid in parties.get(pid, {}).get("members", []) else {"t": "party", "party": None})
+    members = set(parties.get(pid, {}).get("members", []))
+    text = realtime.encode({"t": "party", "party": party_payload(pid)})
+    for uid in members | set(extra_uids):
+        hub.to_uid(uid, text if uid in members else {"t": "party", "party": None})
 
 
 async def party_leave(uid, kicked=False):
@@ -723,7 +764,7 @@ def clean_pos(d, info):
         if loc in LOCS:
             info["loc"] = loc
         for k in ("x", "y"):
-            info[k] = max(0.0, min(8000.0, float(d.get(k, 0))))
+            info[k] = round(max(0.0, min(8000.0, float(d.get(k, 0)))), 1)     # 0,1 px хватает, а снимок короче
         for k in ("ang", "aim"):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
@@ -732,6 +773,8 @@ def clean_pos(d, info):
         info["nick"] = nick or info["name"][:16]
         info["fac"] = d.get("fac") if d.get("fac") in FACTIONS else "aegis"
         cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
+        if info.get("loadtest"):
+            cap = 60
         info["lvl"] = max(1, min(999 if info.get("admin") else cap, int(d.get("lvl", 1))))
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
@@ -752,153 +795,331 @@ def clean_pos(d, info):
         pass
 
 
+PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
+               "hp", "mhp", "cp", "mcp", "bm", "admin")
+
+
 def public(info):
-    return {k: info.get(k) for k in ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc", "hp", "mhp", "cp", "mcp", "bm", "admin")} | {"kr": info.get("kr", 0), "fl": 1 if pvp.flagged(info) else 0}
+    return {k: info.get(k) for k in PUBLIC_KEYS} | {"kr": info.get("kr", 0), "fl": 1 if pvp.flagged(info) else 0}
 
 
 async def push_to_player(tg_id, payload):
-    sent = False
-    for ws, info in list(clients.items()):
-        if info.get("id") == tg_id and not ws.closed:
-            try:
-                await ws.send_json(payload)
-                sent = True
-            except Exception:
-                pass
-    return sent
+    """Поставить сообщение игроку в очередь. True — игрок в сети. Сеть не ждём."""
+    return hub.to_uid(tg_id, payload)
 
 
 async def broadcast(payload, only=None):
-    for ws, info in list(clients.items()):
-        if ws.closed or (only and not only(info)):
-            continue
+    hub.to_all(payload, only)
+
+
+# ---- ограничители частоты ----
+class Bucket:
+    """Токен-бакет: rate событий в секунду в среднем, burst — сколько можно подряд."""
+    __slots__ = ("rate", "burst", "tokens", "t")
+
+    def __init__(self, rate, burst):
+        self.rate, self.burst, self.tokens, self.t = rate, burst, burst, time.monotonic()
+
+    def take(self, n=1.0):
+        now = time.monotonic()
+        self.tokens = min(self.burst, self.tokens + (now - self.t) * self.rate)
+        self.t = now
+        if self.tokens >= n:
+            self.tokens -= n
+            return True
+        return False
+
+
+chat_limits = {}             # (uid, канал) -> Bucket; живёт по uid, а не по вкладке: новая вкладка лимит не сбрасывает
+chat_cids = {}               # uid -> deque последних клиентских id сообщений (защита от дублей при повторе)
+CHAT_RATES = {"world": (0.5, 3), "dm": (1.0, 4)}
+
+
+def chat_allowed(uid, ch):
+    b = chat_limits.get((uid, ch))
+    if not b:
+        b = chat_limits[(uid, ch)] = Bucket(*CHAT_RATES[ch])
+    return b.take()
+
+
+async def handle_chat(d, info):
+    text = str(d.get("text", "")).strip()[:200]
+    ch = d.get("ch")
+    if not text or ch not in ("world", "dm"):
+        return
+    uid = info["id"]
+    cid = str(d.get("cid", ""))[:40]
+    if cid:
+        seen = chat_cids.setdefault(uid, deque(maxlen=50))
+        if cid in seen:                                # повтор после переподключения — уже доставлено
+            hub.to_uid(uid, {"t": "chat_ack", "cid": cid, "dup": True})
+            return
+    if not chat_allowed(uid, ch):
+        metrics.inc("chat.rate_limited")
+        return
+    if cid:
+        chat_cids[uid].append(cid)
+    now = time.time()
+    chat_seq[0] += 1
+    m = {"id": f"{uid}-{int(now * 1000)}", "seq": chat_seq[0], "ch": ch, "text": text, "nick": info["nick"], "fac": info["fac"],
+         "lvl": info["lvl"], "uid": str(uid), "admin": info["admin"], "ts": int(now * 1000)}
+    if ch == "world":
+        chat_history.append(m)
+        hub.to_all({"t": "chat", "m": m})
+    else:
+        to = str(d.get("to", ""))[:16]
+        m["to"] = to
+        payload = realtime.encode({"t": "chat", "m": m})
         try:
-            await ws.send_json(payload)
-        except Exception:
-            pass
+            to_uid = int(d.get("to_uid") or 0)                     # новый клиент адресует по uid — однозначно
+        except (TypeError, ValueError):
+            to_uid = 0
+        if to_uid:
+            hub.to_uid(to_uid, payload)
+        else:                                                      # старый клиент — по нику, как раньше
+            for c in list(hub.conns.values()):
+                if c.info.get("nick") == to and c.uid != uid:
+                    c.push(payload)
+        hub.to_uid(uid, payload)
+    if cid:
+        hub.to_uid(uid, {"t": "chat_ack", "cid": cid, "id": m["id"], "seq": m["seq"]})
+    metrics.inc(f"chat.{ch}")
+
+
+async def handle_pvp(d, info):
+    # удар по игроку: та же PvP-локация, рядом, не чаще 3 раз в секунду, урон не выше предела по уровню
+    try:
+        to, dmg = int(d.get("to")), int(d.get("dmg", 0))
+    except (TypeError, ValueError):
+        return
+    tgt = online(to)
+    if not tgt or to == info["id"] or info["loc"] in SAFE_LOCS or tgt["loc"] != info["loc"]:
+        return
+    if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
+        return
+    if time.time() - info.get("pvp_t", 0) < 0.3:
+        metrics.inc("pvp.cooldown_drop")
+        return
+    pid = member_party.get(info["id"])
+    if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
+        return                                   # союзников не бьём
+    if not pvp.can_fight(info, tgt):
+        return                                   # защита новичков: до 10-го уровня PvP нет
+    skill = bool(d.get("skill"))
+    if skill and time.time() - info.get("pvp_sk", 0) < 0.8:
+        return                                   # умения по игрокам — не чаще раза в 0,8 с
+    info["pvp_t"] = time.time()
+    if skill:
+        info["pvp_sk"] = time.time()
+    dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
+    pvp.on_hit(info, tgt)
+    pvp.record_hit(info["id"], to, dmg)
+    hit = {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit")), "skill": skill}
+    if d.get("hid"):
+        hit["hid"] = str(d.get("hid"))[:24]
+    hub.to_uid(to, hit)
+    metrics.inc("pvp.hit")
+
+
+async def handle_pvp_dead(d, info):
+    try:
+        killer = online(int(d.get("by")))
+    except (TypeError, ValueError):
+        killer = None
+    if not killer or killer["loc"] != info["loc"] or info["loc"] in SAFE_LOCS:
+        return
+    # засчитываем, только если сервер сам видел удары убийцы по этой цели, и только один раз
+    if not pvp.claim_death(info["id"], killer["id"]):
+        metrics.inc("pvp.death_rejected")
+        return
+    to_killer, to_victim = await pvp.on_death(info, killer)
+    hub.to_uid(killer["id"], to_killer)
+    hub.to_uid(info["id"], to_victim)
+    metrics.inc("pvp.death")
+
+
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping"}
 
 
 async def ws_handler(request):
+    if STATE["stopping"]:
+        raise web.HTTPServiceUnavailable(text="restarting")
     ws = web.WebSocketResponse(heartbeat=25, max_msg_size=32 * 1024)
     await ws.prepare(request)
+    metrics.inc("ws.opened")
     info = None
-    last_chat = 0.0
+    conn = None
+    in_limit = Bucket(WS_IN_RATE, WS_IN_BURST)
+    dropped = 0
+    loop = asyncio.get_running_loop()
+    # не авторизовался за WS_AUTH_TIMEOUT секунд — закрываем
+    auth_timer = loop.call_later(WS_AUTH_TIMEOUT, lambda: None if info else asyncio.ensure_future(ws.close(code=4001, message=b"auth timeout")))
     try:
         async for msg in ws:
             if msg.type != WSMsgType.TEXT:
+                continue
+            metrics.inc("ws.msgs_in")
+            if not in_limit.take():
+                dropped += 1
+                metrics.inc("ws.in_rate_drop")
+                if dropped > WS_IN_BURST * 5:                         # поток мусора — отключаем
+                    metrics.inc("ws.flood_close")
+                    await ws.close(code=4009, message=b"flood")
+                    break
                 continue
             try:
                 d = json.loads(msg.data)
             except ValueError:
                 continue
+            if not isinstance(d, dict):
+                continue
             t = d.get("t")
+            t0 = time.perf_counter()
             if info is None:
                 if t != "auth":
                     continue
                 user = auth(d.get("initData", ""))
                 if not user:
-                    await ws.close()
+                    metrics.inc("ws.auth_fail")
+                    await ws.close(code=4001, message=b"bad auth")
                     break
+                auth_timer.cancel()
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
-                        "nick": user["name"][:16], "fac": "aegis", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time()}
+                        "nick": user["name"][:16], "fac": "aegis", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0}
+                if LOADTEST and user["id"] >= LOADTEST_UID_BASE:
+                    info["loadtest"] = True
+                try:
+                    await pvp.load_karma(info)
+                    async with SessionLocal() as s_:
+                        info["lvl_cap"] = await progress.cap_of(s_, user["id"])
+                        await s_.commit()
+                except Exception:
+                    # база медленная или недоступна — игрок всё равно входит, чат и мир работают
+                    log.exception("не удалось загрузить карму/предел уровня uid=%s", user["id"])
+                    metrics.inc("ws.auth_db_error")
+                if ws.closed:
+                    break
+                conn = hub.add(ws, info)
                 clients[ws] = info
-                await pvp.load_karma(info)
-                async with SessionLocal() as s_:
-                    info["lvl_cap"] = await progress.cap_of(s_, user["id"])
-                    await s_.commit()
-                await ws.send_json({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"]})
+                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"]}))
+                metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
             if t == "pos":
+                old_loc = info["loc"]
                 clean_pos(d, info)
+                if info["loc"] != old_loc:
+                    hub.moved(conn, old_loc)
             elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
                 await handle_party(d, info)
             elif t == "pvp":
-                # удар по игроку: та же PvP-локация, рядом, не чаще 3 раз в секунду, урон не выше предела по уровню
-                try:
-                    to, dmg = int(d.get("to")), int(d.get("dmg", 0))
-                except (TypeError, ValueError):
-                    continue
-                tgt = online(to)
-                if not tgt or to == info["id"] or info["loc"] in SAFE_LOCS or tgt["loc"] != info["loc"]:
-                    continue
-                if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
-                    continue
-                if time.time() - info.get("pvp_t", 0) < 0.3:
-                    continue
-                pid = member_party.get(info["id"])
-                if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
-                    continue                                   # союзников не бьём
-                if not pvp.can_fight(info, tgt):
-                    continue                                   # защита новичков: до 10-го уровня PvP нет
-                skill = bool(d.get("skill"))
-                if skill and time.time() - info.get("pvp_sk", 0) < 0.8:
-                    continue                                   # умения по игрокам — не чаще раза в 0,8 с
-                info["pvp_t"] = time.time()
-                if skill:
-                    info["pvp_sk"] = time.time()
-                dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
-                pvp.on_hit(info, tgt)
-                await push_to_player(to, {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit")), "skill": skill})
+                await handle_pvp(d, info)
             elif t == "pvp_dead":
-                try:
-                    killer = online(int(d.get("by")))
-                except (TypeError, ValueError):
-                    killer = None
-                if killer and killer["loc"] == info["loc"] and info["loc"] not in SAFE_LOCS and time.time() - killer.get("pvp_t", 0) < 15:
-                    to_killer, to_victim = await pvp.on_death(info, killer)
-                    await push_to_player(killer["id"], to_killer)
-                    await ws.send_json(to_victim)
+                await handle_pvp_dead(d, info)
             elif t == "emote":
                 eid = str(d.get("id", ""))[:10]
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
                     info["emo_t"] = time.time()
-                    await broadcast({"t": "emote", "from": info["id"], "id": eid},
-                                    only=lambda i: i["loc"] == info["loc"] and i["id"] != info["id"])
+                    hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
             elif t == "chat":
-                now = time.time()
-                text = str(d.get("text", "")).strip()[:200]
-                ch = d.get("ch")
-                if not text or ch not in ("world", "dm") or now - last_chat < 2:
-                    continue
-                last_chat = now
-                m = {"id": f"{info['id']}-{int(now * 1000)}", "ch": ch, "text": text, "nick": info["nick"], "fac": info["fac"],
-                     "lvl": info["lvl"], "uid": str(info["id"]), "admin": info["admin"], "ts": int(now * 1000)}
-                if ch == "world":
-                    chat_history.append(m)
-                    await broadcast({"t": "chat", "m": m})
-                else:
-                    to = str(d.get("to", ""))[:16]
-                    m["to"] = to
-                    await broadcast({"t": "chat", "m": m}, only=lambda i: i["nick"] == to or i["id"] == info["id"])
+                await handle_chat(d, info)
+            elif t == "ping":                                       # клиент может мерить задержку
+                conn.push(realtime.encode({"t": "pong", "c": d.get("c"), "s": int(time.time() * 1000)}))
+            if t in WS_TYPES:
+                metrics.observe("ws.h." + t, (time.perf_counter() - t0) * 1000)
+    except Exception:
+        log.exception("ошибка обработчика WebSocket")
+        metrics.inc("ws.handler_error")
     finally:
+        auth_timer.cancel()
+        hub.remove(ws)
         clients.pop(ws, None)
+        metrics.inc("ws.closed")
         if info:
             last_seen[info["id"]] = time.time()
         if info and not online(info["id"]):
-            await party_leave(info["id"])
+            try:
+                await party_leave(info["id"])
+            except Exception:
+                log.exception("party_leave")
     return ws
 
 
+# ---------- рассылка мира ----------
+def _near(a, b, r2):
+    return (a.get("x", 0) - b.get("x", 0)) ** 2 + (a.get("y", 0) - b.get("y", 0)) ** 2 <= r2
+
+
+def world_tick(keepalive):
+    """Один шаг рассылки. Каждый игрок сериализуется ОДИН раз за шаг, а не для каждого получателя."""
+    r2 = VIEW_RADIUS ** 2 if VIEW_RADIUS > 0 else 0
+    for loc, members in list(hub.by_loc.items()):
+        conns = [c for c in members if not c.closing]
+        if not conns:
+            continue
+        frags = [(c, realtime.encode(public(c.info))) for c in conns]
+        head = '{"t":"players","loc":' + json.dumps(loc) + ',"list":['
+        for c in conns:
+            me, uid = c.info, c.uid
+            if r2:
+                parts = [f for o, f in frags if o.uid != uid and _near(me, o.info, r2)]
+            else:
+                parts = [f for o, f in frags if o.uid != uid]
+            c.push_snapshot(head + ",".join(parts) + "]}", keepalive)
+        metrics.inc("world.snapshots", len(conns))
+
+
 async def world_loop():
-    """10 раз в секунду рассылаем каждому игроку остальных пилотов в его локации, раз в секунду — состав пати."""
+    """WORLD_HZ раз в секунду рассылаем игрокам соседей по локации, раз в секунду — состав пати."""
+    period = 1.0 / WORLD_HZ
+    loop = asyncio.get_running_loop()
+    next_t = loop.time()
     tick = 0
     while True:
-        await asyncio.sleep(0.1)
+        next_t += period
+        await asyncio.sleep(max(0.0, next_t - loop.time()))
+        if loop.time() - next_t > 1.0:                      # сильно отстали — не догоняем пачкой
+            next_t = loop.time()
         tick += 1
-        if tick % 10 == 0:
-            for pid in list(parties):
-                await send_party(pid)
-        by_loc = {}
-        for info in clients.values():
-            by_loc.setdefault(info["loc"], []).append(info)
-        for ws, info in list(clients.items()):
-            others = [public(o) for o in by_loc.get(info["loc"], []) if o is not info and o["id"] != info["id"]]
-            if ws.closed:
-                continue
-            try:
-                await ws.send_json({"t": "players", "loc": info["loc"], "list": others})
-            except Exception:
-                pass
+        t0 = time.perf_counter()
+        try:
+            if tick % WORLD_HZ == 0:
+                for pid in list(parties):
+                    await send_party(pid)
+            world_tick(keepalive=tick % WORLD_HZ == 0)      # раз в секунду шлём даже без изменений
+        except Exception:
+            log.exception("world tick")
+            metrics.inc("world.error")
+        metrics.observe("world.tick", (time.perf_counter() - t0) * 1000)
+
+
+# ---------- уборка временных данных ----------
+async def cleanup_loop():
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now = time.time()
+            online_ids = set(hub.by_uid)
+            for uid in list(invites):
+                inv = {k: v for k, v in invites[uid].items() if now - v < 60}
+                if inv:
+                    invites[uid] = inv
+                else:
+                    invites.pop(uid, None)
+            for uid in [u for u, t in last_heal.items() if now - t > 60]:
+                last_heal.pop(uid, None)
+            for uid in [u for u, t in last_seen.items() if now - t > 3 * 86400]:
+                last_seen.pop(uid, None)                       # дальше «заходил в …» берётся из базы
+            for key in [k for k in chat_limits if k[0] not in online_ids]:
+                chat_limits.pop(key, None)
+            for uid in [u for u in chat_cids if u not in online_ids]:
+                chat_cids.pop(uid, None)
+            for uid in [u for u in member_party if u not in online_ids]:
+                await party_leave(uid)                         # пати без живых участников не висят вечно
+            pvp.cleanup(online_ids)
+            metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
+                                        "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})
+        except Exception:
+            log.exception("cleanup")
 
 
 async def start_web(port: int):
@@ -906,6 +1127,9 @@ async def start_web(port: int):
     app = web.Application(client_max_size=512 * 1024)
     app.router.add_get("/", game_page)
     app.router.add_get("/health", health)
+    app.router.add_get("/live", live)
+    app.router.add_get("/ready", ready)
+    app.router.add_get("/metrics", metrics_page)
     app.router.add_post("/api/state/load", api_load)
     app.router.add_post("/api/state/save", api_save)
     app.router.add_post("/api/grants/ack", api_ack)
@@ -925,10 +1149,40 @@ async def start_web(port: int):
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
-    asyncio.create_task(world_loop())
+    STATE["runner"] = runner
+    STATE["tasks"]["world"] = asyncio.create_task(world_loop())
+    STATE["tasks"]["cleanup"] = asyncio.create_task(cleanup_loop())
+    STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
     await items.migrate_gear()
     await items.migrate_market_registry()
-    asyncio.create_task(gram.deposit_watcher())
-    log.info("Игра доступна на порту %s", port)
+    STATE["tasks"]["deposit"] = asyncio.create_task(gram.deposit_watcher())
+    STATE["ready"] = True
+    if LOADTEST:
+        log.warning("РЕЖИМ НАГРУЗОЧНОГО ТЕСТА включён (staging, LOADTEST=1)")
+    log.info("Игра доступна на порту %s (мир %s Гц, радиус видимости %s)", port, WORLD_HZ, VIEW_RADIUS or "вся локация")
+
+
+async def stop_web(drain_s=2.0):
+    """Плавная остановка: новых не пускаем, просим клиентов переподключиться, даём очередям уйти, закрываем."""
+    if STATE["stopping"]:
+        return
+    STATE["stopping"] = True
+    log.warning("Остановка сервера: %s игроков в сети", len(hub.conns))
+    hub.to_all({"t": "reconnect", "text": "Сервер обновляется, переподключаемся…"})
+    conns = list(hub.conns.values())
+    try:
+        await asyncio.wait_for(asyncio.gather(*(c.drain(drain_s) for c in conns), return_exceptions=True), drain_s + 1)
+    except asyncio.TimeoutError:
+        pass
+    for c in conns:
+        c.close(realtime.CLOSE_RESTART, "restart")
+    await asyncio.sleep(0.3)
+    for name, t in list(STATE["tasks"].items()):
+        t.cancel()
+    await asyncio.gather(*STATE["tasks"].values(), return_exceptions=True)
+    if STATE["runner"]:
+        await STATE["runner"].cleanup()
+    db_dispose()
+    log.warning("Сервер остановлен")

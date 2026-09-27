@@ -6,7 +6,7 @@ from aiogram.types import MenuButtonWebApp, WebAppInfo
 
 from config import BOT_TOKEN, WEBAPP_URL, PORT, ADMIN_USERNAMES
 from db import init_db
-from webserver import start_web
+from webserver import start_web, stop_web
 import start_handlers as start
 import profile_handlers as profile
 import explore_handlers as explore
@@ -46,7 +46,12 @@ async def main():
         logging.warning("WEBAPP_URL не задан: кнопка «Играть» не появится")
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        # start_polling сам ловит SIGTERM от Railway и возвращает управление — тогда плавно гасим мир
+        await dp.start_polling(bot)
+    finally:
+        await stop_web()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
