@@ -1424,9 +1424,13 @@ let p, now = 0, running = true, paused = false, last = performance.now(), saveTi
 let firing = false, auto = false, stick = {id:null, ox:0, oy:0, x:0, y:0}, nearNpc = null;
 const keys = {};
 let vw = 0, vh = 0, dpr = 1;
+// графика: авто-снижение разрешения и кэши того, что не меняется от кадра к кадру
+const GFX = {cap:2, frames:0, slow:0, t0:0, vig:null};
 
 function resize(){
-  dpr = S.settings && S.settings.lowfx ? 1 : Math.min(2, window.devicePixelRatio || 1);   // оптимизация: холст в 1×
+  // оптимизация: холст в 1×; GFX.cap — потолок, который сам снижается, если телефон не успевает рисовать
+  dpr = S.settings && S.settings.lowfx ? 1 : Math.min(2, GFX.cap, window.devicePixelRatio || 1);
+  GFX.vig = null;
   vw = gameEl.clientWidth; vh = gameEl.clientHeight;
   cv.width = Math.max(1, vw*dpr); cv.height = Math.max(1, vh*dpr);
 }
@@ -1885,6 +1889,7 @@ function drawLobbyOverlay(t, dt){
 function drawField(cx, cy){
   const L = LOCS[locKey];
   ctx.fillStyle = typeof tilePattern === "function" ? tilePattern(TILE_PAL[locKey] ? locKey : "dungeon") : L.ground; ctx.fillRect(cx, cy, vw, vh);
+  if(typeof drawGround === "function") drawGround(cx, cy);
   ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 6; ctx.strokeRect(0, 0, W, H);
   ctx.fillStyle = "rgba(95,212,232,.06)"; circle(npcs[0].x, npcs[0].y, 150); ctx.fill();
 }
@@ -1947,20 +1952,47 @@ function embPath(icon){
   try{ EMB_PATH[icon] = m ? new Path2D(m[1]) : null; }catch(e){ EMB_PATH[icon] = null; }
   return EMB_PATH[icon];
 }
+// эмблема гильдии: векторный рисунок один раз превращается в картинку нужного размера
+const emblemCache = new Map();
 function drawEmblem(x, y, size, icon, color){
-  ctx.save(); ctx.translate(x, y);
-  const r = size/2;
-  ctx.beginPath(); for(let i = 0; i < 6; i++){ const a = Math.PI/6 + i*Math.PI/3; ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r); } ctx.closePath();
-  ctx.fillStyle = "#1B232C"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke();
-  const path = embPath(icon);
-  if(path){ const s = size/40; ctx.scale(s, s); ctx.translate(-12, -12); ctx.fillStyle = color; ctx.fill(path); }
-  ctx.restore();
+  const key = icon + "|" + color + "|" + size + "|" + dpr;
+  let c = emblemCache.get(key);
+  if(!c){
+    const pad = 2, W2 = size + pad*2;
+    c = document.createElement("canvas"); c.width = c.height = Math.ceil(W2*dpr);
+    const g = c.getContext("2d"); g.scale(dpr, dpr); g.translate(W2/2, W2/2);
+    const r = size/2;
+    g.beginPath(); for(let i = 0; i < 6; i++){ const a = Math.PI/6 + i*Math.PI/3; g.lineTo(Math.cos(a)*r, Math.sin(a)*r); } g.closePath();
+    g.fillStyle = "#1B232C"; g.fill(); g.lineWidth = 2; g.strokeStyle = color; g.stroke();
+    const path = embPath(icon);
+    if(path){ const s = size/40; g.scale(s, s); g.translate(-12, -12); g.fillStyle = color; g.fill(path); }
+    c._w = W2;
+    emblemCache.set(key, c); if(emblemCache.size > 200) emblemCache.delete(emblemCache.keys().next().value);
+  }
+  ctx.drawImage(c, x - c._w/2, y - c._w/2, c._w, c._w);
 }
+// подписи над головами: текст с обводкой один раз рисуется в маленький холст и дальше просто копируется
+// (strokeText + fillText каждый кадр для десятков игроков — одна из самых дорогих операций на телефоне)
+const nameCache = new Map();
 function nameText(text, x, y, color, font){
-  ctx.font = font; ctx.textAlign = "center";
-  ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.75)"; ctx.strokeText(text, x, y);
-  ctx.fillStyle = color; ctx.fillText(text, x, y);
+  const key = text + "|" + color + "|" + font + "|" + dpr;
+  let c = nameCache.get(key);
+  if(!c){
+    const g0 = document.createElement("canvas").getContext("2d"); g0.font = font;
+    const m = g0.measureText(text), size = parseFloat((font.match(/(\d+(?:\.\d+)?)px/) || [0, 13])[1]);
+    const asc = Math.ceil(m.actualBoundingBoxAscent || size*0.8), desc = Math.ceil(m.actualBoundingBoxDescent || size*0.25);
+    const w = Math.ceil(m.width) + 6, h = asc + desc + 6, cv2 = g0.canvas;
+    cv2.width = Math.ceil(w*dpr); cv2.height = Math.ceil(h*dpr);
+    const g = cv2.getContext("2d"); g.scale(dpr, dpr); g.font = font; g.textAlign = "center";
+    g.lineWidth = 3; g.lineJoin = "round"; g.strokeStyle = "rgba(0,0,0,.75)"; g.strokeText(text, w/2, asc + 3);
+    g.fillStyle = color; g.fillText(text, w/2, asc + 3);
+    c = {cv:cv2, w, h, by:asc + 3};
+    nameCache.set(key, c); if(nameCache.size > 400) nameCache.delete(nameCache.keys().next().value);
+  }
+  ctx.drawImage(c.cv, x - c.w/2, y - c.by, c.w, c.h);
 }
+// шрифт мог догрузиться позже — перерисуем подписи уже им
+if(document.fonts && document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", () => nameCache.clear());
 function drawNameStack(x, y, nick, nickColor, g){
   nameText(nick, x, y - 32, nickColor, "600 13px Rubik, sans-serif");
   if(!g || !g.tag) return;
@@ -2102,32 +2134,53 @@ function draw(t){
   if(typeof tutWorld === "function") tutWorld(t);
   ctx.restore();
   if(!(S.settings && S.settings.lowfx)){
-    const vg = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*0.35, vw/2, vh/2, Math.max(vw, vh)*0.75);
-    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, vw, vh);
+    // затемнение краёв рисуется один раз на размер экрана, а не создаётся заново каждый кадр
+    if(!GFX.vig){
+      const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(vw/4)); c.height = Math.max(1, Math.round(vh/4));
+      const g = c.getContext("2d"), w = c.width, h = c.height;
+      const vg = g.createRadialGradient(w/2, h/2, Math.min(w, h)*0.35, w/2, h/2, Math.max(w, h)*0.75);
+      vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); g.fillStyle = vg; g.fillRect(0, 0, w, h);
+      GFX.vig = c;
+    }
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(GFX.vig, 0, 0, vw, vh);
   }
   drawMinimap();
 }
 
+// HUD: пишем в DOM только то, что изменилось — каждая запись в DOM заставляет браузер пересчитывать стили
+const HUDC = {};
+const hudText = (id, v) => { if(HUDC[id] !== v){ HUDC[id] = v; $(id).textContent = v; } };
+const hudWidth = (id, pct) => { const v = (Math.round(Math.max(0, Math.min(100, pct))*5)/5) + "%"; if(HUDC[id + ":w"] !== v){ HUDC[id + ":w"] = v; $(id).style.width = v; } };
+let hudBmT = 0;
 function hud(){
   const st = stat();
-  $("hLvl").textContent = "Ур. " + S.level; $("hName").textContent = S.name;
-  $("hHp").textContent = Math.ceil(S.hp) + "/" + st.maxhp;
-  $("hHpBar").style.width = Math.max(0, S.hp/st.maxhp*100) + "%";
-  const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp)), cpt = "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU");
-  $("hCpBar").style.width = Math.max(0, cp/st.maxcp*100) + "%"; if($("hCpTxt").textContent !== cpt) $("hCpTxt").textContent = cpt;
-  $("hXpBar").style.width = Math.min(100, S.exp/expNeed(S.level)*100) + "%";
-  $("hScrap").textContent = "Лом " + S.scrap; $("hCores").textContent = "Ядра " + S.cores;
-  const bm = "БМ " + combatPower(); if($("hBM").dataset.v !== bm){ $("hBM").dataset.v = bm; $("hBM").textContent = bm; }
-  $("kitCount").textContent = have("kit_s") + have("kit_l");
-  const cd = (id, v, max) => $(id).querySelector(".cd").style.transform = `scaleY(${Math.max(0, v/max)})`;
+  hudText("hLvl", "Ур. " + S.level); hudText("hName", S.name);
+  hudText("hHp", Math.ceil(S.hp) + "/" + st.maxhp);
+  hudWidth("hHpBar", S.hp/st.maxhp*100);
+  const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp));
+  hudWidth("hCpBar", cp/st.maxcp*100); hudText("hCpTxt", "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU"));
+  hudWidth("hXpBar", S.exp/expNeed(S.level)*100);
+  hudText("hScrap", "Лом " + S.scrap); hudText("hCores", "Ядра " + S.cores);
+  if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + combatPower()); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
+  hudText("kitCount", String(have("kit_s") + have("kit_l")));
+  const cd = (id, v, max) => { const k = `scaleY(${Math.round(Math.max(0, Math.min(1, v/max))*50)/50})`; if(HUDC[id + ":cd"] !== k){ HUDC[id + ":cd"] = k; $(id).querySelector(".cd").style.transform = k; } };
   cd("skFire", Math.max(0, p.fireCd), 1/classParams().rate); cd("skKit", p.kitCd, 2);
   classHud();
   if(typeof targetTick === "function") targetTick(drawDt);
 }
 
+// если 3 секунды подряд кадр дольше 24 мс (меньше ~40 FPS), снижаем разрешение холста ступенькой: 2 → 1,5 → 1
+function gfxWatch(ms){
+  if(!running || paused || document.hidden || ms > 250 || dpr <= 1) { GFX.frames = GFX.slow = 0; return; }
+  GFX.frames++; if(ms > 24) GFX.slow++;
+  if(GFX.frames < 180) return;
+  if(GFX.slow > GFX.frames*0.6){ GFX.cap = dpr > 1.5 ? 1.5 : 1; resize(); }
+  GFX.frames = GFX.slow = 0;
+}
 function loop(ts){
   if(S.settings && S.settings.fps60 === false && ts - last < 31){ requestAnimationFrame(loop); return; }
-  const dt = Math.min(0.05, (ts - last)/1000); last = ts;
+  const raw = ts - last, dt = Math.min(0.05, raw/1000); last = ts;
+  gfxWatch(raw);
   if(running && vw > 0){
     if(!paused) update(dt);
     drawDt = paused ? 0 : dt; draw(ts/1000); hud();
@@ -3553,6 +3606,9 @@ function drawOthers(t, dt){
     if(o.dead) continue;
     const k = Math.min(1, (dt || 0.016)*10);
     o.rx += (o.x - o.rx)*k; o.ry += (o.y - o.ry)*k;
+    // за краем экрана не рисуем (положение всё равно обновляем, чтобы не было рывка при появлении)
+    const cx0 = window.camX || 0, cy0 = window.camY || 0;
+    if(o.rx < cx0 - 90 || o.rx > cx0 + vw + 90 || o.ry < cy0 - 40 || o.ry > cy0 + vh + 160) continue;
     const F = FACTIONS[o.fac] || FACTIONS.aegis;
     drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.moving, t:t + (o.id % 7), ps:1.5});
     const name = String(o.nick || "Пилот").slice(0, 16);
@@ -3871,10 +3927,11 @@ function renderSkillButtons(){
 }
 function classHud(){
   const C = clsOf(S.cls); if(!C) return;
+  const cdr = stat().cdr;
   for(let i = 0; i < 4; i++){
-    const b = $("skC" + i), cd = CB.cd[i], max = skillAt(C.skills[i], skillLv(C.skills[i].id)).cd*(1 - stat().cdr);
+    const b = $("skC" + i), cd = CB.cd[i], max = skillAt(C.skills[i], skillLv(C.skills[i].id)).cd*(1 - cdr);
     const el = b.querySelector(".cdt"), ring = b.querySelector(".cdc"); if(!el || !ring){ renderSkillButtons(); return; }
-    ring.style.setProperty("--p", (cd/max*100).toFixed(1));
+    const pv = (cd/max*100).toFixed(0); if(ring.dataset.p !== pv){ ring.dataset.p = pv; ring.style.setProperty("--p", pv); }
     const txt = cd > 0 ? Math.ceil(cd) : ""; if(el.textContent != txt) el.textContent = txt;
     const ready = cd <= 0; if(b.classList.contains("ready") !== ready){ b.classList.toggle("ready", ready); if(ready && b.dataset.was) { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); } b.dataset.was = "1"; }
   }
@@ -4309,10 +4366,10 @@ function targetTick(dt){
   let hp = 1, mhp = 1;
   if(tgt.kind === "enemy"){ if(!lockedEnemy()){ clearTarget(); return; } hp = tgt.e.hp; mhp = tgt.e.max; }
   else { const o = tgtPlayer(); if(!o){ clearTarget(); return; } hp = +o.hp || 0; mhp = +o.mhp || 1; }
-  $("tfHp").style.width = Math.max(0, Math.min(100, hp/mhp*100)) + "%";
+  hudWidth("tfHp", hp/mhp*100);
   const o2 = tgt.kind === "player" ? tgtPlayer() : null, cpBar = $("tfCp");
   cpBar.hidden = !o2; if(o2) cpBar.firstElementChild.style.width = Math.max(0, Math.min(100, (+o2.cp || 0)/(+o2.mcp || 1)*100)) + "%";
-  $("tfHpTxt").textContent = Math.ceil(Math.max(0, hp)) + " / " + Math.ceil(mhp);
+  hudText("tfHpTxt", Math.ceil(Math.max(0, hp)) + " / " + Math.ceil(mhp));
   const hb = $("tfActs").querySelector('[data-tf="heal"]');
   if(hb){ const dis = healCd > 0; if(hb.disabled !== dis) hb.disabled = dis; const t = dis ? "Подхил " + Math.ceil(healCd) : "Подхил"; if(hb.textContent !== t) hb.textContent = t; }
 }
@@ -4935,10 +4992,18 @@ function buildSprite(kind, P, anim, f){
   return {px:out, glow:glowPx};
 }
 
+// ключ снаряжения для кэша спрайтов: считается один раз на объект, а не JSON.stringify каждый кадр
+const eqKeys = new WeakMap();
+function eqKey(eq){
+  if(!eq) return "";
+  let k = eqKeys.get(eq); if(k !== undefined) return k;
+  k = ""; for(const s of ["head", "weapon", "module", "armor", "core", "legs"]) k += (eq[s] ?? "-") + ",";
+  eqKeys.set(eq, k); return k;
+}
 // спрайт → холст нужного масштаба (+ слой свечения), с кэшем
 function spriteCanvas(kind, o, anim, f, ps){
   const P = sprPalette(o);
-  const key = [kind, o.fac, JSON.stringify(o.eq || {}), anim, f, ps].join("|");
+  const key = kind + "|" + o.fac + "|" + eqKey(o.eq) + "|" + anim + "|" + f + "|" + ps;
   let c = sprCache.get(key);
   if(c) return c;
   const spr = buildSprite(kind, P, anim, f);
@@ -4959,7 +5024,10 @@ function drawMech(g, x, y, o){
   const kind = o.cls && CLASSES[o.cls] ? o.cls : "base", t = o.t || 0;
   const ps = o.ps || Math.max(1, Math.round(2*(o.scale || 1)));
   // дробный масштаб: спрайт рисуется вдвое крупнее и плавно уменьшается — пиксели остаются ровными
-  const frac = ps % 1 !== 0, rps = frac ? Math.round(ps*2) : ps;
+  // если масштаб на экране целый (например, 1,5 × плотность 2 = 3), спрайт строится сразу в пикселях экрана
+  // и копируется 1:1 без сглаживания — чётче и заметно быстрее, чем уменьшение с imageSmoothingQuality "high"
+  const dev = ps*(g === ctx ? dpr : 1), exact = g === ctx && Math.abs(dev - Math.round(dev)) < 1e-6 && ps % 1 !== 0;
+  const frac = ps % 1 !== 0 && !exact, rps = exact ? Math.round(dev) : frac ? Math.round(ps*2) : ps;
   const dir = Math.cos(o.aim || 0) >= 0 ? 1 : -1;
   let anim = "idle", f = Math.floor(t*2) % 2;
   if(o.atk > 0){ anim = "attack"; f = o.atk > 0.5 ? 0 : 1; }
@@ -4972,9 +5040,18 @@ function drawMech(g, x, y, o){
   g.restore();
   g.save(); g.translate(Math.round(x), Math.round(y)); g.scale(dir, 1);
   g.imageSmoothingEnabled = frac; if(frac) g.imageSmoothingQuality = "high";
-  g.drawImage(spr.base, -SPR_AX*ps, -SPR_AY*ps, DW, DH);
-  g.globalCompositeOperation = "lighter"; g.globalAlpha = .55 + (anim === "idle" && f ? .15 : 0);
-  g.drawImage(spr.glow, -SPR_AX*ps, -SPR_AY*ps, DW, DH);
+  // корпус и подсветка запекаются в один холст (два варианта яркости): одна отрисовка вместо двух
+  // и без переключения режима смешивания на каждого пилота
+  const gi = anim === "idle" && f ? 1 : 0;
+  if(!spr.comb) spr.comb = [];
+  let cb = spr.comb[gi];
+  if(!cb){
+    cb = document.createElement("canvas"); cb.width = spr.base.width; cb.height = spr.base.height;
+    const q = cb.getContext("2d"); q.drawImage(spr.base, 0, 0);
+    q.globalCompositeOperation = "lighter"; q.globalAlpha = gi ? .70 : .55; q.drawImage(spr.glow, 0, 0);
+    spr.comb[gi] = cb;
+  }
+  g.drawImage(cb, -SPR_AX*ps, -SPR_AY*ps, DW, DH);
   g.restore();
   if(o.flash > 0){ g.save(); g.globalAlpha = .5; g.globalCompositeOperation = "lighter"; g.translate(Math.round(x), Math.round(y)); g.scale(dir, 1); g.drawImage(spr.base, -SPR_AX*ps, -SPR_AY*ps, DW, DH); g.restore(); }
 }
@@ -5835,6 +5912,7 @@ function drawDungeon(cx, cy, t){
     ctx.fillStyle = typeof tilePattern === "function" ? tilePattern(r.corr ? "corr" : "dungeon") : (r.corr ? "#232E3A" : "#283441");
     ctx.fillRect(r.x, r.y, r.w, r.h);
   }
+  if(typeof drawDecals === "function") drawDecals(cx, cy);
   // лицевая грань стены над комнатами и светильники
   for(const r of dgRects){
     if(!vis(r) || r.corr) continue;
@@ -5842,8 +5920,8 @@ function drawDungeon(cx, cy, t){
     ctx.fillStyle = "#2B3643"; ctx.fillRect(r.x, r.y - 4, r.w, 4);
     for(let x = r.x + 10; x < r.x + r.w; x += 30){ ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x, r.y - 16, 1.5, 12); }
     const lx = r.x + r.w/2, fl = .7 + Math.sin(t*9 + r.x)*.2;
-    const gr = ctx.createRadialGradient(lx, r.y + 4, 0, lx, r.y + 4, 70); gr.addColorStop(0, `rgba(242,169,59,${.28*fl})`); gr.addColorStop(1, "rgba(242,169,59,0)");
-    ctx.fillStyle = gr; ctx.fillRect(lx - 70, r.y - 20, 140, 90);
+    // свет лампы — готовое пятно, мерцание через прозрачность (без нового градиента на каждую комнату в каждом кадре)
+    ctx.globalAlpha = fl; ctx.drawImage(lampGlow(), lx - 70, r.y - 20); ctx.globalAlpha = 1;
     ctx.fillStyle = "#56616D"; ctx.fillRect(lx - 3, r.y - 10, 6, 6);
     ctx.fillStyle = `rgba(255,200,110,${fl})`; ctx.beginPath(); ctx.arc(lx, r.y - 12, 3, 0, Math.PI*2); ctx.fill();
   }
@@ -6711,10 +6789,6 @@ function mgResult(r){
     S.level = r.lvlCap; S.exp = 0; S.hp = Math.min(S.hp, stat().maxhp); save();
     toast("Уровень выровнен по данным сервера: " + r.lvlCap);
   }
-  if(typeof r.lootMult === "number" && r.lootMult < 1){
-    const day = new Date().toDateString();
-    if(localStorage.getItem("mw-lootnote") !== day){ localStorage.setItem("mw-lootnote", day); toast("Сегодня ценный лут выпадает реже: сканеры перегрелись. Завтра шанс вернётся"); }
-  }
   if(!w || !r.drops) return;
   for(const d of r.drops){
     const k = w.batch[d.i] || w.batch[0];
@@ -7051,7 +7125,9 @@ const TILE_PAL = {
 const tilePats = {};
 function tilePattern(kind){
   if(tilePats[kind]) return tilePats[kind];
-  const P = TILE_PAL[kind] || TILE_PAL.dungeon, n = 32, ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps;
+  // открытые локации — плитка 128×128 px вместо 64×64: повтор узора на земле почти не заметен
+  const big = ["scrapfields", "iron_canyon", "reactor_ruins", "arena_fear"].includes(kind);
+  const P = TILE_PAL[kind] || TILE_PAL.dungeon, n = big ? 64 : 32, area = (n/32)*(n/32), ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps;
   const g = c.getContext("2d"), px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
   g.fillStyle = P[0]; g.fillRect(0, 0, c.width, c.height);
   let seed = [...kind].reduce((a, ch) => a*31 + ch.charCodeAt(0), 7) >>> 0;
@@ -7059,19 +7135,22 @@ function tilePattern(kind){
   const rugged = kind === "scrapfields" || kind === "iron_canyon" || kind === "reactor_ruins";
   if(!rugged){
     // стальные плиты 16×16: светлый край сверху-слева, шов снизу-справа, заклёпки по углам
-    for(const [ox, oy] of [[0, 0], [16, 0], [0, 16], [16, 16]]){
+    const offs = []; for(let oy = 0; oy < n; oy += 16) for(let ox = 0; ox < n; ox += 16) offs.push([ox, oy]);
+    for(const [ox, oy] of offs){
       for(let i = 0; i < 16; i++){ px(ox + i, oy, P[2]); px(ox, oy + i, P[2]); px(ox + i, oy + 15, P[3]); px(ox + 15, oy + i, P[3]); }
       for(const [rx, ry] of [[2, 2], [13, 2], [2, 13], [13, 13]]){ px(ox + rx, oy + ry, P[3]); px(ox + rx, oy + ry - 1, P[2]); }
     }
   }
   // потёртости и мелкий мусор
-  for(let i = 0; i < (rugged ? 90 : 26); i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, rnd() < .5 ? P[1] : P[3]); }
+  for(let i = 0; i < (rugged ? 90 : 26)*area; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, rnd() < .5 ? P[1] : P[3]); }
   if(rugged){
-    for(let i = 0; i < 6; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n), l = 2 + Math.floor(rnd()*4); for(let j = 0; j < l; j++) px((x + j) % n, (y + (j >> 1)) % n, P[3]); }
-    for(let i = 0; i < 5; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, P[2]); px((x + 1) % n, y, P[2]); }
+    for(let i = 0; i < 6*area; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n), l = 2 + Math.floor(rnd()*4); for(let j = 0; j < l; j++) px((x + j) % n, (y + (j >> 1)) % n, P[3]); }
+    for(let i = 0; i < 5*area; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, P[2]); px((x + 1) % n, y, P[2]); }
+    // мелкие камешки 2×2 со светлой гранью
+    for(let i = 0; i < 4*area; i++){ const x = Math.floor(rnd()*(n - 1)), y = Math.floor(rnd()*(n - 1)); px(x, y, P[2]); px(x + 1, y, P[1]); px(x, y + 1, P[1]); px(x + 1, y + 1, P[3]); }
   }
-  if(kind === "reactor_ruins") for(let i = 0; i < 3; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#5FC94A"); }
-  if(kind === "arena_fear") for(let i = 0; i < 4; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#6A48D0"); }
+  if(kind === "reactor_ruins") for(let i = 0; i < 3*area; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#5FC94A"); }
+  if(kind === "arena_fear") for(let i = 0; i < 4*area; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#6A48D0"); }
   tilePats[kind] = ctx.createPattern(c, "repeat");
   return tilePats[kind];
 }
@@ -7084,6 +7163,135 @@ const wallPat = (() => { let p = null; return () => {
     for(let i = 0; i < n; i++){ px(i, oy, "#1B2530"); px(i, oy + 7, "#0D131A"); }
     for(const bx of [off, off + 8]){ for(let j = 0; j < 8; j++) px(bx % n, oy + j, "#0D131A"); } }
   return (p = ctx.createPattern(c, "repeat"));
+}; })();
+
+
+// ===================== ТЕКСТУРЫ ЗЕМЛИ: СВЕТ, ТЕНЬ И ДЕТАЛИ =====================
+// Всё строится один раз на локацию из сида её названия (у всех игроков одинаково) и дальше только копируется.
+const GROUND = {key:"", light:null, decals:[]};
+const decalCache = new Map();
+const seedRnd = str => { let seed = [...str].reduce((a, ch) => (a*31 + ch.charCodeAt(0)) >>> 0, 11); return () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296; };
+const DECAL_KINDS = {
+  scrapfields:["crack", "oil", "debris", "debris", "tracks", "bolts"],
+  reactor_ruins:["crack", "toxic", "grate", "debris", "toxic", "crack"],
+  iron_canyon:["crack", "crack", "dust", "debris", "tracks", "bolts"],
+  arena_fear:["scorch", "rune", "crack", "scorch"],
+  dungeon:["crack", "oil", "grate", "debris", "bolts"]
+};
+// пиксельная деталь-наклейка: ps = 2, тёмная обводка не нужна — лежит на земле
+function decalSprite(kind, v, pal){
+  const key = kind + "|" + v + "|" + pal.join(); let c = decalCache.get(key); if(c) return c;
+  const rnd = seedRnd(key), ps = 2;
+  const N = {crack:26, oil:22, toxic:22, debris:16, tracks:44, bolts:12, grate:16, dust:30, scorch:28, rune:30}[kind] || 20;
+  c = document.createElement("canvas"); c.width = c.height = N*ps;
+  const g = c.getContext("2d"), px = (x, y, col, a) => { if(x < 0 || y < 0 || x >= N || y >= N) return; g.globalAlpha = a == null ? 1 : a; g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  const dark = pal[3], mid = pal[1], light = pal[2], m = N/2;
+  const blob = (rx, ry, fn) => { for(let y = 0; y < N; y++) for(let x = 0; x < N; x++){ const d = ((x - m)/rx)**2 + ((y - m)/ry)**2 + (rnd() - .5)*.35; fn(x, y, d); } };
+  if(kind === "crack"){
+    // трещина: ломаная из центра в 2–3 стороны, тёмный шов и светлый скол под ним
+    const arms = 2 + (v % 2);
+    for(let a = 0; a < arms; a++){
+      let x = m, y = m, ang = a*Math.PI*2/arms + rnd();
+      for(let i = 0; i < N*0.55; i++){ ang += (rnd() - .5)*.9; x += Math.cos(ang); y += Math.sin(ang);
+        px(Math.round(x), Math.round(y), "#0B0E12", .75); px(Math.round(x), Math.round(y) + 1, light, .35);
+        if(rnd() < .12){ let bx = x, by = y, ba = ang + (rnd() < .5 ? 1 : -1); for(let j = 0; j < 4; j++){ bx += Math.cos(ba); by += Math.sin(ba); px(Math.round(bx), Math.round(by), "#0B0E12", .5); } } }
+    }
+  } else if(kind === "oil" || kind === "toxic" || kind === "dust" || kind === "scorch"){
+    const rx = N*(.3 + rnd()*.12), ry = N*(.22 + rnd()*.12);
+    const col = {oil:"#0E1216", toxic:"#2E7A3A", dust:light, scorch:"#0B0B0E"}[kind];
+    blob(rx, ry, (x, y, d) => {
+      if(d < 1) px(x, y, col, kind === "dust" ? .22 : kind === "scorch" ? (d < .45 ? .55 : .3) : kind === "toxic" ? .55 : .5);
+      else if(d < 1.25 && rnd() < .45) px(x, y, col, .2);           // рваный край
+    });
+    if(kind === "oil") for(let i = 0; i < 5; i++){ const x = Math.round(m + (rnd() - .5)*rx), y = Math.round(m + (rnd() - .5)*ry); px(x, y, ["#3A4A6A", "#5A3E6A", "#2E5A5E"][i % 3], .6); }   // радужные блики
+    if(kind === "toxic") for(let i = 0; i < 7; i++){ const x = Math.round(m + (rnd() - .5)*rx*1.2), y = Math.round(m + (rnd() - .5)*ry*1.2); px(x, y, "#8BF09A", .8); }
+    if(kind === "scorch") for(let i = 0; i < 8; i++){ const x = Math.round(m + (rnd() - .5)*rx*1.6), y = Math.round(m + (rnd() - .5)*ry*1.6); px(x, y, "#3A2A1E", .5); }
+  } else if(kind === "debris" || kind === "bolts"){
+    const n = kind === "bolts" ? 4 : 4 + Math.floor(rnd()*3);
+    for(let i = 0; i < n; i++){
+      const w = kind === "bolts" ? 1 : 2 + Math.floor(rnd()*3), h = kind === "bolts" ? 1 : 1 + Math.floor(rnd()*2);
+      const x = Math.floor(2 + rnd()*(N - w - 4)), y = Math.floor(2 + rnd()*(N - h - 4));
+      const col = kind === "bolts" ? "#A7B0B8" : ["#8A96A3", "#5A646E", "#8A4B2A", "#6E5A40"][Math.floor(rnd()*4)];
+      for(let yy = -1; yy <= h; yy++) for(let xx = -1; xx <= w; xx++) px(x + xx, y + yy + 1, "#0B0E12", .35);   // тень
+      for(let yy = 0; yy < h; yy++) for(let xx = 0; xx < w; xx++) px(x + xx, y + yy, col);
+      px(x, y, "#E4DED1", .45);                                                                    // блик
+    }
+  } else if(kind === "tracks"){
+    // след гусениц: две полосы с поперечными траками
+    const vert = v % 2, len = N - 4;
+    for(let i = 2; i < len; i++) for(const off of [m - 6, m + 5]) for(let k = 0; k < 3; k++){
+      const a = (i % 3 === 0) ? .45 : .22; if(vert) px(off + k, i, dark, a); else px(i, off + k, dark, a);
+    }
+  } else if(kind === "grate"){
+    for(let y = 1; y < N - 1; y++) for(let x = 1; x < N - 1; x++){
+      const edge = x === 1 || y === 1 || x === N - 2 || y === N - 2;
+      px(x, y, edge ? "#56616D" : (x % 3 === 0 ? "#3A4757" : "#0B0E12"), edge ? .9 : .85);
+    }
+    for(let i = 1; i < N - 1; i++) px(i, 1, "#8A96A3", .7);
+  } else if(kind === "rune"){
+    for(let a = 0; a < 64; a++){ const t = a/64*Math.PI*2; px(Math.round(m + Math.cos(t)*(m - 3)), Math.round(m + Math.sin(t)*(m - 3)), "#6A48D0", .55); }
+    for(let k = 0; k < 4; k++){ const t = k*Math.PI/2 + .4; for(let r = 3; r < 7; r++) px(Math.round(m + Math.cos(t)*(m - r)), Math.round(m + Math.sin(t)*(m - r)), "#9B7BFF", .6); }
+  }
+  g.globalAlpha = 1;
+  decalCache.set(key, c); if(decalCache.size > 120) decalCache.delete(decalCache.keys().next().value);
+  return c;
+}
+// крупные пятна света и тени поверх плитки: маленький холст, растянутый на всю карту
+function groundLight(key){
+  const rnd = seedRnd("light|" + key), n = 24, c = document.createElement("canvas"); c.width = c.height = n;
+  const g = c.getContext("2d"), vals = [];
+  for(let i = 0; i < n*n; i++) vals.push(rnd());
+  const at = (x, y) => vals[((y + n) % n)*n + ((x + n) % n)];
+  for(let y = 0; y < n; y++) for(let x = 0; x < n; x++){
+    const v = (at(x, y)*4 + at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1))/8 - .5;   // сглаженный шум
+    g.fillStyle = v < 0 ? `rgba(0,0,0,${Math.min(.32, -v*1.2)})` : `rgba(255,236,210,${Math.min(.08, v*.26)})`;
+    g.fillRect(x, y, 1, 1);
+  }
+  return c;
+}
+function buildGround(){
+  const key = locKey + "|" + W + "|" + H + (LOCS[locKey].dungeon && typeof dgRects !== "undefined" ? "|" + dgRects.length : "");
+  if(GROUND.key === key) return;
+  GROUND.key = key; GROUND.decals = []; GROUND.light = null;
+  const kinds = DECAL_KINDS[TILE_PAL[locKey] && !LOCS[locKey].dungeon ? locKey : "dungeon"] || DECAL_KINDS.dungeon;
+  const pal = TILE_PAL[LOCS[locKey].dungeon ? "dungeon" : locKey] || TILE_PAL.dungeon;
+  const rnd = seedRnd("decal|" + locKey);
+  const add = (x, y) => { const kind = kinds[Math.floor(rnd()*kinds.length)], v = Math.floor(rnd()*4); GROUND.decals.push({x, y, kind, v, pal, a:.7 + rnd()*.3}); };
+  if(LOCS[locKey].dungeon){
+    if(typeof dgRects === "undefined") return;
+    for(const r of dgRects){ const cnt = Math.round(r.w*r.h/(170*170)*(r.corr ? .5 : 1) + rnd()*.8); for(let i = 0; i < cnt; i++) add(r.x + 20 + rnd()*(r.w - 40), r.y + 20 + rnd()*(r.h - 40)); }
+  } else {
+    const cnt = Math.round(W*H/(165*165));
+    for(let i = 0; i < cnt; i++) add(60 + rnd()*(W - 120), 60 + rnd()*(H - 120));
+    GROUND.light = groundLight(locKey);
+  }
+}
+function drawDecals(cx, cy){
+  buildGround();
+  ctx.imageSmoothingEnabled = false;
+  for(const d of GROUND.decals){
+    const img = decalSprite(d.kind, d.v, d.pal), hw = img.width/2;
+    if(d.x + hw < cx || d.x - hw > cx + vw || d.y + hw < cy || d.y - hw > cy + vh) continue;
+    ctx.globalAlpha = d.a; ctx.drawImage(img, Math.round(d.x - hw), Math.round(d.y - hw));
+  }
+  ctx.globalAlpha = 1;
+}
+function drawGround(cx, cy){
+  buildGround();
+  if(GROUND.light && !(S.settings && S.settings.lowfx)){
+    // рисуем только видимую часть растянутого холста света
+    const L = GROUND.light, n = L.width, sx = cx/W*n, sy = cy/H*n, sw = vw/W*n, sh = vh/H*n;
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(L, sx, sy, sw, sh, cx, cy, vw, vh);
+  }
+  drawDecals(cx, cy);
+}
+// свет лампы в подземелье — один готовый холст на все комнаты
+const lampGlow = (() => { let c = null; return () => {
+  if(c) return c;
+  c = document.createElement("canvas"); c.width = 140; c.height = 90;
+  const g = c.getContext("2d"), gr = g.createRadialGradient(70, 24, 0, 70, 24, 70);
+  gr.addColorStop(0, "rgba(242,169,59,.28)"); gr.addColorStop(1, "rgba(242,169,59,0)"); g.fillStyle = gr; g.fillRect(0, 0, 140, 90);
+  return c;
 }; })();
 
 // ---- режим оптимизации: без размытого свечения на холсте, холст 1×, спрайты без подсветки ----

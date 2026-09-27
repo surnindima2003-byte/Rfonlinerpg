@@ -291,7 +291,7 @@ async def api_items(request):
             # старый путь (HTTP) — для закэшированных клиентов; новые шлют убийства через WebSocket
             me = online(uid)
             drops, cap, lf = await process_kills(s, uid, me, body.get("kills") or [{"mob": body.get("mob"), "loc": body.get("loc")}])
-            return web.json_response({"ok": True, "drops": drops, "lvlCap": cap, "lootMult": lf})
+            return web.json_response({"ok": True, "drops": drops, "lvlCap": cap})
 
         if op == "enchant":
             x = (await s.execute(select(ItemInst).where(ItemInst.uid == str(body.get("uid", ""))))).scalar_one_or_none()

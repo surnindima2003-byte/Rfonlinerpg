@@ -8,7 +8,7 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 from aiogram.utils.web_app import safe_parse_webapp_init_data
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 
 import re
 import secrets
@@ -19,7 +19,12 @@ from config import (WORLD_HZ, VIEW_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BUR
 from db import SessionLocal, engine, db_ping, dispose as db_dispose
 import metrics
 import realtime
-from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
+from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist, Player
+import chipwar
+import funnel
+import mobguard
+from db_atomic import insert_ignore
+from game_data import STARTING_STATS
 import gram
 import items
 import pvp
@@ -143,6 +148,7 @@ async def metrics_page(request):
 async def api_load(request):
     _, user = await read_auth(request)
     await stats.mark_seen(user["id"])
+    funnel.mark(user["id"], "app_open")
     m = re.fullmatch(r"ref_(\d{3,15})", user.get("start", ""))
     if m:
         await gram.bind_referral(user["id"], int(m.group(1)))
@@ -519,7 +525,8 @@ async def api_market(request):
             if op == "cancel":
                 if lot.seller_id != uid:
                     return web.json_response({"ok": False, "error": "Это не твой лот"})
-                await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+                if not await _take_lot(s, lot_id, seller=uid):
+                    return web.json_response({"ok": False, "error": "Лот уже продан или снят"})
                 await items.market_transfer(s, item, uid)                 # вещь возвращается продавцу
                 await s.commit()
                 return web.json_response({"ok": True, "item": item})
@@ -527,27 +534,46 @@ async def api_market(request):
                 return web.json_response({"ok": False, "error": "Нельзя купить свой лот"})
             buyer = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
             buyer_nick = (buyer.nick if buyer and buyer.nick else user["name"])[:16]
-            # оплата GRAM с серверного баланса: покупатель платит, продавец получает за вычетом комиссии
+            # кошельки создаём заранее: создание кошелька — отдельная транзакция, и она не должна
+            # оказаться между «забрали лот» и «списали GRAM»
             bw = await gram.wallet_of(s, uid)
+            await gram.wallet_of(s, lot.seller_id)
+            # 1) забираем лот: DELETE … RETURNING. Из двух одновременных покупателей строку получит один,
+            #    второй увидит 0 строк и ничего не заплатит
+            if not await _take_lot(s, lot_id):
+                return web.json_response({"ok": False, "error": "Лот уже продан или снят"})
+            # 2) списываем GRAM атомарно; не хватило — откатываем всю операцию, лот остаётся на маркете
             from_locked = min(bw.locked or 0, lot.price)          # игровые GRAM из звёзд тратятся первыми
             if not await gram.move(s, uid, -lot.price, "market_buy", f"mkb:{lot_id}", "Маркет: покупка"):
+                await s.rollback()
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
-            bw.locked = max(0, (bw.locked or 0) - from_locked)
+            if from_locked:
+                await gram.adjust_locked(s, uid, -from_locked)
             payout = max(1, int(lot.price * (1 - MARKET_FEE)))
             await gram.move(s, lot.seller_id, payout, "market_sell", f"mks:{lot_id}", "Маркет: продажа")
             # игровые GRAM покупателя остаются игровыми и у продавца: через маркет звёзды не превратить в выводимые GRAM
-            sw = await gram.wallet_of(s, lot.seller_id)
-            sw.locked = (sw.locked or 0) + int(from_locked * (1 - MARKET_FEE))
-            await s.execute(MarketLot.__table__.delete().where(MarketLot.id == lot_id))
+            if from_locked:
+                await gram.adjust_locked(s, lot.seller_id, int(from_locked * (1 - MARKET_FEE)))
             await items.market_transfer(s, item, uid)                     # вещь переходит покупателю
             now_ = int(time.time())
             s.add(MarketHist(tg_id=uid, kind="buy", item=lot.item, price=lot.price, other="@" + lot.seller_nick, ts=now_))
             s.add(MarketHist(tg_id=lot.seller_id, kind="sell", item=lot.item, price=lot.price, other="@" + buyer_nick, ts=now_))
             await s.commit()
+            funnel.mark(uid, "market")
+            funnel.mark(lot.seller_id, "market")
     if op == "buy":
         await push_to_player(lot.seller_id, {"t": "gram", "text": f"Маркет: лот продан, +{gram.g(payout)} GRAM", "refresh": True})
         return web.json_response({"ok": True, "item": item})
     raise web.HTTPBadRequest(text="bad op")
+
+
+async def _take_lot(s, lot_id, seller=None):
+    """Атомарно снять лот с маркета. True — именно этот запрос его забрал."""
+    t = MarketLot.__table__
+    q = t.delete().where(t.c.id == lot_id)
+    if seller is not None:
+        q = q.where(t.c.seller_id == seller)
+    return (await s.execute(q.returning(t.c.id))).first() is not None
 
 
 # ---------- TON Connect: манифест и иконка игры ----------
@@ -771,7 +797,7 @@ def clean_pos(d, info):
         info["dead"] = bool(d.get("dead"))
         nick = str(d.get("nick", ""))[:16].strip()
         info["nick"] = nick or info["name"][:16]
-        info["fac"] = d.get("fac") if d.get("fac") in FACTIONS else "aegis"
+        info["fac"] = info.get("fac_srv") or ""                                    # фракцию задаёт сервер, а не сообщение
         cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
         if info.get("loadtest"):
             cap = 60
@@ -806,10 +832,6 @@ def public(info):
 async def push_to_player(tg_id, payload):
     """Поставить сообщение игроку в очередь. True — игрок в сети. Сеть не ждём."""
     return hub.to_uid(tg_id, payload)
-
-
-async def broadcast(payload, only=None):
-    hub.to_all(payload, only)
 
 
 # ---- ограничители частоты ----
@@ -938,6 +960,66 @@ async def handle_pvp_dead(d, info):
     metrics.inc("pvp.death")
 
 
+async def handle_kills(d, info, conn):
+    """Убийства мобов из сообщения pos. Ответ (выпавший лут) — сообщением kres с тем же номером пачки."""
+    try:
+        async with SessionLocal() as s:
+            drops, cap, lf = await items.process_kills(s, info["id"], info, d.get("mk"))
+    except Exception:
+        log.exception("убийства uid=%s", info["id"])
+        metrics.inc("kill.error")
+        drops, cap, lf = [], info.get("lvl_cap"), 1.0
+    conn.push(realtime.encode({"t": "kres", "n": d.get("kn"), "drops": drops, "lvlCap": cap}))
+
+
+async def api_faction(request):
+    """Одноразовый выбор фракции в игре (для тех, кто не выбрал её в боте через /start). Сменить потом нельзя."""
+    body, user = await read_auth(request)
+    fac = body.get("fac")
+    if fac not in FACTIONS:
+        return web.json_response({"ok": False, "error": "Нет такой фракции"})
+    uid = user["id"]
+    async with SessionLocal() as s:
+        await s.execute(insert_ignore(Player.__table__, tg_id=uid, name=(user["name"] or "Пилот")[:64], faction=fac,
+                                      current_zone="scrapfields", **STARTING_STATS))
+        # строка могла существовать с пустой фракцией — заполняем, только если она всё ещё пустая
+        await s.execute(update(Player).where(Player.tg_id == uid, Player.faction == "").values(faction=fac)
+                        .execution_options(synchronize_session=False))
+        cur = (await s.execute(select(Player.faction).where(Player.tg_id == uid))).scalar()
+        await s.commit()
+    if cur != fac:
+        return web.json_response({"ok": False, "error": "Фракция уже выбрана", "fac": cur})
+    for c in hub.by_uid.get(uid, []):
+        c.info["fac_srv"] = c.info["fac"] = fac
+    log.info("Фракция: игрок %s выбрал %s", uid, fac)
+    return web.json_response({"ok": True, "fac": fac})
+
+
+async def api_chipwar(request):
+    body, user = await read_auth(request)
+    op = request.match_info["op"]
+    if op == "state":
+        return web.json_response({"ok": True, **chipwar.status()})
+    if not user["admin"]:
+        raise web.HTTPForbidden(text="not admin")
+    if op == "start":
+        if chipwar.WAR.phase == "live":
+            return web.json_response({"ok": False, "error": "Chip War уже идёт"})
+        try:
+            minutes = max(1, min(60, int(body.get("minutes", 10))))
+        except (TypeError, ValueError):
+            minutes = 10
+        await chipwar.start_now(hub, minutes * 60)
+        log.warning("Админ @%s запустил Chip War на %s мин", user["username"], minutes)
+        return web.json_response({"ok": True})
+    if op == "stop":
+        if chipwar.WAR.phase != "live":
+            return web.json_response({"ok": False, "error": "Chip War сейчас не идёт"})
+        await chipwar.finish_now(hub, push_to_player)
+        return web.json_response({"ok": True})
+    raise web.HTTPBadRequest(text="bad op")
+
+
 WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping"}
 
 
@@ -984,15 +1066,22 @@ async def ws_handler(request):
                     await ws.close(code=4001, message=b"bad auth")
                     break
                 auth_timer.cancel()
+                try:
+                    proto = int(d.get("proto", 1))
+                except (TypeError, ValueError):
+                    proto = 1
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
-                        "nick": user["name"][:16], "fac": "aegis", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0}
+                        "nick": user["name"][:16], "fac": "", "fac_srv": "", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
+                        "proto": proto}
                 if LOADTEST and user["id"] >= LOADTEST_UID_BASE:
                     info["loadtest"] = True
                 try:
                     await pvp.load_karma(info)
                     async with SessionLocal() as s_:
                         info["lvl_cap"] = await progress.cap_of(s_, user["id"])
+                        fac = (await s_.execute(select(Player.faction).where(Player.tg_id == user["id"]))).scalar()
                         await s_.commit()
+                    info["fac_srv"] = info["fac"] = fac if fac in FACTIONS else ""
                 except Exception:
                     # база медленная или недоступна — игрок всё равно входит, чат и мир работают
                     log.exception("не удалось загрузить карму/предел уровня uid=%s", user["id"])
@@ -1001,7 +1090,9 @@ async def ws_handler(request):
                     break
                 conn = hub.add(ws, info)
                 clients[ws] = info
-                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"]}))
+                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"],
+                                           "fac": info["fac_srv"], "cw": chipwar.status()}))
+                funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
             if t == "pos":
@@ -1009,6 +1100,11 @@ async def ws_handler(request):
                 clean_pos(d, info)
                 if info["loc"] != old_loc:
                     hub.moved(conn, old_loc)
+                # удары по мобам и убийства едут в том же сообщении: сервер гарантированно видит удары раньше убийства
+                if d.get("mh"):
+                    mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
+                if d.get("mk"):
+                    await handle_kills(d, info, conn)
             elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
                 await handle_party(d, info)
             elif t == "pvp":
@@ -1049,7 +1145,7 @@ def _near(a, b, r2):
     return (a.get("x", 0) - b.get("x", 0)) ** 2 + (a.get("y", 0) - b.get("y", 0)) ** 2 <= r2
 
 
-def world_tick(keepalive):
+def world_tick(keepalive, full_tick=False):
     """Один шаг рассылки. Каждый игрок сериализуется ОДИН раз за шаг, а не для каждого получателя."""
     r2 = VIEW_RADIUS ** 2 if VIEW_RADIUS > 0 else 0
     for loc, members in list(hub.by_loc.items()):
@@ -1057,14 +1153,33 @@ def world_tick(keepalive):
         if not conns:
             continue
         frags = [(c, realtime.encode(public(c.info))) for c in conns]
-        head = '{"t":"players","loc":' + json.dumps(loc) + ',"list":['
+        loc_js = json.dumps(loc)
+        head = '{"t":"players","loc":' + loc_js + ',"list":['
         for c in conns:
             me, uid = c.info, c.uid
             if r2:
-                parts = [f for o, f in frags if o.uid != uid and _near(me, o.info, r2)]
+                vis = [(o.uid, f) for o, f in frags if o.uid != uid and _near(me, o.info, r2)]
             else:
-                parts = [f for o, f in frags if o.uid != uid]
-            c.push_snapshot(head + ",".join(parts) + "]}", keepalive)
+                vis = [(o.uid, f) for o, f in frags if o.uid != uid]
+            if not c.delta:
+                c.push_snapshot(head + ",".join(f for _, f in vis) + "]}", keepalive)
+                continue
+            # протокол 2: только изменившиеся соседи и id ушедших; полный снимок — после смены локации и раз в 10 с
+            view = dict(vis)
+            base = c.sent_view
+            full = base is None or full_tick
+            if full:
+                up, gone = list(view.values()), []
+            else:
+                up = [f for i, f in view.items() if base.get(i) != f]
+                gone = [i for i in base if i not in view]
+            if not full and not up and not gone:
+                metrics.inc("world.delta_empty")
+                continue
+            text = ('{"t":"pd","loc":' + loc_js + ',"full":' + ("1" if full else "0") + ',"up":[' + ",".join(up) +
+                    '],"gone":' + json.dumps(gone) + '}')
+            c.push_snapshot(text, True, view)
+            metrics.inc("world.delta_full" if full else "world.delta")
         metrics.inc("world.snapshots", len(conns))
 
 
@@ -1085,7 +1200,8 @@ async def world_loop():
             if tick % WORLD_HZ == 0:
                 for pid in list(parties):
                     await send_party(pid)
-            world_tick(keepalive=tick % WORLD_HZ == 0)      # раз в секунду шлём даже без изменений
+            world_tick(keepalive=tick % WORLD_HZ == 0,      # раз в секунду шлём даже без изменений
+                       full_tick=tick % (WORLD_HZ * 10) == 0)   # дельта-клиентам — полный снимок раз в 10 с
         except Exception:
             log.exception("world tick")
             metrics.inc("world.error")
@@ -1116,6 +1232,7 @@ async def cleanup_loop():
             for uid in [u for u in member_party if u not in online_ids]:
                 await party_leave(uid)                         # пати без живых участников не висят вечно
             pvp.cleanup(online_ids)
+            mobguard.cleanup(online_ids)
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})
         except Exception:
@@ -1145,6 +1262,8 @@ async def start_web(port: int):
     items.setup(app)
     pvp.setup(app)
     stats.setup(app)
+    app.router.add_post("/api/faction", api_faction)
+    app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
@@ -1158,6 +1277,7 @@ async def start_web(port: int):
     await items.migrate_gear()
     await items.migrate_market_registry()
     STATE["tasks"]["deposit"] = asyncio.create_task(gram.deposit_watcher())
+    STATE["tasks"]["chipwar"] = asyncio.create_task(chipwar.loop(hub, push_to_player, metrics))
     STATE["ready"] = True
     if LOADTEST:
         log.warning("РЕЖИМ НАГРУЗОЧНОГО ТЕСТА включён (staging, LOADTEST=1)")
