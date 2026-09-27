@@ -33,6 +33,9 @@ class GameSave(Base):
     __tablename__ = "game_saves"
 
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+        # Сохранение принимается только в той эпохе, в которой оно было создано.
+    # Это не даёт старой вкладке вернуть инвентарь после полного сброса базы.
+    epoch: Mapped[str] = mapped_column(String(96), default="", index=True)
     username: Mapped[str] = mapped_column(String(64), default="", index=True)
     name: Mapped[str] = mapped_column(String(64), default="")
     data: Mapped[str] = mapped_column(Text, default="")
