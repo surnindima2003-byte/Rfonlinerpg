@@ -153,7 +153,9 @@ async def api_load(request):
     if m:
         await gram.bind_referral(user["id"], int(m.group(1)))
     async with SessionLocal() as s:
-        row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+        row = (await s.execute(select(GameSave).where(
+            GameSave.tg_id == user["id"], GameSave.epoch == DATA_EPOCH
+        ))).scalar_one_or_none()
         grants = (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.applied == False))).scalars().all()  # noqa: E712
         if row and (row.username != user["username"] or row.name != user["name"]):
             row.username, row.name = user["username"], user["name"]
@@ -165,7 +167,11 @@ async def api_load(request):
 
 async def api_save(request):
     body, user = await read_auth(request)
-    data = body.get("data")
+        # Открытая до сброса вкладка продолжает посылать старый локальный инвентарь.
+    # Не принимаем его ни от обычного игрока, ни от администратора.
+    if body.get("epoch") != DATA_EPOCH:
+        raise web.HTTPConflict(text="stale epoch")
+  data = body.get("data")
     raw = json.dumps(data, ensure_ascii=False)
     if not isinstance(data, dict) or len(raw.encode()) > MAX_SAVE_BYTES:
         raise web.HTTPBadRequest(text="bad save")
@@ -174,7 +180,8 @@ async def api_save(request):
         if not row:
             row = GameSave(tg_id=user["id"])
             s.add(row)
-        row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
+        row.epoch = DATA_EPOCH
+      row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
         s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
         try:
             # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
