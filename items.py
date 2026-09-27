@@ -19,9 +19,96 @@ from models import ItemInst, SphereBal, GameSave
 log = logging.getLogger("items")
 
 # снаряжение: (id, минимальный уровень) — зеркало ITEMS из игры, стартовые вещи не выпадают
-GEAR = [("laser1", 1), ("laser2", 3), ("plasma", 6), ("sensor1", 1), ("sensor2", 4), ("plate1", 1), ("plate2", 4),
-        ("tracks1", 1), ("tracks2", 3), ("servo", 2), ("shieldgen", 5), ("reactor1", 1), ("reactor2", 5)]
+# 9 видов × 5 поколений (1, 10, 20, 30, 40 ур.) — зеркало GEAR_FAM/TIERS из игры
+GEAR_FAMS = ("hammer", "blades", "rifle", "staff", "sensor", "armor", "module", "core", "legs")
+TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
+CLASS_WPN = {"guard": "hammer", "reaper": "blades", "sniper": "rifle", "techno": "staff"}
+GEAR = [(f"g_{f}_{t}", lv) for f in GEAR_FAMS for t, lv in TIER_LVL.items()]
 GEAR_IDS = {g for g, _ in GEAR}
+# старые вещи → новые; W1/W2 — оружие класса владельца 1-го/2-го поколения
+LEGACY_GEAR = {"st_head": "g_sensor_1", "sensor1": "g_sensor_1", "sensor2": "g_sensor_3", "st_armor": "g_armor_1", "plate1": "g_armor_1",
+               "plate2": "g_armor_3", "st_module": "g_module_1", "servo": "g_module_1", "shieldgen": "g_module_3", "st_core": "g_core_1",
+               "reactor1": "g_core_1", "reactor2": "g_core_3", "st_legs": "g_legs_1", "tracks1": "g_legs_1", "tracks2": "g_legs_3",
+               "st_weapon": "W1", "laser1": "W1", "laser2": "W1", "plasma": "W3"}
+
+
+def weapon_id(cls, tier):
+    return f"g_{CLASS_WPN.get(cls, 'hammer')}_{tier}"
+
+
+def legacy_to_new(item_id, cls):
+    m = LEGACY_GEAR.get(item_id)
+    if not m:
+        return item_id
+    return weapon_id(cls, int(m[1])) if m[0] == "W" else m
+
+
+async def migrate_gear_v2():
+    """Один раз: было 5 поколений (1, 10, 20, 30, 40 ур.), стало 10 (каждые 5 ур.) — поколение t → 2t−1.
+    Отметка в таблице meta не даёт перенести вещи повторно."""
+    import json
+    from models import MarketLot, MarketHist, Meta, Grant
+    rx = re.compile(r"^g_([a-z]+)_([1-5])$")
+    remap = lambda i: (lambda m: f"g_{m.group(1)}_{2 * int(m.group(2)) - 1}" if m else i)(rx.match(i or ""))
+    moved = 0
+    async with SessionLocal() as s:
+        if (await s.execute(select(Meta).where(Meta.key == "gear_v2"))).scalar_one_or_none():
+            return
+        for r in (await s.execute(select(ItemInst))).scalars().all():
+            new = remap(r.item)
+            if new != r.item:
+                r.item, moved = new, moved + 1
+        for model in (MarketLot, MarketHist):
+            for r in (await s.execute(select(model))).scalars().all():
+                try:
+                    it = json.loads(r.item)
+                except (TypeError, ValueError):
+                    continue
+                new = remap(it.get("id"))
+                if new != it.get("id"):
+                    it["id"] = new
+                    r.item, moved = json.dumps(it), moved + 1
+        for gr in (await s.execute(select(Grant).where(Grant.kind == "item"))).scalars().all():
+            try:
+                pl = json.loads(gr.payload)
+            except (TypeError, ValueError):
+                continue
+            new = remap(pl.get("item"))
+            if new != pl.get("item"):
+                pl["item"] = new
+                gr.payload, moved = json.dumps(pl), moved + 1
+        s.add(Meta(key="gear_v2", value=str(int(time.time()))))
+        await s.commit()
+    log.info("Снаряжение: 10 поколений, перенесено %s записей", moved)
+
+
+async def migrate_gear():
+    """Один раз: вещи старой системы в реестре и на маркете превращаются в новые."""
+    import json
+    from models import MarketLot, MarketHist
+    moved = 0
+    async with SessionLocal() as s:
+        old = list(LEGACY_GEAR)
+        rows = (await s.execute(select(ItemInst).where(ItemInst.item.in_(old)))).scalars().all()
+        classes = {r.tg_id: r.cls for r in (await s.execute(select(GameSave))).scalars().all()} if rows else {}
+        for r in rows:
+            r.item = legacy_to_new(r.item, classes.get(r.owner, ""))
+            moved += 1
+        for model, owner_field in ((MarketLot, "seller_id"), (MarketHist, "tg_id")):
+            for r in (await s.execute(select(model))).scalars().all():
+                try:
+                    it = json.loads(r.item)
+                except (TypeError, ValueError):
+                    continue
+                if it.get("id") in LEGACY_GEAR:
+                    if not classes:
+                        classes = {x.tg_id: x.cls for x in (await s.execute(select(GameSave))).scalars().all()}
+                    it["id"] = legacy_to_new(it["id"], classes.get(getattr(r, owner_field), ""))
+                    r.item = json.dumps(it)
+                    moved += 1
+        await s.commit()
+    if moved:
+        log.info("Снаряжение: переведено на новую систему %s записей", moved)
 SPHERES = ("sph_cu", "sph_ti")
 BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1}
@@ -59,7 +146,7 @@ def mob_level(mob, loc):
 def roll(lv, mult=1):
     """Бросок ценного лута за одного убитого моба (mult > 1 — главарь)."""
     out, s = [], lv - 1
-    pool = [g for g, need in GEAR if need <= lv + 2]
+    pool = [g for g, need in GEAR if lv - 10 <= need <= lv + 2]
     for grade, per in enumerate(gear_per(lv)):
         if per and random.random() < min(0.5, per * mult) * len(pool):
             out.append({"kind": "gear", "id": random.choice(pool), "g": grade})
@@ -126,7 +213,8 @@ async def api_items(request):
             # пачка убийств за последние ~1,2 с: [{mob, loc}, ...]
             kills = body.get("kills") or [{"mob": body.get("mob"), "loc": body.get("loc")}]
             me = online(uid)
-            save = (await s.execute(select(GameSave.lvl).where(GameSave.tg_id == uid))).scalar()
+            import progress
+            save = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
             drops = []
             for i, k in enumerate(kills[:40]):
                 if not isinstance(k, dict):
@@ -142,14 +230,17 @@ async def api_items(request):
                     _boss_t[uid], mult = time.time(), BOSS_LOOT
                 import pvp
                 await pvp.mob_killed(uid, me)
+                save = await progress.add_kill(s, uid, lv, mob.startswith("db"))
                 for d in roll(lv, mult):
                     item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
                     item["i"] = i
                     drops.append(item)
+            await s.commit()
             if drops:
-                await s.commit()
                 log.info("Лут: игрок %s → %s", uid, [d["id"] for d in drops])
-            return web.json_response({"ok": True, "drops": drops})
+            if me:
+                me["lvl_cap"] = save
+            return web.json_response({"ok": True, "drops": drops, "lvlCap": save})
 
         if op == "enchant":
             x = (await s.execute(select(ItemInst).where(ItemInst.uid == str(body.get("uid", ""))))).scalar_one_or_none()
@@ -237,12 +328,16 @@ async def migrate_market_registry():
 
 
 # предметы паков магазина GRAM, которые регистрируются сервером (их потом можно продать на маркете)
-PACK_ITEMS = {"books": [("gear", "laser2", 2)], "legend": [("gear", "plasma", 3)], "spheres": [("sph", "sph_cu", 3)], "cores": [("sph", "sph_ti", 1)]}
+# "W2" — оружие класса покупателя 2-го поколения, "W3" — 3-го
+PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "spheres": [("sph", "sph_cu", 3)], "cores": [("sph", "sph_ti", 1)]}
 
 
 async def mint_pack(s, owner, pack):
     out = []
+    cls = (await s.execute(select(GameSave.cls).where(GameSave.tg_id == owner))).scalar() or ""
     for kind, iid, v in PACK_ITEMS.get(pack, []):
+        if kind == "gear" and iid.startswith("W"):
+            iid = weapon_id(cls, int(iid[1]))
         out.append(await mint_gear(s, owner, iid, v, source="shop") if kind == "gear" else await add_spheres(s, owner, iid, v))
     return out
 

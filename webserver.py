@@ -19,6 +19,7 @@ from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 import gram
 import items
 import pvp
+import progress
 import stats
 from config import WEBAPP_URL
 
@@ -29,12 +30,7 @@ SAFE_LOCS = {"lobby", "arena_fear"}          # здесь PvP нет никог�
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
-GEAR_IDS = {
-    "st_head", "st_weapon", "st_module", "st_armor", "st_core", "st_legs",
-    "laser1", "laser2", "plasma", "sensor1", "sensor2", "plate1", "plate2",
-    "tracks1", "tracks2", "servo", "shieldgen", "reactor1", "reactor2",
-    "kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti",
-}
+GEAR_IDS = items.GEAR_IDS | {"kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti"}
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
 
 log = logging.getLogger("web")
@@ -137,8 +133,10 @@ async def api_save(request):
         row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
         s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
         try:
-            row.bm = max(0, min(10_000_000, int(data.get("bm", 0))))
-            row.lvl = max(1, min(999, int(s_.get("level", 1))))
+            # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
+            cap = 999 if user["admin"] else await progress.cap_of(s, user["id"])
+            row.lvl = max(1, min(cap, int(s_.get("level", 1))))
+            row.bm = max(0, min(10_000_000 if user["admin"] else progress.bm_cap(row.lvl), int(data.get("bm", 0))))
         except (TypeError, ValueError):
             pass
         new_nick = str(s_.get("name", ""))[:16]
@@ -195,6 +193,11 @@ async def api_admin_grant(request):
             tg_id, target_name = row.tg_id, row.username
         g = Grant(tg_id=tg_id, kind=kind, payload=json.dumps(payload), by_admin=user["username"], created=int(time.time()))
         s.add(g)
+        if kind == "level":
+            await progress.add_levels(s, tg_id, amount)          # выданные уровни сервер тоже засчитывает
+        elif kind == "exp":
+            row_ = await progress.prog_of(s, tg_id)
+            row_.exp = (row_.exp or 0) + amount
         await s.commit()
         gd = grant_dict(g)
     log.info("Админ @%s выдал %s %s игроку %s", user["username"], kind, payload, target_name)
@@ -728,7 +731,8 @@ def clean_pos(d, info):
         nick = str(d.get("nick", ""))[:16].strip()
         info["nick"] = nick or info["name"][:16]
         info["fac"] = d.get("fac") if d.get("fac") in FACTIONS else "aegis"
-        info["lvl"] = max(1, min(999, int(d.get("lvl", 1))))
+        cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
+        info["lvl"] = max(1, min(999 if info.get("admin") else cap, int(d.get("lvl", 1))))
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
@@ -799,6 +803,9 @@ async def ws_handler(request):
                         "nick": user["name"][:16], "fac": "aegis", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time()}
                 clients[ws] = info
                 await pvp.load_karma(info)
+                async with SessionLocal() as s_:
+                    info["lvl_cap"] = await progress.cap_of(s_, user["id"])
+                    await s_.commit()
                 await ws.send_json({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"]})
                 continue
             if t == "pos":
@@ -920,6 +927,8 @@ async def start_web(port: int):
     await web.TCPSite(runner, "0.0.0.0", port).start()
     asyncio.create_task(world_loop())
     await gram.migrate_market_to_gram()
+    await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
+    await items.migrate_gear()
     await items.migrate_market_registry()
     asyncio.create_task(gram.deposit_watcher())
     log.info("Игра доступна на порту %s", port)

@@ -230,3 +230,13 @@ class ClientError(Base):
     users: Mapped[int] = mapped_column(Integer, default=0)
     first: Mapped[int] = mapped_column(BigInteger, default=0)
     last: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class ServerProg(Base):
+    """Опыт, посчитанный сервером по подтверждённым убийствам. Уровень для PvP и рейтинга — отсюда."""
+    __tablename__ = "server_prog"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    exp: Mapped[int] = mapped_column(BigInteger, default=0)
+    base_lvl: Mapped[int] = mapped_column(Integer, default=1)     # уровень, набранный до начала учёта
+    bonus: Mapped[int] = mapped_column(Integer, default=0)        # уровни, выданные админом
