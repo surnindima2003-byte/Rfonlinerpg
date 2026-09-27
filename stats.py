@@ -88,6 +88,14 @@ async def api_stats(request):
         mk_day = (await cnt(select(func.count(), func.coalesce(func.sum(MarketHist.price), 0)).where(MarketHist.kind == "buy", MarketHist.ts >= day))).first()
         pvp_fights = (await cnt(select(func.coalesce(func.sum(PvpStat.kills), 0)))).scalar() or 0
         errs = (await cnt(select(ClientError).order_by(ClientError.last.desc()).limit(30))).scalars().all()
+        import funnel
+        import mobguard
+        fun = await funnel.report(s, days=7)
+        sus = mobguard.top_rejects()
+        nicks = {}
+        if sus:
+            for tg_id, nick, lvl in (await cnt(select(GameSave.tg_id, GameSave.nick, GameSave.lvl).where(GameSave.tg_id.in_([u for u, _ in sus])))).all():
+                nicks[tg_id] = (nick or "Пилот", lvl or 1)
     g = lambda v: round((v or 0) / NANO, 4)
     return web.json_response({"ok": True,
         "players": {"online": len(clients), "dau": dau, "wau": wau, "total": total, "new_day": new_day, "new_week": new_week,
@@ -95,6 +103,8 @@ async def api_stats(request):
         "money": {"gram_total": g(gram_total), "gram_locked": g(gram_locked), "dep_day": g(dep_day), "dep_all": g(dep_all),
                   "shop_day": g(-shop_day), "wd_pending": wd_pending[0] or 0, "wd_pending_sum": g(wd_pending[1]),
                   "stars_day": stars_day, "stars_all": stars_all, "market_day": mk_day[0] or 0, "market_day_sum": g(mk_day[1]), "pvp_kills": pvp_fights},
+        "funnel": fun,
+        "suspects": {"mode": mobguard.MODE, "list": [{"uid": str(u), "nick": nicks.get(u, ("?", 1))[0], "lvl": nicks.get(u, ("?", 1))[1], "rejects": n} for u, n in sus]},
         "errors": [{"msg": e.msg, "stack": e.stack[:600], "count": e.count, "users": e.users, "last": e.last * 1000, "ua": e.ua} for e in errs]})
 
 

@@ -893,6 +893,21 @@ textarea.field{min-height:70px;resize:vertical}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition:none!important}
 }
+/* ---- Chip War ---- */
+.cw{position:absolute;left:50%;top:calc(var(--hb, 120px) + 6px);transform:translateX(-50%);z-index:3;display:flex;align-items:stretch;gap:0;border:1px solid #34414E;border-radius:10px;overflow:hidden;background:rgba(16,22,28,.92);color:#E4DED1;padding:0;font:12px Rubik,sans-serif;cursor:pointer}
+.cw[hidden]{display:none}
+.cw .cw-t{padding:5px 8px;font:12px 'Russo One',sans-serif;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.cw .cw-f{padding:5px 7px;min-width:34px;text-align:center;border-left:1px solid #34414E;font-variant-numeric:tabular-nums}
+.cw .cw-f b{display:block;height:3px;border-radius:2px;margin-top:3px;background:var(--c)}
+.cw .cw-f.hold{background:color-mix(in srgb, var(--c) 22%, transparent)}
+.cw .cw-dot{width:8px;height:8px;border-radius:50%;background:#E0694A;animation:cwp 1.2s infinite}
+#tframe:not([hidden]) ~ .cw{top:calc(var(--hb, 120px) + 84px)}
+@keyframes cwp{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.cw .cw-dot{animation:none}}
+.facpick{display:flex;flex-direction:column;gap:8px}
+.facpick button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:12px 14px;border-radius:12px;border:1px solid #34414E;border-left:5px solid var(--c);background:var(--panel-2);color:var(--text);font:15px 'Russo One',sans-serif}
+.facpick button small{font:13px Rubik,sans-serif;color:var(--muted)}
+.facpick button:focus-visible{outline:2px solid var(--c);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -3393,7 +3408,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
   function applyGrant(g){
     const a = +g.payload.amount || 0;
     if(g.by === "market" && g.kind === "scrap"){ S.scrap += a; toast("Маркет: лот продан, получено " + a + " лома"); if(typeof mkRefresh === "function") mkRefresh(); }
-    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast("Администратор выдал " + a + " " + GRANT_NAME[g.kind]); }
+    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
     else if(g.kind === "exp"){ S.exp += a; levelUps(); toast("Администратор выдал " + a + " опыта"); }
     else if(g.kind === "level"){ for(let i = 0; i < a; i++){ S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; } S.hp = stat().maxhp; toast("Администратор поднял уровень до " + S.level); }
     else if(g.kind === "item" && ITEMS[g.payload.item]){
@@ -3435,7 +3450,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
   function connect(){
     const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
     NET.ws = ws;
-    ws.onopen = () => { retry = 1000; ws.send(JSON.stringify({t:"auth", initData})); };
+    ws.onopen = () => { retry = 1000; ws.send(JSON.stringify({t:"auth", initData, proto:2})); };
     ws.onmessage = ev => {
       let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
       if(d.t === "hello"){ S.pvpKr = +d.kr || 0;
@@ -3443,6 +3458,13 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         chatUid = String(d.id); chatDb = null;
         chatShared = (d.history || []).filter(m => typeof m.text === "string");
         onChatUpdate();
+        if(typeof onHello === "function") onHello(d);
+      } else if(d.t === "pd"){
+        // протокол 2: сервер присылает только изменившихся соседей и id ушедших
+        if(d.loc !== locKey){ NET.others.clear(); return; }
+        if(d.full){ const keep = new Set((d.up || []).map(o => o.id)); for(const id of [...NET.others.keys()]) if(!keep.has(id)) NET.others.delete(id); }
+        for(const o of d.up || []){ const cur = NET.others.get(o.id); if(cur) Object.assign(cur, o); else NET.others.set(o.id, {...o, rx:o.x, ry:o.y}); }
+        for(const id of d.gone || []) NET.others.delete(id);
       } else if(d.t === "players"){
         if(d.loc !== locKey){ NET.others.clear(); return; }
         const seen = new Set();
@@ -3473,7 +3495,10 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       hp:Math.ceil(S.hp), mhp:stat().maxhp, cp:Math.ceil(S.cp ?? stat().maxcp), mcp:stat().maxcp, bm:combatPower(),
       gt:gCur ? gCur.tag : "", gn:gCur ? gCur.name : "", gi:gCur && gCur.emblem ? gCur.emblem.icon : "", gc:gCur && gCur.emblem ? gCur.emblem.color : ""};
     const js = JSON.stringify(msg);
-    if(js !== lastPos || Date.now() - lastSent > 2000){ ws.send(js); lastPos = js; lastSent = Date.now(); }
+    // удары по мобам и убийства едут в этом же сообщении: так сервер всегда видит удары раньше убийства
+    const mg = typeof mgTake === "function" ? mgTake() : null;
+    if(mg){ if(mg.h) msg.mh = mg.h; if(mg.k){ msg.mk = mg.k; msg.kn = mg.n; } ws.send(JSON.stringify(msg)); lastPos = js; lastSent = Date.now(); }
+    else if(js !== lastPos || Date.now() - lastSent > 2000){ ws.send(js); lastPos = js; lastSent = Date.now(); }
   }, 125);
 
   // ---- админ-панель ----
@@ -3496,7 +3521,9 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
         <p class="demo">GRAM выдавать нельзя: это настоящие деньги, их можно только пополнить.</p>
         <button class="btn wide" type="button" data-gramadm="1">💎 GRAM: выплаты и пополнения</button>
-        <button class="btn wide" type="button" data-adstats="1">📊 Статистика и ошибки игроков</button>`;
+        <button class="btn wide" type="button" data-adstats="1">📊 Статистика и ошибки игроков</button>
+        <div class="flabel" style="margin-top:6px">Chip War вне расписания</div>
+        <div class="seg"><button type="button" data-cwadm="start">Начать на 10 мин</button><button type="button" data-cwadm="stop">Завершить сейчас</button></div>`;
     });
   }
   async function admGrant(payload){
@@ -5164,15 +5191,23 @@ function icon(id, g){
 
 // ===================== ИКОНКИ НОВОГО СНАРЯЖЕНИЯ =====================
 // 9 видов × 5 поколений. Материал зависит от поколения, камень-вставка — от грейда (G).
+// палитра на каждое из 10 поколений; нечётные — прежние 5 палитр (вещи после переноса 1→1, 2→3 … 5→9 выглядят как раньше)
 const TIER_MAT = [
   {M:["#E3A273", "#B8703F", "#8A4B2A", "#5A2F1B"], D:["#8A6B55", "#6B4A30", "#4A3020", "#2E1C12"], acc:"#E08A3A", glowAcc:false},
+  {M:["#C9C3BA", "#9A9288", "#6E675F", "#46403A"], D:["#6E675F", "#4E4842", "#35302B", "#221E1A"], acc:"#D0A060", glowAcc:false},
   {M:["#EEF2F5", "#AEB9C4", "#77838F", "#4A5561"], D:["#6B7682", "#4A5561", "#323B45", "#1F262E"], acc:"#5FA8E8", glowAcc:false},
+  {M:["#FFFFFF", "#D6E4EE", "#9FB4C4", "#62788A"], D:["#6E8394", "#526474", "#3A4854", "#232C34"], acc:"#8FD0FF", glowAcc:false},
   {M:["#F2FAFF", "#B8D8F0", "#7AA8CC", "#3F6A90"], D:["#5A7A96", "#3F5A74", "#2A4058", "#18283A"], acc:"#5FD4E8", glowAcc:true},
+  {M:["#CFDCFF", "#8AA6F2", "#5670C8", "#2E3F86"], D:["#44508A", "#323C6A", "#222A4C", "#141A30"], acc:"#9AB8FF", glowAcc:true},
   {M:["#D8C8F0", "#8E7AB8", "#5E4A8E", "#34285A"], D:["#4A3E66", "#342A4E", "#221A38", "#140F24"], acc:"#E07BFF", glowAcc:true},
-  {M:["#FFF4C0", "#F2C14B", "#C4901C", "#7A5510"], D:["#4A4F60", "#2E3240", "#1E212C", "#12141C"], acc:"#7FE6FF", glowAcc:true}
+  {M:["#D6FFD9", "#8BE896", "#4FAE5E", "#2A6A34"], D:["#3E5A44", "#2C4432", "#1C2E22", "#101C14"], acc:"#6CFF7A", glowAcc:true},
+  {M:["#FFF4C0", "#F2C14B", "#C4901C", "#7A5510"], D:["#4A4F60", "#2E3240", "#1E212C", "#12141C"], acc:"#7FE6FF", glowAcc:true},
+  {M:["#FFFBEA", "#FFE08A", "#E0A92A", "#8A5E0E"], D:["#2E2A40", "#221E30", "#171422", "#0E0C16"], acc:"#FFFFFF", glowAcc:true}
 ];
-function gearArt(fam, tier, T){
-  const {put, rect, line, disc, block, G} = T, m = TIER_MAT[tier - 1], M = m.M, D = m.D, A = m.acc, ag = m.glowAcc;
+function gearArt(fam, gen, T){
+  // форма вещи — по паре поколений (1–2, 3–4 … 9–10), цвет — своего поколения
+  const tier = Math.min(5, Math.ceil(gen/2));
+  const {put, rect, line, disc, block, G} = T, m = TIER_MAT[Math.min(TIER_MAT.length, Math.max(1, gen)) - 1], M = m.M, D = m.D, A = m.acc, ag = m.glowAcc;
   const gem = (x, y, big) => { if(big){ rect(x, y, 2, 2, G[1], true); put(x, y, G[0], true); put(x + 1, y + 1, G[2], true); } else put(x, y, G[1], true); };
   const T5 = tier === 5, T4 = tier === 4, T3 = tier >= 3;
   if(fam === "hammer"){
@@ -6665,27 +6700,29 @@ async function regSync(){
 }
 if(typeof NET !== "undefined" && NET.ready) NET.ready.then(() => setTimeout(regSync, 1500));
 
-// убийства копятся и уходят на сервер пачкой раз в 1,2 с; сервер бросает ценный лут и возвращает вещи с номерами
+// убийства копятся и уходят на сервер вместе с ударами внутри сообщения pos (см. mgTake);
+// сервер бросает ценный лут и отвечает сообщением kres с вещами, у которых есть номер
 const killQ = [];
-function regKill(e){ if(killQ.length < 60) killQ.push({mob:e.type, loc:locKey, x:Math.round(e.x), y:Math.round(e.y)}); }
-setInterval(() => {
-  if(!killQ.length || !regOnline()) return;
-  const batch = killQ.splice(0, killQ.length);
-  regApi("kill", {kills:batch.map(k => ({mob:k.mob, loc:k.loc}))}).then(r => {
-    if(r && r.ok && r.lvlCap && !window.NET_ADMIN && S.level > r.lvlCap){
-      // сервер считает опыт сам: уровень выше подтверждённого убийствами не принимается
-      S.level = r.lvlCap; S.exp = 0; S.hp = Math.min(S.hp, stat().maxhp); save();
-      toast("Уровень выровнен по данным сервера: " + r.lvlCap);
-    }
-    if(!r || !r.ok || !r.drops) return;
-    for(const d of r.drops){
-      const k = batch[d.i] || batch[0];
-      if(!k || k.loc !== locKey) continue;
-      drops.push({x:k.x + Math.random()*30 - 15, y:k.y + Math.random()*30 - 15, kind:d.id, amt:d.n || 1, g:d.g, e:d.e, uid:d.uid, reg:!!d.reg, t:0});
-      if(d.uid) REG.uids.add(d.uid);
-    }
-  }).catch(() => {});
-}, 1200);
+function regKill(e){ if(killQ.length < 60) killQ.push({iid:e.iid || 0, mob:e.type, loc:locKey, x:Math.round(e.x), y:Math.round(e.y)}); e.iid = 0; }
+function mgResult(r){
+  const w = MG.wait.get(r.n); MG.wait.delete(r.n);
+  if(r.lvlCap && !window.NET_ADMIN && S.level > r.lvlCap){
+    // сервер считает опыт сам: уровень выше подтверждённого убийствами не принимается
+    S.level = r.lvlCap; S.exp = 0; S.hp = Math.min(S.hp, stat().maxhp); save();
+    toast("Уровень выровнен по данным сервера: " + r.lvlCap);
+  }
+  if(typeof r.lootMult === "number" && r.lootMult < 1){
+    const day = new Date().toDateString();
+    if(localStorage.getItem("mw-lootnote") !== day){ localStorage.setItem("mw-lootnote", day); toast("Сегодня ценный лут выпадает реже: сканеры перегрелись. Завтра шанс вернётся"); }
+  }
+  if(!w || !r.drops) return;
+  for(const d of r.drops){
+    const k = w.batch[d.i] || w.batch[0];
+    if(!k || k.loc !== locKey) continue;
+    drops.push({x:k.x + Math.random()*30 - 15, y:k.y + Math.random()*30 - 15, kind:d.id, amt:d.n || 1, g:d.g, e:d.e, uid:d.uid, reg:!!d.reg, t:0});
+    if(d.uid) REG.uids.add(d.uid);
+  }
+}
 function regAddSph(id, n){ REG.sph[id] = Math.max(0, (REG.sph[id] || 0) + n); }
 // учтённых сфер не может быть больше, чем их лежит в сумке: лишние списываются и на сервере
 function regClampSph(){
@@ -7100,6 +7137,7 @@ async function openAdminStats(){
     ${Object.entries(P.levels).map(([k, n]) => `<div class="stbar"><span>${k}</span><div><i style="width:${n/lvMax*100}%"></i></div><b>${n}</b></div>`).join("")}
     <div class="dsect">Деньги</div>
     <div class="stgrid">${card(gramF(M.gram_total), "GRAM на балансах")}${card(gramF(M.gram_locked), "из них игровые ⭐")}${card(gramF(M.dep_day), "пополнено за сутки", "var(--ok)")}${card(gramF(M.dep_all), "пополнено всего")}${card(gramF(M.shop_day), "потрачено в магазине за сутки")}${card(M.stars_day + " ⭐", "звёзд за сутки")}${card(M.stars_all + " ⭐", "звёзд всего")}${card(M.market_day, "сделок на маркете за сутки")}${card(gramF(M.market_day_sum), "оборот маркета, GRAM")}${card(M.wd_pending, "заявок на вывод", M.wd_pending ? "#F2A93B" : "")}${card(gramF(M.wd_pending_sum), "к выплате, GRAM")}${card(M.pvp_kills, "побед в PvP всего")}</div>
+    ${adFunnel(adStats.funnel)}${adSuspects(adStats.suspects)}
     <div class="dsect">Ошибки у игроков (${adStats.errors.length})</div>
     ${adStats.errors.length ? adStats.errors.map(e => `<details class="sterr"><summary><b>${esc(e.msg)}</b><small>${e.count} раз · игроков ${e.users} · ${new Date(e.last).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})}</small></summary><pre>${esc(e.stack || "")}</pre><small>${esc(e.ua)}</small></details>`).join("") : `<div class="empty">Ошибок нет 🎉</div>`}
     <button class="btn wide" type="button" data-adstats="1">Обновить</button>`;
@@ -7535,6 +7573,156 @@ function T(s){
   else out = s.replace(trRe, m => I18N[m] ? I18N[m][i] : m);
   if(trMemo.size > 3000) trMemo.clear();
   trMemo.set(s, out); return out;
+}
+
+
+// ===================== БОЙ С МОБАМИ: СЕРВЕР ВИДИТ УДАРЫ =====================
+// Каждый моб получает номер боя; урон по нему копится и уходит на сервер в сообщении pos.
+// Убийство сервер засчитывает, только если раньше видел удары по этому мобу.
+const MG = {seq:Math.floor(Math.random()*1e9) + 1, hits:new Map(), n:0, wait:new Map()};
+const _hitEnemyMG = hitEnemy;
+hitEnemy = function(e, dmg, kind){
+  if(!e || e.dead) return _hitEnemyMG(e, dmg, kind);
+  if(!e.iid) e.iid = ++MG.seq;
+  const iid = e.iid, before = e.hp;
+  const r = _hitEnemyMG(e, dmg, kind);
+  const done = Math.round(before - e.hp);
+  if(done > 0 && locKey !== "lobby"){ const h = MG.hits.get(iid); if(h) h[2] += done; else MG.hits.set(iid, [iid, e.type, done]); }
+  return r;
+};
+function mgTake(){
+  if(!MG.hits.size && !killQ.length) return null;
+  const out = {};
+  if(MG.hits.size){
+    out.h = [];
+    for(const [iid, h] of MG.hits){ if(out.h.length >= 40) break; out.h.push(h); MG.hits.delete(iid); }
+  }
+  // убийства — только когда все удары уже уехали (иначе сервер увидит убийство раньше удара)
+  if(killQ.length && !MG.hits.size){
+    const batch = killQ.splice(0, 40), n = ++MG.n;
+    MG.wait.set(n, {batch, t:Date.now()});
+    for(const [k, v] of MG.wait) if(Date.now() - v.t > 30000) MG.wait.delete(k);
+    out.k = batch.map(k => ({iid:k.iid, mob:k.mob, loc:k.loc})); out.n = n;
+  }
+  return out;
+}
+
+// ===================== ФРАКЦИЯ С СЕРВЕРА =====================
+const FAC_INFO = {aegis:"Оборонные роботы, тяжёлая броня", vex:"Быстрые разведывательные дроны", core:"Инженерные роботы, ставка на энергию и крафт"};
+const FAC = {srv:null, asked:false};
+function setFaction(f){
+  FAC.srv = f; if(S.faction !== f){ S.faction = f; save(); }
+  document.documentElement.style.setProperty("--faction", FACTIONS[f].color);
+}
+function onHello(d){
+  if(d.cw) cwApply(d.cw);
+  if(FACTIONS[d.fac]) setFaction(d.fac);
+  else if(d.fac === "" && !FAC.asked){ FAC.asked = true; setTimeout(() => { if(!paused && !FAC.srv) openFactionPick(); }, 2500); }
+}
+function openFactionPick(){
+  openSheet("Выбери фракцию", "Выбор постоянный: сменить фракцию потом нельзя", () => {
+    body().innerHTML = `<div class="facpick">${Object.entries(FACTIONS).map(([k, F]) => `<button type="button" data-facpick="${k}" style="--c:${F.color}">${esc(F.name)}<small>${FAC_INFO[k]}</small></button>`).join("")}</div>
+      <p class="demo" style="margin-top:10px">Фракция решает, за кого ты сражаешься в Chip War и чей бонус получаешь после победы.</p>`;
+  });
+}
+$("shBody").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-facpick]"); if(!b) return;
+  b.disabled = true;
+  try{
+    const r = await NET.api("/api/faction", {fac:b.dataset.facpick});
+    if(r && r.ok){ setFaction(r.fac); closeSheet(); toast("Фракция: " + FACTIONS[r.fac].name); Sfx.play("level"); }
+    else { if(r && FACTIONS[r.fac]) setFaction(r.fac); toast((r && r.error) || "Не удалось выбрать фракцию"); closeSheet(); }
+  }catch(err){ b.disabled = false; toast("Нет связи с сервером, попробуй ещё раз"); }
+});
+
+// ===================== CHIP WAR =====================
+const CW = {st:null};
+const cwEl = document.createElement("button");
+cwEl.type = "button"; cwEl.className = "cw"; cwEl.id = "cwHud"; cwEl.hidden = true; cwEl.setAttribute("aria-label", "Chip War: счёт");
+$("zoneTag").insertAdjacentElement("afterend", cwEl);
+const cwTime = ms => { const t = Math.max(0, Math.round(ms/1000)); return Math.floor(t/60) + ":" + String(t % 60).padStart(2, "0"); };
+function cwBuffOn(){ const b = CW.st && CW.st.buff; return b && Date.now() < b.until && FAC.srv === b.fac ? b : null; }
+function cwApply(st){
+  const prev = CW.st; CW.st = st;
+  if(st.ann === "start"){ toast("⚔ Chip War началась: удержи чип в Железном каньоне"); Sfx.play("portal"); if(typeof chatLocal === "function") chatLocal("Chip War началась! Чип в центре Железного каньона, участвуют пилоты с " + st.min + "-го уровня"); }
+  else if(st.ann === "soon"){ toast("Chip War через 5 минут — Железный каньон"); }
+  else if(st.ann === "end"){ const w = st.win && FACTIONS[st.win]; toast(w ? "Chip War: победа " + w.name + (st.win === FAC.srv ? " — бонус твоей фракции на сутки!" : "") : "Chip War окончена вничью"); Sfx.play("level"); }
+  cwHud();
+}
+function cwHud(){
+  const st = CW.st, now = Date.now();
+  const live = st && st.ph === "live", soon = st && st.ph !== "live" && st.next && st.next - now < 300000 && st.next > now;
+  cwEl.hidden = !(live || soon);
+  if(cwEl.hidden) return;
+  if(soon){ cwEl.innerHTML = `<span class="cw-t">Chip War через ${cwTime(st.next - now)}</span>`; return; }
+  cwEl.innerHTML = `<span class="cw-t"><i class="cw-dot"></i>${cwTime(st.end - now)}</span>` + ["aegis", "vex", "core"].map(f =>
+    `<span class="cw-f${st.hold === f ? " hold" : ""}" style="--c:${FACTIONS[f].color}" aria-label="${FACTIONS[f].name}: ${st.sc[f]}">${st.sc[f]}<b style="width:${Math.min(100, st.sc[f]/st.target*100)}%"></b></span>`).join("");
+}
+setInterval(cwHud, 1000);
+cwEl.addEventListener("click", () => {
+  const st = CW.st; if(!st) return;
+  openSheet("Chip War", "Битва фракций за чип", () => {
+    const b = st.buff && Date.now() < st.buff.until ? st.buff : null;
+    const holdTx = st.hold === "contested" ? "Чип оспаривается" : st.hold && FACTIONS[st.hold] ? "Чип держит " + FACTIONS[st.hold].name : "Чип свободен";
+    body().innerHTML = `
+      ${st.ph === "live" ? `<div class="stline"><b>${holdTx}</b> · до конца ${cwTime(st.end - Date.now())}</div>
+      ${["aegis", "vex", "core"].map(f => `<div class="stbar"><span style="color:${FACTIONS[f].color}">${FACTIONS[f].name}</span><div><i style="width:${Math.min(100, st.sc[f]/st.target*100)}%;background:${FACTIONS[f].color}"></i></div><b>${st.sc[f]}</b></div>`).join("")}` : ""}
+      ${st.next ? `<div class="stline">Следующая битва: <b>${new Date(st.next).toLocaleString("ru-RU", {weekday:"short", hour:"2-digit", minute:"2-digit"})}</b></div>` : ""}
+      ${b ? `<div class="stline">Бонус победителя у ${FACTIONS[b.fac].name}: +${Math.round((b.loot - 1)*100)}% к шансу ценного лута и +${Math.round(b.exp*100)}% опыта до ${new Date(b.until).toLocaleString("ru-RU", {hour:"2-digit", minute:"2-digit"})}</div>` : ""}
+      <p class="demo">Чип стоит в центре Железного каньона. Пока в круге пилоты только одной фракции, она получает очки (до +3 в секунду). Если в круге несколько фракций, очки не идут никому. Побеждает первая фракция с ${st.target} очками или лидер к концу времени. Участвуют пилоты с ${st.min}-го уровня; кто простоял в круге хотя бы минуту, получает лом и ядра.</p>
+      ${FAC.srv ? "" : `<button class="btn pri wide" type="button" data-facopen="1">Выбрать фракцию</button>`}`;
+  });
+});
+$("shBody").addEventListener("click", e => { if(e.target.closest("button[data-facopen]")) openFactionPick(); });
+// круг чипа на карте каньона
+const _drawOthersCW = drawOthers;
+drawOthers = function(t, dt){
+  _drawOthersCW(t, dt);
+  const st = CW.st; if(!st || st.ph !== "live" || locKey !== st.loc) return;
+  const col = st.hold && FACTIONS[st.hold] ? FACTIONS[st.hold].color : st.hold === "contested" ? "#E4DED1" : "#8A96A3";
+  ctx.save();
+  ctx.globalAlpha = 0.12; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 3; if(st.hold === "contested") ctx.setLineDash([14, 10]);
+  ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  const pulse = 10 + Math.sin(t*4)*2;                  // сам чип
+  ctx.globalAlpha = 1; ctx.fillStyle = "#1B232C"; ctx.fillRect(st.x - 14, st.y - 14, 28, 28);
+  ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = pulse; ctx.fillRect(st.x - 8, st.y - 8, 16, 16); ctx.shadowBlur = 0;
+  ctx.restore();
+};
+// бонус опыта победившей фракции
+const _killEnemyCW = killEnemy;
+killEnemy = function(e){
+  const wasDead = e.dead; _killEnemyCW(e);
+  const b = cwBuffOn(); if(wasDead || !e.dead || !b) return;
+  const extra = Math.round((NPCS[e.type].exp || 0)*b.exp); if(extra <= 0) return;
+  S.exp += extra; addText(e.x, e.y - 50, "+" + extra + " Chip War", FACTIONS[b.fac].color);
+  if(levelUps()){ Sfx.play("level"); toast("Новый уровень: " + S.level + "!"); }
+};
+if(typeof onNetExtra === "function"){
+  const prevCW = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "cw"){ cwApply(d); return; }
+    if(d.t === "kres"){ mgResult(d); return; }
+    prevCW(d);
+  };
+}
+// админ: запуск и остановка Chip War вне расписания
+$("shBody").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-cwadm]"); if(!b) return;
+  try{ const r = await NET.api("/api/chipwar/" + b.dataset.cwadm, {minutes:10}); toast(r && r.ok ? (b.dataset.cwadm === "start" ? "Chip War запущена" : "Chip War завершена") : ((r && r.error) || "Ошибка")); }
+  catch(err){ toast("Нет связи с сервером"); }
+});
+// статистика админа: воронка новичка и подозрительные убийства
+function adFunnel(f){
+  if(!f || !f.length) return "";
+  const top = Math.max(1, f[0].n);
+  return `<div class="dsect">Воронка новичков за 7 дней</div>` + f.map(x => `<div class="stbar"><span>${esc(x.name)}</span><div><i style="width:${x.n/top*100}%"></i></div><b>${x.n}${x !== f[0] && f[0].n ? ` <small>${Math.round(x.n*100/f[0].n)}%</small>` : ""}</b></div>`).join("");
+}
+function adSuspects(sx){
+  if(!sx) return "";
+  const mode = {off:"выключена", shadow:"только наблюдение", on:"отклоняет"}[sx.mode] || sx.mode;
+  return `<div class="dsect">Отклонённые убийства за сутки</div><div class="stline">Проверка боя с мобами: <b>${mode}</b></div>` +
+    (sx.list.length ? sx.list.map(x => `<div class="stline">${esc(x.nick)} <small>ур. ${x.lvl} · id ${x.uid}</small> — <b>${x.rejects}</b></div>`).join("") : `<div class="empty">Отказов нет</div>`);
 }
 
 // ---- перевод страницы ----

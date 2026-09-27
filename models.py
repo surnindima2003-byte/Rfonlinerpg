@@ -240,3 +240,30 @@ class ServerProg(Base):
     exp: Mapped[int] = mapped_column(BigInteger, default=0)
     base_lvl: Mapped[int] = mapped_column(Integer, default=1)     # уровень, набранный до начала учёта
     bonus: Mapped[int] = mapped_column(Integer, default=0)        # уровни, выданные админом
+
+
+class LootDay(Base):
+    """Сколько убийств за сегодняшние сутки (UTC) засчитано игроку: после порога ценный лут выпадает реже."""
+    __tablename__ = "loot_day"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    day: Mapped[int] = mapped_column(Integer, default=0)          # номер суток от 1970-01-01 (UTC)
+    kills: Mapped[int] = mapped_column(Integer, default=0)        # взвешенно: главарь считается за 10
+
+
+class FunnelEvent(Base):
+    """Первый раз, когда игрок дошёл до шага воронки новичка (один раз на шаг)."""
+    __tablename__ = "funnel_events"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    step: Mapped[str] = mapped_column(String(16), primary_key=True)
+    ts: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
+
+
+class FactionLock(Base):
+    """Фракция игрока, закреплённая сервером при первом входе в живой мир. Сменить её, подменив сообщение, нельзя."""
+    __tablename__ = "faction_lock"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    fac: Mapped[str] = mapped_column(String(8))
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)

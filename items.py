@@ -11,10 +11,13 @@ import secrets
 import time
 
 from aiohttp import web
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update, case
 
 from db import SessionLocal
-from models import ItemInst, SphereBal, GameSave
+from models import ItemInst, SphereBal, GameSave, LootDay
+import metrics
+import mobguard
+from db_atomic import insert_ignore
 
 log = logging.getLogger("items")
 
@@ -168,17 +171,92 @@ async def mint_gear(s, owner, item_id, g, e=0, source="drop"):
 
 
 async def sph_row(s, owner, sid):
-    row = (await s.execute(select(SphereBal).where(SphereBal.owner == owner, SphereBal.item == sid))).scalar_one_or_none()
-    if not row:
+    """Строка баланса сфер. Если из-за старой гонки строк стало несколько — сливаем их в одну."""
+    rows = (await s.execute(select(SphereBal).where(SphereBal.owner == owner, SphereBal.item == sid).order_by(SphereBal.id))).scalars().all()
+    if not rows:
         row = SphereBal(owner=owner, item=sid, n=0)
         s.add(row)
+        await s.flush()                                  # нужен id для атомарных изменений
+        return row
+    row = rows[0]
+    if len(rows) > 1:
+        extra = sum(r.n or 0 for r in rows[1:])
+        await s.execute(SphereBal.__table__.delete().where(SphereBal.id.in_([r.id for r in rows[1:]])))
+        await s.execute(update(SphereBal).where(SphereBal.id == row.id).values(n=SphereBal.n + extra).execution_options(synchronize_session=False))
+        row.n = (row.n or 0) + extra
+        log.warning("Сферы: слиты дубли строк игрока %s (%s)", owner, sid)
     return row
 
 
 async def add_spheres(s, owner, sid, n):
     row = await sph_row(s, owner, sid)
-    row.n = (row.n or 0) + n
+    res = await s.execute(update(SphereBal).where(SphereBal.id == row.id).values(n=SphereBal.n + n)
+                          .returning(SphereBal.n).execution_options(synchronize_session=False))
+    _sync(row, "n", res.first())
     return {"id": sid, "n": n, "reg": True}
+
+
+async def take_spheres(s, owner, sid, n):
+    """Атомарно списать n учтённых сфер. False — столько нет (ничего не списано)."""
+    row = await sph_row(s, owner, sid)
+    res = await s.execute(update(SphereBal).where(SphereBal.id == row.id, SphereBal.n >= n).values(n=SphereBal.n - n)
+                          .returning(SphereBal.n).execution_options(synchronize_session=False))
+    got = res.first()
+    _sync(row, "n", got)
+    return got is not None, row
+
+
+async def drop_spheres(s, owner, sid, n):
+    """Списать до n сфер (не ниже нуля) — вещь ушла из сумки."""
+    row = await sph_row(s, owner, sid)
+    res = await s.execute(update(SphereBal).where(SphereBal.id == row.id)
+                          .values(n=case((SphereBal.n > n, SphereBal.n - n), else_=0))
+                          .returning(SphereBal.n).execution_options(synchronize_session=False))
+    _sync(row, "n", res.first())
+
+
+def _sync(obj, field, returned):
+    if returned is not None:
+        from sqlalchemy.orm.attributes import set_committed_value
+        set_committed_value(obj, field, returned[0])
+
+
+async def set_item_status(s, item_uid, owner, from_status, to_status, new_owner=None):
+    """Атомарно перевести вещь из одного состояния в другое. True — именно этот запрос её перевёл."""
+    vals = {"status": to_status}
+    if new_owner is not None:
+        vals["owner"] = new_owner
+    cond = [ItemInst.uid == item_uid, ItemInst.status == from_status]
+    if owner is not None:
+        cond.append(ItemInst.owner == owner)
+    res = await s.execute(update(ItemInst).where(*cond).values(**vals).execution_options(synchronize_session=False))
+    return res.rowcount == 1
+
+
+# ---------- дневная «усталость» лута ----------
+LOOT_FULL = int(__import__("os").getenv("LOOT_FULL_KILLS", "2500"))     # до стольких убийств в сутки — полный шанс
+LOOT_LOW = int(__import__("os").getenv("LOOT_LOW_KILLS", "6000"))       # к этому числу шанс опускается до LOOT_FLOOR
+LOOT_FLOOR = float(__import__("os").getenv("LOOT_FLOOR", "0.2"))
+
+
+def loot_factor(kills_today):
+    """Множитель шанса ценного лута. Опыт, лом и обычные материалы не режутся — только то, что продаётся за GRAM."""
+    if kills_today <= LOOT_FULL:
+        return 1.0
+    if kills_today >= LOOT_LOW:
+        return LOOT_FLOOR
+    return 1.0 - (1.0 - LOOT_FLOOR) * (kills_today - LOOT_FULL) / (LOOT_LOW - LOOT_FULL)
+
+
+async def count_loot_kill(s, uid, weight):
+    """Засчитать убийство в дневной счётчик. Возвращает число убийств за сутки ДО этого."""
+    day = int(time.time() // 86400)
+    await s.execute(insert_ignore(LootDay.__table__, tg_id=uid, day=day, kills=0))
+    res = await s.execute(update(LootDay).where(LootDay.tg_id == uid)
+                          .values(kills=case((LootDay.day == day, LootDay.kills + weight), else_=weight), day=day)
+                          .returning(LootDay.kills).execution_options(synchronize_session=False))
+    row = res.first()
+    return (row[0] - weight) if row else 0
 
 
 # ---------- ограничение частоты убийств ----------
@@ -210,37 +288,10 @@ async def api_items(request):
                                       "sph": {k: sph.get(k, 0) for k in SPHERES}})
 
         if op == "kill":
-            # пачка убийств за последние ~1,2 с: [{mob, loc}, ...]
-            kills = body.get("kills") or [{"mob": body.get("mob"), "loc": body.get("loc")}]
+            # старый путь (HTTP) — для закэшированных клиентов; новые шлют убийства через WebSocket
             me = online(uid)
-            import progress
-            save = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
-            drops = []
-            for i, k in enumerate(kills[:40]):
-                if not isinstance(k, dict):
-                    continue
-                mob, loc = str(k.get("mob", ""))[:24], str(k.get("loc", ""))[:24]
-                lv = mob_level(mob, loc)
-                if not me or me.get("loc") != loc or lv is None or lv > (save or 1) + 12 or not allow_kill(uid):
-                    continue                                   # не в этой локации, слишком сильный моб или слишком часто
-                mult = 1
-                if mob.startswith("db"):
-                    if time.time() - _boss_t.get(uid, 0) < BOSS_GAP:
-                        continue                               # главари не могут умирать слишком часто
-                    _boss_t[uid], mult = time.time(), BOSS_LOOT
-                import pvp
-                await pvp.mob_killed(uid, me)
-                save = await progress.add_kill(s, uid, lv, mob.startswith("db"))
-                for d in roll(lv, mult):
-                    item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
-                    item["i"] = i
-                    drops.append(item)
-            await s.commit()
-            if drops:
-                log.info("Лут: игрок %s → %s", uid, [d["id"] for d in drops])
-            if me:
-                me["lvl_cap"] = save
-            return web.json_response({"ok": True, "drops": drops, "lvlCap": save})
+            drops, cap, lf = await process_kills(s, uid, me, body.get("kills") or [{"mob": body.get("mob"), "loc": body.get("loc")}])
+            return web.json_response({"ok": True, "drops": drops, "lvlCap": cap, "lootMult": lf})
 
         if op == "enchant":
             x = (await s.execute(select(ItemInst).where(ItemInst.uid == str(body.get("uid", ""))))).scalar_one_or_none()
@@ -249,32 +300,41 @@ async def api_items(request):
                 return web.json_response({"ok": False, "error": "Вещь не найдена на сервере"})
             if x.e >= len(ENCH_CHANCE):
                 return web.json_response({"ok": False, "error": "Максимальная заточка"})
-            sph = await sph_row(s, uid, sid)
-            if (sph.n or 0) < 1:
+            ok, sph = await take_spheres(s, uid, sid, 1)
+            if not ok:
                 return web.json_response({"ok": False, "error": "Нет учтённой сферы"})
-            sph.n -= 1
-            if random.random() * 100 < ENCH_CHANCE[x.e]:
-                x.e += 1
-                result = "ok"
+            e0 = x.e
+            if random.random() * 100 < ENCH_CHANCE[e0]:
+                vals, result = {"e": e0 + 1}, "ok"
             elif sid == "sph_ti":
-                result = "fail"
+                vals, result = {}, "fail"
             else:
-                x.status = "gone"
-                result = "broken"
+                vals, result = {"status": "gone"}, "broken"
+            if vals:
+                # вещь меняется, только если с момента чтения её никто не тронул (двойное нажатие, другая вкладка)
+                res = await s.execute(update(ItemInst).where(ItemInst.uid == x.uid, ItemInst.owner == uid, ItemInst.status == "inv", ItemInst.e == e0)
+                                      .values(**vals).execution_options(synchronize_session=False))
+                if res.rowcount != 1:
+                    await s.rollback()
+                    return web.json_response({"ok": False, "error": "Вещь уже изменилась, попробуй ещё раз"})
+                _sync(x, "e", (vals.get("e", x.e),))
             await s.commit()
             return web.json_response({"ok": True, "result": result, "e": x.e, "sph": sph.n})
 
         if op == "gone":
             # вещь продана торговцу, вложена в кодекс или разрушена — больше не существует
             uids = [str(u)[:24] for u in (body.get("uids") or [])][:50]
-            for x in (await s.execute(select(ItemInst).where(ItemInst.uid.in_(uids), ItemInst.owner == uid, ItemInst.status == "inv"))).scalars().all():
-                x.status = "gone"
+            if uids:
+                await s.execute(update(ItemInst).where(ItemInst.uid.in_(uids), ItemInst.owner == uid, ItemInst.status == "inv")
+                                .values(status="gone").execution_options(synchronize_session=False))
             sp = body.get("sph") or {}
             for sid in SPHERES:
-                n = int(sp.get(sid, 0) or 0)
+                try:
+                    n = int(sp.get(sid, 0) or 0)
+                except (TypeError, ValueError):
+                    n = 0
                 if n > 0:
-                    row = await sph_row(s, uid, sid)
-                    row.n = max(0, (row.n or 0) - n)
+                    await drop_spheres(s, uid, sid, min(n, 100000))
             await s.commit()
             return web.json_response({"ok": True})
     raise web.HTTPBadRequest(text="bad op")
@@ -282,19 +342,18 @@ async def api_items(request):
 
 # ---------- для маркета ----------
 async def escrow_for_market(s, uid, item):
-    """Проверить и заблокировать предмет под лот. Возвращает (данные предмета с сервера, ошибка)."""
+    """Проверить и заблокировать предмет под лот. Возвращает (данные предмета с сервера, ошибка).
+    Блокировка атомарная: одну вещь нельзя выставить двумя одновременными запросами."""
     if item.get("uid"):
         x = (await s.execute(select(ItemInst).where(ItemInst.uid == str(item["uid"])))).scalar_one_or_none()
-        if not x or x.owner != uid or x.status != "inv":
+        if not x or x.owner != uid or x.status != "inv" or not await set_item_status(s, x.uid, uid, "inv", "market"):
             return None, "Эта вещь не подтверждена сервером, продать её за GRAM нельзя"
-        x.status = "market"
         return {"id": x.item, "g": x.g, "e": x.e, "n": 1, "uid": x.uid}, None
     if item.get("id") in SPHERES:
         n = max(1, min(999, int(item.get("n", 1))))
-        row = await sph_row(s, uid, item["id"])
-        if (row.n or 0) < n:
+        ok, row = await take_spheres(s, uid, item["id"], n)
+        if not ok:
             return None, f"Учтённых сфер только {row.n or 0}: остальные нельзя продать за GRAM"
-        row.n -= n
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
     return None, "За GRAM можно продавать только снаряжение и сферы, выбитые с мобов"
 
@@ -302,11 +361,63 @@ async def escrow_for_market(s, uid, item):
 async def market_transfer(s, item, to_uid, status="inv"):
     """Передать предмет лота новому владельцу (покупка) или вернуть продавцу (снятие)."""
     if item.get("uid"):
-        x = (await s.execute(select(ItemInst).where(ItemInst.uid == item["uid"]))).scalar_one_or_none()
-        if x:
-            x.owner, x.status = to_uid, status
+        if not await set_item_status(s, item["uid"], None, "market", status, new_owner=to_uid):
+            log.warning("Маркет: вещь %s не была в статусе market", item["uid"])
     elif item.get("reg"):
         await add_spheres(s, to_uid, item["id"], int(item.get("n", 1)))
+
+
+# ---------- обработка убийств (WebSocket и HTTP) ----------
+async def process_kills(s, uid, me, kills):
+    """Пачка убийств [{mob, loc, iid}]. Возвращает (выпавшие вещи, допустимый уровень, множитель лута).
+    Коммитит сессию сам."""
+    import progress
+    import pvp
+    import chipwar
+    import funnel
+    cap = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
+    drops, lf = [], 1.0
+    if not isinstance(kills, list):
+        kills = []
+    for i, k in enumerate(kills[:40]):
+        if not isinstance(k, dict):
+            continue
+        mob, loc = str(k.get("mob", ""))[:24], str(k.get("loc", ""))[:24]
+        lv = mob_level(mob, loc)
+        if not me or me.get("loc") != loc or lv is None or lv > (cap or 1) + 12 or not allow_kill(uid):
+            metrics.inc("kill.rejected_basic")
+            continue                                   # не в этой локации, слишком сильный моб или слишком часто
+        if not mobguard.allow_kill(uid, k.get("iid"), mob):
+            continue                                   # сервер не видел боя с этим мобом (режим MOB_GUARD=on)
+        boss = mob.startswith("db")
+        mult = 1
+        if boss:
+            if time.time() - _boss_t.get(uid, 0) < BOSS_GAP:
+                continue                               # главари не могут умирать слишком часто
+            _boss_t[uid], mult = time.time(), BOSS_LOOT
+        await pvp.mob_killed(uid, me)
+        cap = await progress.add_kill(s, uid, lv, boss)
+        before = await count_loot_kill(s, uid, 10 if boss else 1)
+        lf = loot_factor(before)
+        bonus = chipwar.loot_mult(me.get("fac"))
+        for d in roll(lv, mult * lf * bonus):
+            item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
+            item["i"] = i
+            drops.append(item)
+        metrics.inc("kill.ok")
+        funnel.mark(uid, "kill1")
+        if boss:
+            funnel.mark(uid, "boss1")
+    await s.commit()
+    if drops:
+        funnel.mark(uid, "loot1")
+        log.info("Лут: игрок %s → %s", uid, [d["id"] for d in drops])
+    if me:
+        me["lvl_cap"] = cap
+    for lvl_mark in (5, 10, 20):
+        if (cap or 1) >= lvl_mark:
+            funnel.mark(uid, f"lvl{lvl_mark}")
+    return drops, cap, round(lf, 2)
 
 
 async def migrate_market_registry():

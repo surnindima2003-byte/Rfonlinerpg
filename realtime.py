@@ -35,7 +35,8 @@ def encode(payload):
 
 
 class Conn:
-    __slots__ = ("ws", "info", "q", "q_bytes", "snap", "wake", "task", "closing", "opened", "last_snap")
+    __slots__ = ("ws", "info", "q", "q_bytes", "snap", "wake", "task", "closing", "opened", "last_snap",
+                 "snap_view", "sent_view", "delta")
 
     def __init__(self, ws, info):
         self.ws = ws
@@ -44,6 +45,12 @@ class Conn:
         self.q_bytes = 0
         self.snap = None         # последний неотправленный снимок мира
         self.last_snap = None    # последний отправленный снимок (чтобы не слать одинаковые)
+        # протокол дельт: клиент получает только изменившихся соседей.
+        # sent_view — то, что клиент ДЕЙСТВИТЕЛЬНО получил (id -> строка игрока); меняется только при отправке,
+        # поэтому снимок, вытесненный новым до отправки, ничего не теряет: новая дельта считается от sent_view.
+        self.snap_view = None
+        self.sent_view = None
+        self.delta = bool(info.get("proto", 0) >= 2)
         self.wake = asyncio.Event()
         self.closing = False
         self.opened = time.monotonic()
@@ -67,8 +74,9 @@ class Conn:
         self.wake.set()
         return True
 
-    def push_snapshot(self, text, keepalive=False):
-        """Снимок мира: заменяет неотправленный старый. Одинаковые подряд не шлём (кроме keepalive)."""
+    def push_snapshot(self, text, keepalive=False, view=None):
+        """Снимок мира: заменяет неотправленный старый. Одинаковые подряд не шлём (кроме keepalive).
+        view — полное состояние, которое клиент будет знать после этой отправки (для дельт)."""
         if self.closing:
             return
         if not keepalive and text == self.last_snap and self.snap is None:
@@ -77,7 +85,13 @@ class Conn:
         if self.snap is not None:
             metrics.inc("world.snap_coalesced")
         self.snap = text
+        self.snap_view = view
         self.wake.set()
+
+    def reset_view(self):
+        """Клиент сменил локацию или переподключился — следующая дельта будет полной."""
+        self.sent_view = None
+        self.last_snap = None
 
     # ---- отправитель ----
     async def _sender(self):
@@ -96,6 +110,11 @@ class Conn:
                         metrics.observe("ws.queue_wait", (time.monotonic() - t_in) * 1000)
                     else:
                         text, self.snap = self.snap, None
+                        view, self.snap_view = self.snap_view, None
+                        if view is not None:
+                            # считаем отправленным уже в момент отправки: дельта, собранная, пока эта
+                            # строка идёт в сеть, должна считаться от неё (иначе потеряется «ушёл»)
+                            self.sent_view = view
                         await self._send(text)
                         self.last_snap = text
                     idx += 1
@@ -199,7 +218,7 @@ class Hub:
             if not s:
                 self.by_loc.pop(old_loc, None)
         self.by_loc.setdefault(new_loc, set()).add(c)
-        c.last_snap = None
+        c.reset_view()
 
     # ---- поиск ----
     def info_of(self, uid):

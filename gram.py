@@ -13,7 +13,8 @@ import time
 
 import aiohttp
 from aiohttp import web
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
+from sqlalchemy.orm.attributes import set_committed_value
 
 from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE, STAR_USD, GRAM_USD, STAR_PACKS
 from db import SessionLocal
@@ -32,22 +33,63 @@ def g(nano):
 
 
 async def wallet_of(s, uid):
+    """Кошелёк игрока. Новый создаётся отдельной короткой транзакцией: так он не зависит от того,
+    чем закончится текущая операция, а два одновременных запроса не создадут два кошелька."""
     w = (await s.execute(select(GramWallet).where(GramWallet.tg_id == uid))).scalar_one_or_none()
-    if not w:
-        w = GramWallet(tg_id=uid, memo="MW" + secrets.token_hex(4).upper(), balance=0, spent=0, created=int(time.time()))
-        s.add(w)
+    if w:
+        return w
+    from db_atomic import insert_ignore
+    ins = insert_ignore(GramWallet.__table__, tg_id=uid, memo="MW" + secrets.token_hex(4).upper(),
+                        balance=0, spent=0, locked=0, created=int(time.time()))
+    if _sqlite():
+        await s.execute(ins)                             # SQLite: одна запись за раз, вложенная транзакция ждала бы саму себя
         await s.commit()
+    else:
+        async with SessionLocal() as s2:
+            await s2.execute(ins)
+            await s2.commit()
+    return (await s.execute(select(GramWallet).where(GramWallet.tg_id == uid))).scalar_one()
+
+
+async def move(s, uid, amount, kind, ref, note="", keep_locked=False):
+    """Изменить баланс и записать операцию. False — не хватает средств.
+
+    Баланс меняется одним атомарным UPDATE с условием, а не «прочитать → посчитать → записать»:
+    запросы к базе идут параллельно (потоки db.py), и два одновременных списания иначе
+    оба увидели бы старый баланс и оба прошли. keep_locked=True — списать можно только
+    выводимые GRAM (без полученных за звёзды).
+    """
+    w = await wallet_of(s, uid)
+    cond = [GramWallet.tg_id == uid]
+    if amount < 0:
+        floor = func.coalesce(GramWallet.locked, 0) if keep_locked else 0
+        cond.append(GramWallet.balance + amount >= floor)
+    res = await s.execute(update(GramWallet).where(*cond).values(balance=GramWallet.balance + amount)
+                          .returning(GramWallet.balance).execution_options(synchronize_session=False))
+    row = res.first()
+    if row is None:
+        return False
+    set_committed_value(w, "balance", row[0])          # объект в сессии видит новый баланс, но не перезапишет его
+    s.add(GramTx(tg_id=uid, kind=kind, amount=amount, ref=ref, note=note[:200], ts=int(time.time())))
+    return True
+
+
+async def adjust_locked(s, uid, delta):
+    """Атомарно изменить «игровые» GRAM из звёзд (не ниже нуля)."""
+    w = await wallet_of(s, uid)
+    new = func.coalesce(GramWallet.locked, 0) + delta
+    res = await s.execute(update(GramWallet).where(GramWallet.tg_id == uid)
+                          .values(locked=func.max(new, 0) if _sqlite() else func.greatest(new, 0))
+                          .returning(GramWallet.locked).execution_options(synchronize_session=False))
+    row = res.first()
+    if row is not None:
+        set_committed_value(w, "locked", row[0])
     return w
 
 
-async def move(s, uid, amount, kind, ref, note=""):
-    """Изменить баланс и записать операцию. Возвращает False, если не хватает средств."""
-    w = await wallet_of(s, uid)
-    if amount < 0 and w.balance + amount < 0:
-        return False
-    w.balance += amount
-    s.add(GramTx(tg_id=uid, kind=kind, amount=amount, ref=ref, note=note[:200], ts=int(time.time())))
-    return True
+def _sqlite():
+    import db
+    return not db.IS_PG
 
 
 # ---------- реферальная система ----------
@@ -105,10 +147,11 @@ async def credit_stars(uid, stars, charge_id):
         if (await s.execute(select(StarPayment).where(StarPayment.charge_id == charge_id))).scalar_one_or_none():
             return 0
         s.add(StarPayment(charge_id=charge_id, tg_id=uid, stars=stars, gram=nano, ts=int(time.time())))
-        w = await wallet_of(s, uid)
         await move(s, uid, nano, "stars", "stars:" + charge_id, f"Пополнение: {stars} ⭐")
-        w.locked = (w.locked or 0) + nano
+        await adjust_locked(s, uid, nano)
         await s.commit()
+    import funnel
+    funnel.mark(uid, "pay")
     log.info("Звёзды: игрок %s, %s ⭐ → %s GRAM", uid, stars, g(nano))
     try:
         from webserver import push_to_player
@@ -203,8 +246,10 @@ async def api_gram(request):
             nano = int(round(price * NANO))
             if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
-            w.locked = max(0, (w.locked or 0) - nano)          # сначала тратятся игровые GRAM из звёзд
-            w.spent += nano
+            await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
+            await s.execute(update(GramWallet).where(GramWallet.tg_id == uid).values(spent=GramWallet.spent + nano)
+                            .execution_options(synchronize_session=False))
+            set_committed_value(w, "spent", (w.spent or 0) + nano)
             notes = await pay_referrals(s, uid, nano)
             import items
             minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
@@ -228,8 +273,9 @@ async def api_gram(request):
             nano = int(round(amount * NANO))
             if nano > w.balance - (w.locked or 0):
                 return web.json_response({"ok": False, "error": f"Для вывода доступно {g(max(0, w.balance - (w.locked or 0)))} GRAM. GRAM из звёзд вывести нельзя"})
-            if not await move(s, uid, -nano, "withdraw", f"wd:{uid}:{time.time_ns()}", "Заявка на вывод"):
-                return web.json_response({"ok": False, "error": "Не хватает GRAM"})
+            # условие «не трогать GRAM из звёзд» проверяется в том же UPDATE, а не отдельным чтением
+            if not await move(s, uid, -nano, "withdraw", f"wd:{uid}:{time.time_ns()}", "Заявка на вывод", keep_locked=True):
+                return web.json_response({"ok": False, "error": "Для вывода не хватает GRAM. GRAM из звёзд вывести нельзя"})
             save = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
             s.add(GramWithdrawal(tg_id=uid, nick=(save.nick if save and save.nick else user["name"])[:16], address=address, amount=nano,
                                  payout=int(nano * (1 - GRAM_WITHDRAW_FEE)), created=int(time.time()), updated=int(time.time())))
@@ -287,11 +333,18 @@ async def api_gram_admin(request):
             if not wd or wd.status != "pending":
                 return web.json_response({"ok": False, "error": "Заявка уже обработана"})
             action = body.get("action")
+            if action not in ("paid", "reject"):
+                raise web.HTTPBadRequest(text="bad action")
+            # два нажатия подряд: статус меняет только первый запрос
+            claimed = await s.execute(update(GramWithdrawal).where(GramWithdrawal.id == wd.id, GramWithdrawal.status == "pending")
+                                      .values(status="paid" if action == "paid" else "rejected", updated=int(time.time()))
+                                      .execution_options(synchronize_session=False))
+            if claimed.rowcount != 1:
+                return web.json_response({"ok": False, "error": "Заявка уже обработана"})
             if action == "paid":
-                wd.status, wd.tx_hash, wd.updated = "paid", str(body.get("tx", ""))[:120], int(time.time())
+                wd.tx_hash = str(body.get("tx", ""))[:120]
                 text = f"Вывод {g(wd.payout)} GRAM выполнен"
             elif action == "reject":
-                wd.status, wd.updated = "rejected", int(time.time())
                 await move(s, wd.tg_id, wd.amount, "refund", f"refund:{wd.id}", "Возврат: заявка отклонена")
                 text = f"Заявка на вывод отклонена, {g(wd.amount)} GRAM вернулись на баланс"
             else:

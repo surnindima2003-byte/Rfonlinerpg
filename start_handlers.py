@@ -37,6 +37,8 @@ def factions_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    import funnel
+    funnel.mark(message.from_user.id, "bot_start")
     # реферальная ссылка: t.me/бот?start=ref_<id пригласившего>
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) == 2 and parts[1].startswith("ref_") and parts[1][4:].isdigit():

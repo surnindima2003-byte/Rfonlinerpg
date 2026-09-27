@@ -118,3 +118,29 @@ class RealtimeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeltaViewTest(unittest.TestCase):
+    def test_view_counts_as_sent_before_network(self):
+        async def go():
+            ws = FakeWS(delay=0.2)
+            c = realtime.Conn(ws, {"id": 1, "proto": 2})
+            self.assertTrue(c.delta)
+            c.push_snapshot("a", True, {2: "x"})
+            await asyncio.sleep(0.05)                 # отправка началась, но ещё идёт
+            self.assertEqual(c.sent_view, {2: "x"})   # новая дельта должна считаться уже от этого вида
+            c.push_snapshot("b", True, {3: "y"})
+            await asyncio.sleep(0.5)
+            self.assertEqual(c.sent_view, {3: "y"})
+            self.assertEqual([t for _, t in ws.sent], ["a", "b"])
+            c.reset_view()
+            self.assertIsNone(c.sent_view)
+            c.stop()
+        run(go())
+
+    def test_old_protocol_has_no_delta(self):
+        async def go():
+            c = realtime.Conn(FakeWS(), {"id": 1})
+            self.assertFalse(c.delta)
+            c.stop()
+        run(go())
