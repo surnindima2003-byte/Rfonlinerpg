@@ -634,6 +634,19 @@ button.li{width:100%;font:inherit;color:inherit}
 .pvpme{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
 .pvpme b{display:block;font:17px 'Russo One',sans-serif}.pvpme small{font-size:10px;color:var(--muted)}
 
+/* ---- статистика админа ---- */
+.stgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.stc{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:9px 4px;text-align:center}
+.stc b{display:block;font:17px 'Russo One',sans-serif}.stc small{font-size:10px;color:var(--muted);line-height:1.2;display:block}
+.stline{font-size:13px;margin:4px 0 10px}.stline small{color:var(--muted)}
+.stbar{display:grid;grid-template-columns:52px 1fr 40px;gap:8px;align-items:center;font-size:12px;margin-bottom:4px}
+.stbar div{height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden}.stbar i{display:block;height:100%;background:var(--cyan)}
+.stbar b{text-align:right}
+.sterr{background:var(--panel-2);border:1px solid rgba(224,105,74,.4);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.sterr summary{cursor:pointer;list-style:none}.sterr summary b{display:block;font-size:12px;color:#E0694A;word-break:break-word}
+.sterr small{font-size:11px;color:var(--muted)}
+.sterr pre{white-space:pre-wrap;word-break:break-all;font-size:10px;color:var(--muted);max-height:180px;overflow:auto}
+
 /* ---- разделы меню ---- */
 .vip-head{text-align:center;font:34px 'Russo One',sans-serif;color:#F2A93B;text-shadow:0 0 18px rgba(242,169,59,.45);margin:4px 0 10px}
 .vip-prog{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);gap:8px}
@@ -987,6 +1000,14 @@ textarea.field{min-height:70px;resize:vertical}
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script>
+// ---- сбор ошибок: всё, что сломалось у игрока, уходит на сервер (админ видит в «Статистике») ----
+const ERR_Q = [];
+(function(){
+  const push = (msg, stack) => { if(ERR_Q.length < 30 && msg) ERR_Q.push({msg:String(msg).slice(0, 500), stack:String(stack || "").slice(0, 2000), ua:navigator.userAgent.slice(0, 200)}); };
+  window.addEventListener("error", e => push(e.message, e.error && e.error.stack || (e.filename + ":" + e.lineno)));
+  window.addEventListener("unhandledrejection", e => push("Promise: " + (e.reason && e.reason.message || e.reason), e.reason && e.reason.stack));
+  setInterval(() => { if(!ERR_Q.length || typeof NET === "undefined" || !NET.on || !NET.id) return; const x = ERR_Q.shift(); NET.api("/api/err", x).catch(() => {}); }, 4000);
+})();
 // ===================== ДАННЫЕ И СОСТОЯНИЕ =====================
 const $ = id => document.getElementById(id);
 const rnd = ([a,b]) => a + Math.floor(Math.random()*(b-a+1));
@@ -1350,7 +1371,7 @@ const keys = {};
 let vw = 0, vh = 0, dpr = 1;
 
 function resize(){
-  dpr = Math.min(2, window.devicePixelRatio || 1);
+  dpr = S.settings && S.settings.lowfx ? 1 : Math.min(2, window.devicePixelRatio || 1);   // оптимизация: холст в 1×
   vw = gameEl.clientWidth; vh = gameEl.clientHeight;
   cv.width = Math.max(1, vw*dpr); cv.height = Math.max(1, vh*dpr);
 }
@@ -1808,11 +1829,7 @@ function drawLobbyOverlay(t, dt){
 
 function drawField(cx, cy){
   const L = LOCS[locKey];
-  ctx.fillStyle = L.ground; ctx.fillRect(cx, cy, vw, vh);
-  const s = 120, x0 = Math.floor(cx/s)*s, y0 = Math.floor(cy/s)*s;
-  for(let x = x0; x < cx+vw; x += s) for(let y = y0; y < cy+vh; y += s){
-    if(((x/s) + (y/s)) % 2 === 0){ ctx.fillStyle = L.ground2; ctx.fillRect(x, y, s, s); }
-  }
+  ctx.fillStyle = typeof tilePattern === "function" ? tilePattern(TILE_PAL[locKey] ? locKey : "dungeon") : L.ground; ctx.fillRect(cx, cy, vw, vh);
   ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 6; ctx.strokeRect(0, 0, W, H);
   ctx.fillStyle = "rgba(95,212,232,.06)"; circle(npcs[0].x, npcs[0].y, 150); ctx.fill();
 }
@@ -1823,8 +1840,10 @@ function drawRocks(cx, cy){
     if(r.x+r.r < cx || r.x-r.r > cx+vw || r.y+r.r < cy || r.y-r.r > cy+vh) continue;
     ctx.fillStyle = "rgba(0,0,0,.35)"; circle(r.x+5, r.y+7, r.r); ctx.fill();
     if(r.pillar){ ctx.fillStyle = "#34414E"; circle(r.x, r.y, r.r); ctx.fill(); ctx.strokeStyle = "#F2A93B"; ctx.lineWidth = 3; circle(r.x, r.y, r.r-6); ctx.stroke(); continue; }
-    ctx.fillStyle = r.shade > .5 ? LOCS[locKey].rock : "#4E4A47"; circle(r.x, r.y, r.r); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.08)"; circle(r.x-r.r*0.3, r.y-r.r*0.3, r.r*0.45); ctx.fill();
+    if(typeof rockSprite === "function"){ const img = rockSprite(Math.round(r.r), r.shade > .5 ? LOCS[locKey].rock : "#4E4A47", Math.round((r.x*7 + r.y*13) % 5));
+      ctx.imageSmoothingEnabled = false; ctx.drawImage(img, r.x - img.width/2, r.y - img.height/2); }
+    else { ctx.fillStyle = r.shade > .5 ? LOCS[locKey].rock : "#4E4A47"; circle(r.x, r.y, r.r); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.08)"; circle(r.x-r.r*0.3, r.y-r.r*0.3, r.r*0.45); ctx.fill(); }
   }
 }
 
@@ -1913,6 +1932,7 @@ function drawEnemy(e, t){
     circle(0, 0, k.r + 6 + pu*4); ctx.stroke(); ctx.restore();
     ctx.scale(BOSS_SCALE, BOSS_SCALE);
   }
+  if(typeof drawEnemyPx === "function"){ drawEnemyPx(e, k, t); } else {
   ctx.rotate(e.ang); ctx.translate(e.lunge > 0 ? 6 : 0, 0);
   const kind = k.base || e.type;
   if(kind === "scrap_crawler"){
@@ -1937,6 +1957,7 @@ function drawEnemy(e, t){
     ctx.fillStyle = "#4A4F57"; rr(-24, -22, 48, 44, 10); ctx.fill();
     ctx.fillStyle = "#2E3A46"; ctx.fillRect(18, -5, 22, 10);
     ctx.fillStyle = "#1B232C"; rr(2, -10, 16, 20, 4); ctx.fill(); ctx.fillStyle = k.color; rr(8, -6, 7, 12, 2); ctx.fill();
+  }
   }
   if(e.flash > 0){ ctx.globalAlpha = .6; ctx.fillStyle = "#fff"; circle(0, 0, k.r); ctx.fill(); ctx.globalAlpha = 1; }
   ctx.restore();
@@ -2025,8 +2046,10 @@ function draw(t){
   ctx.globalAlpha = 1;
   if(typeof tutWorld === "function") tutWorld(t);
   ctx.restore();
-  const vg = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*0.35, vw/2, vh/2, Math.max(vw, vh)*0.75);
-  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, vw, vh);
+  if(!(S.settings && S.settings.lowfx)){
+    const vg = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*0.35, vw/2, vh/2, Math.max(vw, vh)*0.75);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, vw, vh);
+  }
   drawMinimap();
 }
 
@@ -2048,6 +2071,7 @@ function hud(){
 }
 
 function loop(ts){
+  if(S.settings && S.settings.fps60 === false && ts - last < 31){ requestAnimationFrame(loop); return; }
   const dt = Math.min(0.05, (ts - last)/1000); last = ts;
   if(running && vw > 0){
     if(!paused) update(dt);
@@ -2680,6 +2704,12 @@ function soundTab(){
     <div class="srange"><input type="range" min="0.7" max="1.4" step="0.05" value="${S.settings.joySize}" id="joySizeIn" aria-label="Размер джойстика"><b>${pct(S.settings.joySize)}</b></div>
     <h3>Режим джойстика</h3>${onoff("joyFloat", S.settings.joyFloat, "👆", "📍", "Под пальцем", "На месте")}
     <p class="hint">«На месте» — стик всегда в одной точке. «Под пальцем» — перепрыгивает туда, где коснулся левой частью экрана.</p>
+  </section>
+  <section class="pcard sset">
+    <h3>Оптимизация</h3>${onoff("lowfx", S.settings.lowfx, "⚡", "✨", "Включена", "Выключена")}
+    <p class="hint">Для слабых телефонов: меньше эффектов свечения, холст в обычном разрешении, мобы вдали не рисуются</p>
+    <h3>Частота кадров</h3>${onoff("fps60", S.settings.fps60 !== false, "🎞", "🔋", "60 FPS", "30 FPS")}
+    <p class="hint">30 кадров в секунду бережёт батарею и снижает нагрев</p>
   </section>
   <section class="pcard sset">
     <h3>Расположение кнопок</h3>
@@ -3414,7 +3444,8 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         <div class="flabel" style="margin-top:6px">Телепорт без ограничений по уровню</div>
         <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
         <p class="demo">GRAM выдавать нельзя: это настоящие деньги, их можно только пополнить.</p>
-        <button class="btn wide" type="button" data-gramadm="1">💎 GRAM: выплаты и пополнения</button>`;
+        <button class="btn wide" type="button" data-gramadm="1">💎 GRAM: выплаты и пополнения</button>
+        <button class="btn wide" type="button" data-adstats="1">📊 Статистика и ошибки игроков</button>`;
     });
   }
   async function admGrant(payload){
@@ -5370,18 +5401,12 @@ function drawDungeon(cx, cy, t){
   ctx.fillStyle = "#0B1015"; ctx.fillRect(cx, cy, vw, vh);
   const vis = r => r.x + r.w + 30 > cx && r.x - 30 < cx + vw && r.y + r.h + 40 > cy && r.y - 40 < cy + vh;
   // тёмные стены вокруг проходов
-  for(const r of dgRects){ if(!vis(r)) continue; ctx.fillStyle = "#141C25"; ctx.fillRect(r.x - 12, r.y - 12, r.w + 24, r.h + 24); }
+  for(const r of dgRects){ if(!vis(r)) continue; ctx.fillStyle = typeof wallPat === "function" ? wallPat() : "#141C25"; ctx.fillRect(r.x - 12, r.y - 12, r.w + 24, r.h + 24); }
   // пол из плит
   for(const r of dgRects){
     if(!vis(r)) continue;
-    const s = 40, x0 = Math.floor(Math.max(r.x, cx)/s)*s, y0 = Math.floor(Math.max(r.y, cy)/s)*s;
-    ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-    ctx.fillStyle = r.corr ? "#232E3A" : "#283441"; ctx.fillRect(r.x, r.y, r.w, r.h);
-    for(let x = x0; x < Math.min(r.x + r.w, cx + vw); x += s) for(let y = y0; y < Math.min(r.y + r.h, cy + vh); y += s){
-      if(((x + y)/s) % 2 === 0){ ctx.fillStyle = "rgba(255,255,255,.025)"; ctx.fillRect(x, y, s, s); }
-      ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(x, y, s, 1.5); ctx.fillRect(x, y, 1.5, s);
-    }
-    ctx.restore();
+    ctx.fillStyle = typeof tilePattern === "function" ? tilePattern(r.corr ? "corr" : "dungeon") : (r.corr ? "#232E3A" : "#283441");
+    ctx.fillRect(r.x, r.y, r.w, r.h);
   }
   // лицевая грань стены над комнатами и светильники
   for(const r of dgRects){
@@ -6346,7 +6371,8 @@ function tutGive(r){
 }
 function tutRender(){
   let el = $("tutCard");
-  if(!tutActive() || $("scrGame").hidden && S.tut !== 5){ if(el) el.hidden = true; $("tutRing").hidden = true; return; }
+  const sheetOpen = $("sheet").classList.contains("open");
+  if(!tutActive() || ($("scrGame").hidden && S.tut !== 5) || sheetOpen){ if(el) el.hidden = true; $("tutRing").hidden = true; return; }
   const st = TUT[S.tut]; if(!st){ return; }
   if(!el){
     el = document.createElement("div"); el.id = "tutCard"; el.className = "tutcard";
@@ -6478,6 +6504,209 @@ setInterval(() => {
   if(locKey !== "arena_fear") qLastWave = 0;
 }, 500);
 setTimeout(qBadge, 1500);
+// ===================== ПИКСЕЛЬНЫЙ МИР: ВРАГИ И ПОЛ =====================
+// Враги рисуются попиксельно, как мехи игроков: обводка, объём, светящиеся глаза и анимация.
+// Виды: краулер (краб-робот), дрон (винты), турель-страж (тренога и ствол), шагоход (двуногий).
+const EPX = 32;                       // сетка спрайта врага 32×32
+const epxCache = new Map();
+function epxBuild(kind, accent, f){
+  const N = EPX, buf = new Array(N*N).fill(null), glow = [];
+  const put = (x, y, c, gl) => { x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= N || y >= N || !c) return; buf[y*N + x] = c; if(gl) glow.push([x, y, c]); };
+  const rect = (x, y, w, h, c, gl) => { for(let j = 0; j < h; j++) for(let i = 0; i < w; i++) put(x + i, y + j, c, gl); };
+  const line = (x0, y0, x1, y1, c, gl) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1; for(let i = 0; i <= n; i++) put(x0 + (x1 - x0)*i/n, y0 + (y1 - y0)*i/n, c, gl); };
+  const disc = (cx, cy, r, c, gl) => { for(let y = -r; y <= r; y++) for(let x = -r; x <= r; x++) if(x*x + y*y <= r*r + r*0.6) put(cx + x, cy + y, c, gl); };
+  const block = (x, y, w, h, P) => { rect(x, y, w, h, P[1]); for(let i = 0; i < w; i++){ put(x + i, y, P[0]); put(x + i, y + h - 1, P[3]); } for(let j = 1; j < h - 1; j++){ put(x, y + j, P[0]); put(x + w - 1, y + j, P[2]); } };
+  const A = [mix(accent, "#FFFFFF", .45), accent, shade(accent, .7), shade(accent, .45)];
+  const M = ["#9AA6B2", "#6B7682", "#4A5561", "#2B333C"], R = ["#C98A5A", "#8A5A3A", "#6A3E26", "#3E2414"];
+  const eye = "#FF5A4A", eyeHi = "#FFD0C8";
+  if(kind === "scrap_crawler"){
+    // краб-робот: низкий корпус на шести лапах
+    const sw = [[0, 1, 0, -1], [-1, 0, 1, 0]][f % 2];
+    for(let i = 0; i < 3; i++){
+      const lx = 9 + i*6, st = (i % 2 ? sw[0] : sw[1]);
+      line(lx, 19, lx - 3 + st, 23, R[2]); line(lx - 3 + st, 23, lx - 4 + st, 27, R[3]);        // задние лапы
+      line(lx + 2, 19, lx + 5 - st, 23, R[1]); line(lx + 5 - st, 23, lx + 6 - st, 27, R[2]);    // передние лапы
+    }
+    for(let y = 0; y < 8; y++){ const w = [10, 14, 16, 18, 18, 17, 15, 12][y], x0 = 16 - (w >> 1); rect(x0, 13 + y, w, 1, y < 2 ? R[0] : y > 5 ? R[3] : R[1]); put(x0, 13 + y, R[0]); }
+    rect(10, 15, 12, 1, A[1]); rect(12, 18, 8, 1, R[2]);
+    put(24, 15, eye, true); put(24, 17, eye, true); put(25, 16, eyeHi, true);
+    line(22, 13, 27, 10, M[2]); put(27, 9, A[0], true);                                        // антенна-клешня
+  } else if(kind === "rogue_drone"){
+    // дрон: шар с глазом, два винта сверху, реактивная тяга снизу
+    const bob = f % 2;
+    const rotor = f % 2 ? [[4, 7], [18, 7]] : [[6, 7], [20, 7]];
+    line(10, 11 + bob, 7, 8 + bob, M[2]); line(22, 11 + bob, 25, 8 + bob, M[2]);
+    for(const [x, w] of [[rotor[0][0], 7], [rotor[1][0], 7]]) rect(x, 7 + bob, f % 2 ? w : w - 3, 1, "#C9D1D8");
+    disc(16, 15 + bob, 7, M[1]); disc(15, 13 + bob, 4, M[0]); disc(16, 16 + bob, 6, M[1]);
+    for(let i = 0; i < 12; i++){ const a = i/12*Math.PI*2; put(16 + Math.round(Math.cos(a)*7), 15 + bob + Math.round(Math.sin(a)*7), M[3]); }
+    rect(10, 16 + bob, 12, 1, A[2]);
+    disc(20, 15 + bob, 2, "#1B232C"); put(20, 15 + bob, eye, true); put(21, 14 + bob, eyeHi, true);
+    rect(14, 22 + bob, 4, 2, M[2]); put(15, 24 + bob, A[1], true); put(16, 25 + bob, A[0], true); put(15, 26 + bob, A[2], true);
+  } else if(kind === "sentry_bot"){
+    // турель-страж: тренога, шестигранная голова, длинный ствол
+    const fire = f === 2;
+    line(16, 21, 10, 28, M[2]); line(16, 21, 22, 28, M[2]); line(16, 21, 16, 28, M[3]);
+    rect(9, 28, 3, 1, M[3]); rect(21, 28, 3, 1, M[3]); rect(15, 28, 3, 1, M[3]);
+    const hex = [[12, 8], [10, 10], [9, 12], [9, 12], [9, 12], [9, 12], [10, 10], [12, 8]];
+    hex.forEach(([x0, w], j) => { rect(x0, 11 + j, w + (j > 1 && j < 6 ? 2 : 0), 1, j < 2 ? M[0] : j > 5 ? M[3] : M[1]); put(x0, 11 + j, M[0]); });
+    rect(11, 13, 10, 1, A[2]);
+    rect(21, 14, fire ? 9 : 10, 2, "#2F3842"); rect(21, 14, fire ? 9 : 10, 1, "#56626F");
+    disc(15, 15, 2, "#1B232C"); put(15, 15, eye, true); put(16, 14, eyeHi, true);
+    if(fire) for(const [x, y] of [[31, 15], [30, 13], [30, 17], [31, 14], [31, 16]]) put(x, y, "#FFE08A", true);
+    put(13, 10, A[1], true);
+  } else {
+    // шагоход: тяжёлый двуногий, пушка-рука, светящийся визор
+    const st = [[2, -2], [0, 0], [-2, 2], [0, 0]][f % 4], by = f % 2 ? 0 : 1;
+    const leg = (x, dx, c) => { block(x + dx, 18 + by, 4, 5, c); block(x + dx, 23 + by, 4, 5, [c[2], c[2], c[3], c[3]]); rect(x + dx - 1, 28, 6, 1, M[3]); };
+    leg(11, st[1], [M[2], M[2], M[3], M[3]]);
+    block(8, 6 + by, 16, 13, M);
+    rect(9, 15 + by, 14, 1, A[2]); rect(10, 11 + by, 12, 1, M[2]);
+    rect(16, 8 + by, 7, 3, "#0B0F13"); rect(17, 9 + by, 5, 1, eye, true); put(21, 9 + by, eyeHi, true);
+    block(22, 11 + by, 9, 4, ["#56626F", "#3A444F", "#2B333C", "#1B232C"]); put(30, 12 + by, A[0], true); put(30, 13 + by, A[1], true);
+    block(5, 9 + by, 4, 7, M);                                                                  // наплечник
+    leg(17, st[0], M);
+    put(12, 8 + by, A[1], true);
+  }
+  // тёмный контур
+  const out = buf.slice();
+  for(let y = 0; y < N; y++) for(let x = 0; x < N; x++){
+    if(buf[y*N + x]) continue;
+    if([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const X = x + dx, Y = y + dy; return X >= 0 && Y >= 0 && X < N && Y < N && buf[Y*N + X]; })) out[y*N + x] = "#0B0E12";
+  }
+  return {px:out, glow};
+}
+function epxCanvas(kind, accent, f, ps){
+  const key = kind + "|" + accent + "|" + f + "|" + ps;
+  let c = epxCache.get(key); if(c) return c;
+  const spr = epxBuild(kind, accent, f), base = document.createElement("canvas");
+  base.width = base.height = EPX*ps;
+  const g = base.getContext("2d");
+  for(let i = 0; i < spr.px.length; i++){ const col = spr.px[i]; if(!col) continue; g.fillStyle = col; g.fillRect((i % EPX)*ps, Math.floor(i/EPX)*ps, ps, ps); }
+  if(!(S.settings && S.settings.lowfx)){
+    g.globalCompositeOperation = "lighter";
+    for(const [x, y, col] of spr.glow){ g.shadowColor = col; g.shadowBlur = ps*3; g.fillStyle = col; g.globalAlpha = .55; g.fillRect(x*ps, y*ps, ps, ps); }
+  }
+  c = base; epxCache.set(key, c);
+  if(epxCache.size > 500) epxCache.delete(epxCache.keys().next().value);
+  return c;
+}
+// вызывается из drawEnemy вместо векторного корпуса (контекст уже в центре врага, для главаря — увеличен)
+function drawEnemyPx(e, k, t){
+  const kind = k.base || e.type;
+  const moving = e.chase || Math.hypot((e.tx || e.x) - e.x, (e.ty || e.y) - e.y) > 6;
+  let f;
+  if(kind === "rogue_drone") f = Math.floor(t*14) % 2;
+  else if(kind === "sentry_bot") f = e.cd > 1.15 ? 2 : Math.floor(t*2) % 2;
+  else if(kind === "scrap_crawler") f = moving ? Math.floor(t*10) % 2 : 0;
+  else f = moving ? Math.floor(t*7) % 4 : 1;
+  const ps = 2, img = epxCanvas(kind, k.color || "#E0694A", f, ps), dir = Math.cos(e.ang || 0) >= 0 ? 1 : -1;
+  ctx.save(); ctx.scale(dir, 1); ctx.imageSmoothingEnabled = false;
+  const lunge = e.lunge > 0 ? 4 : 0;
+  ctx.drawImage(img, -EPX*ps/2 + lunge, -EPX*ps/2 - 4);
+  ctx.restore();
+}
+
+// ---- пиксельные текстуры пола и стен (повторяющийся узор, привязан к миру) ----
+const TILE_PAL = {
+  dungeon:["#2C3846", "#26313D", "#34424F", "#1D2630"], corr:["#242E3A", "#1F2833", "#2B3744", "#171F28"],
+  lobby:["#2A3542", "#24303C", "#324050", "#1B242E"], scrapfields:["#5A4636", "#4E3C2E", "#6A5240", "#3A2C20"],
+  reactor_ruins:["#34423A", "#2C3831", "#3E4E44", "#222C26"], iron_canyon:["#3E3538", "#342C2F", "#4A4044", "#262022"],
+  arena_fear:["#2A2230", "#231C29", "#34293C", "#1A1420"]
+};
+const tilePats = {};
+function tilePattern(kind){
+  if(tilePats[kind]) return tilePats[kind];
+  const P = TILE_PAL[kind] || TILE_PAL.dungeon, n = 32, ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps;
+  const g = c.getContext("2d"), px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  g.fillStyle = P[0]; g.fillRect(0, 0, c.width, c.height);
+  let seed = [...kind].reduce((a, ch) => a*31 + ch.charCodeAt(0), 7) >>> 0;
+  const rnd = () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296;
+  const rugged = kind === "scrapfields" || kind === "iron_canyon" || kind === "reactor_ruins";
+  if(!rugged){
+    // стальные плиты 16×16: светлый край сверху-слева, шов снизу-справа, заклёпки по углам
+    for(const [ox, oy] of [[0, 0], [16, 0], [0, 16], [16, 16]]){
+      for(let i = 0; i < 16; i++){ px(ox + i, oy, P[2]); px(ox, oy + i, P[2]); px(ox + i, oy + 15, P[3]); px(ox + 15, oy + i, P[3]); }
+      for(const [rx, ry] of [[2, 2], [13, 2], [2, 13], [13, 13]]){ px(ox + rx, oy + ry, P[3]); px(ox + rx, oy + ry - 1, P[2]); }
+    }
+  }
+  // потёртости и мелкий мусор
+  for(let i = 0; i < (rugged ? 90 : 26); i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, rnd() < .5 ? P[1] : P[3]); }
+  if(rugged){
+    for(let i = 0; i < 6; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n), l = 2 + Math.floor(rnd()*4); for(let j = 0; j < l; j++) px((x + j) % n, (y + (j >> 1)) % n, P[3]); }
+    for(let i = 0; i < 5; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, P[2]); px((x + 1) % n, y, P[2]); }
+  }
+  if(kind === "reactor_ruins") for(let i = 0; i < 3; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#5FC94A"); }
+  if(kind === "arena_fear") for(let i = 0; i < 4; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, "#6A48D0"); }
+  tilePats[kind] = ctx.createPattern(c, "repeat");
+  return tilePats[kind];
+}
+const wallPat = (() => { let p = null; return () => {
+  if(p) return p;
+  const n = 16, ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps; const g = c.getContext("2d");
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  g.fillStyle = "#141C25"; g.fillRect(0, 0, c.width, c.height);
+  for(let row = 0; row < 2; row++){ const oy = row*8, off = row ? 4 : 0;
+    for(let i = 0; i < n; i++){ px(i, oy, "#1B2530"); px(i, oy + 7, "#0D131A"); }
+    for(const bx of [off, off + 8]){ for(let j = 0; j < 8; j++) px(bx % n, oy + j, "#0D131A"); } }
+  return (p = ctx.createPattern(c, "repeat"));
+}; })();
+
+// ---- режим оптимизации: без размытого свечения на холсте, холст 1×, спрайты без подсветки ----
+function applyGfx(){
+  const low = !!(S.settings && S.settings.lowfx);
+  if(low) Object.defineProperty(ctx, "shadowBlur", {configurable:true, get(){ return 0; }, set(){}});
+  else delete ctx.shadowBlur;
+  epxCache.clear();
+  if(typeof resize === "function") resize();
+}
+$("pBody").addEventListener("click", e => { const b = e.target.closest("button[data-seton]"); if(b && /^(lowfx|fps60):/.test(b.dataset.seton)) setTimeout(applyGfx, 0); });
+applyGfx();
+
+// ---- пиксельные валуны: неровный контур, светлая грань сверху-слева, трещины ----
+const rockCache = new Map();
+function rockSprite(r, color, variant){
+  const key = r + "|" + color + "|" + variant; let c = rockCache.get(key); if(c) return c;
+  const ps = 2, n = Math.max(6, Math.ceil(r/ps)), size = n*2 + 2, cv2 = document.createElement("canvas"); cv2.width = cv2.height = size*ps;
+  const g = cv2.getContext("2d"), P = [mix(color, "#FFFFFF", .25), color, shade(color, .72), shade(color, .5)];
+  let seed = r*97 + variant*131 + 7; const rnd = () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296;
+  const bump = Array.from({length:16}, () => 0.82 + rnd()*0.2), inside = (x, y) => { const dx = x - n, dy = y - n, a = (Math.atan2(dy, dx) + Math.PI)/(Math.PI*2)*16, rr = bump[Math.floor(a) % 16]*n; return dx*dx + dy*dy <= rr*rr; };
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  for(let y = 0; y < size; y++) for(let x = 0; x < size; x++){
+    if(!inside(x, y)) continue;
+    const l = ((n - x) + (n - y))/(n*1.6);                          // свет сверху-слева
+    px(x, y, l > .45 ? P[0] : l > -.1 ? P[1] : l > -.55 ? P[2] : P[3]);
+  }
+  for(let i = 0; i < 3 + (r >> 4); i++){                             // трещины
+    let x = n + Math.floor((rnd() - .5)*n), y = n + Math.floor((rnd() - .5)*n);
+    for(let j = 0; j < 3 + Math.floor(rnd()*4); j++){ if(inside(x, y)) px(x, y, P[3]); x += rnd() < .5 ? 1 : 0; y += 1; }
+  }
+  for(let y = 0; y < size; y++) for(let x = 0; x < size; x++){       // тёмный контур
+    if(inside(x, y)) continue;
+    if([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => inside(x + dx, y + dy))) px(x, y, "#0B0E12");
+  }
+  rockCache.set(key, cv2); return cv2;
+}
+// ===================== СТАТИСТИКА ДЛЯ АДМИНА =====================
+let adStats = null;
+async function openAdminStats(){
+  openSheet("Статистика", "Игроки, деньги и ошибки", () => { body().innerHTML = `<div class="empty">Загрузка…</div>`; });
+  try{ const r = await NET.api("/api/admin/stats", {}); adStats = r && r.ok ? r : null; }catch(e){ adStats = null; }
+  if(!adStats){ body().innerHTML = `<div class="empty">Статистика доступна только администратору в игре через бота</div>`; return; }
+  const P = adStats.players, M = adStats.money, card = (v, l, c) => `<div class="stc"><b style="${c ? "color:" + c : ""}">${v}</b><small>${l}</small></div>`;
+  const lvMax = Math.max(1, ...Object.values(P.levels));
+  body().innerHTML = `
+    <div class="dsect">Игроки</div>
+    <div class="stgrid">${card(P.online, "онлайн сейчас", "var(--ok)")}${card(P.dau, "за сутки")}${card(P.wau, "за неделю")}${card(P.total, "всего")}${card(P.new_day, "новых за сутки")}${card(P.new_week, "новых за неделю")}</div>
+    <div class="stline">Удержание на 2-й день: <b>${P.retention === null ? "мало данных" : P.retention + "%"}</b>${P.cohort ? ` <small>(из ${P.cohort} новичков вчера)</small>` : ""}</div>
+    <div class="dsect">Уровни игроков</div>
+    ${Object.entries(P.levels).map(([k, n]) => `<div class="stbar"><span>${k}</span><div><i style="width:${n/lvMax*100}%"></i></div><b>${n}</b></div>`).join("")}
+    <div class="dsect">Деньги</div>
+    <div class="stgrid">${card(gramF(M.gram_total), "GRAM на балансах")}${card(gramF(M.gram_locked), "из них игровые ⭐")}${card(gramF(M.dep_day), "пополнено за сутки", "var(--ok)")}${card(gramF(M.dep_all), "пополнено всего")}${card(gramF(M.shop_day), "потрачено в магазине за сутки")}${card(M.stars_day + " ⭐", "звёзд за сутки")}${card(M.stars_all + " ⭐", "звёзд всего")}${card(M.market_day, "сделок на маркете за сутки")}${card(gramF(M.market_day_sum), "оборот маркета, GRAM")}${card(M.wd_pending, "заявок на вывод", M.wd_pending ? "#F2A93B" : "")}${card(gramF(M.wd_pending_sum), "к выплате, GRAM")}${card(M.pvp_kills, "побед в PvP всего")}</div>
+    <div class="dsect">Ошибки у игроков (${adStats.errors.length})</div>
+    ${adStats.errors.length ? adStats.errors.map(e => `<details class="sterr"><summary><b>${esc(e.msg)}</b><small>${e.count} раз · игроков ${e.users} · ${new Date(e.last).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})}</small></summary><pre>${esc(e.stack || "")}</pre><small>${esc(e.ua)}</small></details>`).join("") : `<div class="empty">Ошибок нет 🎉</div>`}
+    <button class="btn wide" type="button" data-adstats="1">Обновить</button>`;
+}
+$("shBody").addEventListener("click", e => { const b = e.target.closest("button[data-adstats]"); if(b) openAdminStats(); });
 // ===================== УПРАВЛЕНИЕ: ДЖОЙСТИК, СТИКЕРЫ, РАСПОЛОЖЕНИЕ КНОПОК =====================
 S.settings.joyAlpha = S.settings.joyAlpha ?? 0.66;
 S.settings.joySize = S.settings.joySize ?? 1;

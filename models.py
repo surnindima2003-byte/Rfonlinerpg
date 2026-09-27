@@ -208,3 +208,25 @@ class PvpStat(Base):
     pk: Mapped[int] = mapped_column(Integer, default=0)            # убито невиновных
     karma: Mapped[int] = mapped_column(Integer, default=0)
     rating: Mapped[int] = mapped_column(Integer, default=1000)
+
+
+class FirstSeen(Base):
+    """Когда игрок впервые зашёл — для статистики новых игроков и удержания."""
+    __tablename__ = "first_seen"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    ts: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
+
+
+class ClientError(Base):
+    """Ошибки, случившиеся у игроков в игре: одинаковые складываются в одну запись со счётчиком."""
+    __tablename__ = "client_errors"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    msg: Mapped[str] = mapped_column(Text, default="")
+    stack: Mapped[str] = mapped_column(Text, default="")
+    ua: Mapped[str] = mapped_column(String(200), default="")
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    users: Mapped[int] = mapped_column(Integer, default=0)
+    first: Mapped[int] = mapped_column(BigInteger, default=0)
+    last: Mapped[int] = mapped_column(BigInteger, default=0)

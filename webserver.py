@@ -19,6 +19,7 @@ from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist
 import gram
 import items
 import pvp
+import stats
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -88,8 +89,17 @@ def grant_dict(g: Grant):
 
 
 # ---------- страницы и API ----------
+_game_cache = {"mtime": 0, "body": b""}
+
+
 async def game_page(request):
-    return web.FileResponse(GAME_FILE, headers={"Cache-Control": "no-cache"})
+    """Игра отдаётся сжатой (gzip): грузится в несколько раз быстрее на мобильном интернете."""
+    st = GAME_FILE.stat()
+    if st.st_mtime != _game_cache["mtime"]:
+        _game_cache.update(mtime=st.st_mtime, body=GAME_FILE.read_bytes())
+    resp = web.Response(body=_game_cache["body"], content_type="text/html", charset="utf-8", headers={"Cache-Control": "no-cache"})
+    resp.enable_compression()
+    return resp
 
 
 async def health(request):
@@ -98,6 +108,7 @@ async def health(request):
 
 async def api_load(request):
     _, user = await read_auth(request)
+    await stats.mark_seen(user["id"])
     m = re.fullmatch(r"ref_(\d{3,15})", user.get("start", ""))
     if m:
         await gram.bind_referral(user["id"], int(m.group(1)))
@@ -902,6 +913,7 @@ async def start_web(port: int):
     gram.setup(app)
     items.setup(app)
     pvp.setup(app)
+    stats.setup(app)
     app.router.add_get("/ws", ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
