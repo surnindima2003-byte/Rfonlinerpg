@@ -16,7 +16,9 @@ ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERN
 
 # Сброс базы: сервер сносит все таблицы, когда эта метка меняется.
 # Чтобы снова обнулить игру, поменяй WIPE_TOKEN в Railway → Variables (например на wipe-2).
-SCHEMA_VERSION = "3"
+# Эпоха 4 принудительно обнуляет прогресс всех игроков при следующем запуске,
+# даже если в Railway уже задан WIPE_TOKEN.
+SCHEMA_VERSION = "4"
 WIPE_TOKEN = os.getenv("WIPE_TOKEN", "wipe-1")
 DATA_EPOCH = f"{SCHEMA_VERSION}:{WIPE_TOKEN}"
 
