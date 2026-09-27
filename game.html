@@ -3445,13 +3445,17 @@ window.NET_GOD = false; window.NET_ADMIN = false;
 
   // ---- сохранения ----
   let lastPushed = "";
+  let serverEpoch = null;
   function snapshot(){ return {S, W:Wl, ts:S._ts || 0, bm:combatPower()}; }
   async function push(force){
+    // До ответа сервера эпоха неизвестна: отправка здесь могла бы вернуть
+    // старый локальный инвентарь сразу после полного сброса.
+    if(!serverEpoch) return;
     const js = JSON.stringify(snapshot());
     if(!force && js === lastPushed) return;
     S._ts = Date.now(); save();
     const data = snapshot(); lastPushed = JSON.stringify(data);
-    try{ await api("/api/state/save", {data}); }catch(e){ lastPushed = ""; }
+    try{ await api("/api/state/save", {epoch:serverEpoch, data}); }catch(e){ lastPushed = ""; }
   }
   setInterval(() => push(false), 10000);
   document.addEventListener("visibilitychange", () => { if(document.hidden) push(true); });
@@ -3476,6 +3480,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
   // ---- вход ----
   api("/api/state/load").then(r => {
     if(!r || !r.ok){ NET._ready(); return; }
+   serverEpoch = r.epoch;
     // база на сервере была сброшена: очищаем прогресс на телефоне и начинаем заново
     if(r.epoch && localStorage.getItem("mw-epoch") !== r.epoch){
       ["mw-save-v2", "mw-wallet", "mw-localdb", "mw-demo"].forEach(k => localStorage.removeItem(k));
