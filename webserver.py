@@ -31,6 +31,7 @@ import pvp
 import pvpguard
 import progress
 import stats
+import special_quests
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -1495,6 +1496,7 @@ async def start_web(port: int):
     items.setup(app)
     pvp.setup(app)
     stats.setup(app)
+    special_quests.setup(app, read_auth, push_to_player, grant_dict)
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)

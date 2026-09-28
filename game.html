@@ -198,6 +198,11 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-card.sp b{color:#F2C14B}.qs-card.sp .qs-rew{color:#5FD4E8}
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .qs-row b{color:#2A333C}:root:not([data-theme="dark"]) .qs-card.done b{color:#5A6570}:root:not([data-theme="dark"]) .qs-card.on b{color:#A8650F}:root:not([data-theme="dark"]) .qs-card.on .qs-ic{color:#A8650F}:root:not([data-theme="dark"]) .qs-card.sp b{color:#A8650F}:root:not([data-theme="dark"]) .qs-rew{color:#B86A12}:root:not([data-theme="dark"]) .qs-card.sp .qs-rew{color:#1C7F96}:root:not([data-theme="dark"]) .qs-tabs button[aria-selected="true"]{color:#A8650F;border-bottom-color:#D99A2B}}
 :root[data-theme="light"] .qs-row b{color:#2A333C}:root[data-theme="light"] .qs-card.done b{color:#5A6570}:root[data-theme="light"] .qs-card.on b{color:#A8650F}:root[data-theme="light"] .qs-card.on .qs-ic{color:#A8650F}:root[data-theme="light"] .qs-card.sp b{color:#A8650F}:root[data-theme="light"] .qs-rew{color:#B86A12}:root[data-theme="light"] .qs-card.sp .qs-rew{color:#1C7F96}:root[data-theme="light"] .qs-tabs button[aria-selected="true"]{color:#A8650F;border-bottom-color:#D99A2B}
+.qs-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}.qs-btns .qs-go{margin-top:9px}
+.qs-go.alt{background:none;border:1px solid #D99A2B;color:#F2C14B;text-shadow:none}
+.qs-go:disabled{opacity:.6}
+.qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
+.qs-card.sp.done{opacity:.75}
 .qs-go{display:block;width:100%;margin-top:9px;border:0;border-radius:8px;padding:9px;background:linear-gradient(180deg,#F2C14B,#D99A2B);color:#fff;font:600 13px Rubik,sans-serif;text-shadow:0 1px 1px rgba(0,0,0,.25)}
 
 /* ---- окна ---- */
@@ -1486,7 +1491,7 @@ let firing = false, auto = false, stick = {id:null, ox:0, oy:0, x:0, y:0}, nearN
 const keys = {};
 let vw = 0, vh = 0, dpr = 1;
 // графика: авто-снижение разрешения и кэши того, что не меняется от кадра к кадру
-const GFX = {cap:2, frames:0, slow:0, t0:0, vig:null};
+const GFX = {cap:2, frames:0, slow:0, t0:0, vig:null, fx:true};   // fx — пятна света на земле (первое, что отключаем на слабом телефоне)
 
 function resize(){
   // оптимизация: холст в 1×; GFX.cap — потолок, который сам снижается, если телефон не успевает рисовать
@@ -2211,16 +2216,28 @@ function drawDrops(){
   }
 }
 
+// план подземелья для миникарты: сотни прямоугольников рисуются один раз, а не каждый кадр
+const miniDgCache = {key:"", c:null};
+function miniDungeon(size, s){
+  const key = dgKey + "|" + dgRects.length + "|" + size + "|" + dpr;
+  if(miniDgCache.key !== key){
+    const c = document.createElement("canvas"); c.width = Math.ceil(size*dpr); c.height = Math.ceil(size*dpr);
+    const g = c.getContext("2d"); g.scale(dpr, dpr); g.fillStyle = "#3A4757";
+    for(const r of dgRects) g.fillRect(r.x*s, r.y*s, Math.max(1, r.w*s), Math.max(1, r.h*s));
+    miniDgCache.key = key; miniDgCache.c = c;
+  }
+  return miniDgCache.c;
+}
 function drawMinimap(){
   const size = 92, x = vw - size - 8, y = 8, s = size / Math.max(W, H);
   ctx.fillStyle = "rgba(20,27,34,.85)"; rr(x-3, y-3, size+6, size+6, 10); ctx.fill();
   ctx.save(); rr(x, y, size, size, 7); ctx.clip();
   ctx.fillStyle = locKey === "lobby" ? "#1C252E" : LOCS[locKey].ground; ctx.fillRect(x, y, size, size);
-  if(LOCS[locKey].dungeon){ ctx.fillStyle = "#3A4757"; for(const r of dgRects) ctx.fillRect(x + r.x*s, y + r.y*s, Math.max(1, r.w*s), Math.max(1, r.h*s)); }
+  if(LOCS[locKey].dungeon) ctx.drawImage(miniDungeon(size, s), x, y, size, size);
   if(locKey === "lobby"){ ctx.fillStyle = "#34414E"; for(const r of rocks){ if(r.rw) ctx.fillRect(x + r.rx*s, y + r.ry*s, r.rw*s, r.rh*s); else { circle(x + r.x*s, y + r.y*s, Math.max(1.5, r.r*s)); ctx.fill(); } } }
   for(const n of npcs){ ctx.fillStyle = n.kind === "portal" || n.kind === "back" ? "#9B7BFF" : (LOBBY_PADS[n.kind] || "#F2A93B"); circle(x + n.x*s, y + n.y*s, 3.5); ctx.fill(); }
   ctx.fillStyle = "#E0694A";
-  for(const e of enemies) if(!e.dead && Math.hypot(e.x-p.x, e.y-p.y) < 700) ctx.fillRect(x + e.x*s - 1, y + e.y*s - 1, 2.5, 2.5);
+  for(const e of enemies) if(!e.dead && Math.abs(e.x - p.x) < 700 && Math.abs(e.y - p.y) < 700) ctx.fillRect(x + e.x*s - 1, y + e.y*s - 1, 2.5, 2.5);
   if(typeof NET !== "undefined"){ ctx.fillStyle = "#7BC98A"; for(const o of NET.others.values()){ circle(x + o.rx*s, y + o.ry*s, 2.5); ctx.fill(); } }
   ctx.fillStyle = "#fff"; circle(x + p.x*s, y + p.y*s, 3); ctx.fill();
   ctx.restore();
@@ -2293,12 +2310,13 @@ function hud(){
   if(typeof targetTick === "function") targetTick(drawDt);
 }
 
-// если 3 секунды подряд кадр дольше 24 мс (меньше ~40 FPS), снижаем разрешение холста ступенькой: 2 → 1,5 → 1
+// если 3 секунды подряд кадр дольше 24 мс (меньше ~40 FPS), упрощаем картинку ступенькой:
+// сначала убираем пятна света на земле (~четверть времени кадра, почти незаметно), потом разрешение холста 2 → 1,5 → 1
 function gfxWatch(ms){
-  if(!running || paused || document.hidden || ms > 250 || dpr <= 1) { GFX.frames = GFX.slow = 0; return; }
+  if(!running || paused || document.hidden || ms > 250 || (dpr <= 1 && !GFX.fx)) { GFX.frames = GFX.slow = 0; return; }
   GFX.frames++; if(ms > 24) GFX.slow++;
   if(GFX.frames < 180) return;
-  if(GFX.slow > GFX.frames*0.6){ GFX.cap = dpr > 1.5 ? 1.5 : 1; resize(); }
+  if(GFX.slow > GFX.frames*0.6){ if(GFX.fx) GFX.fx = false; else { GFX.cap = dpr > 1.5 ? 1.5 : 1; resize(); } }
   GFX.frames = GFX.slow = 0;
 }
 function loop(ts){
@@ -3661,7 +3679,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
   function applyGrant(g){
     const a = +g.payload.amount || 0;
     if(g.by === "market" && g.kind === "scrap"){ S.scrap += a; toast("Маркет: лот продан, получено " + a + " лома"); if(typeof mkRefresh === "function") mkRefresh(); }
-    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
+    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : String(g.by || "").startsWith("special:") ? "Задание выполнено: +" : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
     else if(g.kind === "exp"){ S.exp += a; levelUps(); toast("Администратор выдал " + a + " опыта"); }
     else if(g.kind === "level"){ for(let i = 0; i < a; i++){ S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; } S.hp = stat().maxhp; toast("Администратор поднял уровень до " + S.level); }
     else if(g.kind === "item" && ITEMS[g.payload.item]){
@@ -7572,12 +7590,31 @@ function storyEvent(kind, info, n, type){
 }
 setInterval(stCheck, 1000);                                     // уровень, заточка, локация, PvP проверяются сами
 
-// ---- специальные квесты (пока без функции) ----
+// ---- специальные квесты: вступление в чат и подписку на канал проверяет бот на сервере ----
 const SPECIAL_Q = [
-  {icon:"🛰", name:"Terra_Nova", sub:"Play Terra_Nova", rew:30},
-  {icon:"★", name:"Чат игры", sub:"Вступи в чат игры в Telegram", rew:10},
-  {icon:"★", name:"Безумный мир", sub:"Подпишись на канал «Безумный мир»", rew:20}
+  {key:"chat", icon:"💬", name:"Чат игры", sub:"Вступи в чат игры RF ONLINE", rew:10, url:"https://t.me/RFONLINERPG_CHAT"},
+  {key:"channel", icon:"📢", name:"Канал игры", sub:"Подпишись на канал RF ONLINE", rew:20, url:"https://t.me/RFONLINERPG"},
+  {key:"terranova", icon:"🛰", name:"Terra_Nova", sub:"Play Terra_Nova", rew:30, soon:true}
 ];
+const SPQ = {state:{}, loaded:false, busy:null};
+async function spLoad(){
+  if(typeof NET === "undefined" || !NET.api) return;
+  try{ const r = await NET.api("/api/special/status", {}); if(r && r.ok){ SPQ.state = r.quests || {}; SPQ.loaded = true; if(qTab === "special" && !$("scrQuests").hidden) renderQuests(); } }catch(e){}
+}
+function spOpen(url){
+  const tg = window.Telegram && Telegram.WebApp;
+  if(tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, "_blank");
+}
+async function spClaim(q){
+  if(SPQ.busy) return;
+  SPQ.busy = q.key; renderQuests();
+  try{
+    const r = await NET.api("/api/special/claim", {id:q.key});
+    if(r && r.ok){ SPQ.state[q.key] = {...(SPQ.state[q.key] || {}), done:true}; toast(r.already ? "Награда уже получена" : "✓ Проверено! +" + q.rew + " ядер"); Sfx.play("level"); }
+    else toast((r && r.error) || "Не удалось проверить");
+  }catch(e){ toast("Нет связи с сервером"); }
+  SPQ.busy = null; renderQuests();
+}
 
 // ---- экран ----
 let qTab = "story";
@@ -7600,11 +7637,15 @@ function renderQuests(){
       }).join("");
     }).join("") + (st.i >= STORY_FLAT.length ? `<div class="empty">Все сюжетные квесты выполнены. Новые этажи — в следующих обновлениях</div>` : "");
   } else if(qTab === "special"){
-    body = SPECIAL_Q.map((q, i) => `<section class="qs-card sp">
+    if(!SPQ.loaded) spLoad();
+    body = SPECIAL_Q.map((q, i) => { const done = !q.soon && SPQ.state[q.key] && SPQ.state[q.key].done;
+      return `<section class="qs-card sp ${done ? "done" : ""}">
       <div class="qs-row"><b><i class="qs-ic">${q.icon}</i><span data-notr>${q.name}</span></b><span class="qs-rew">◆ ${q.rew} ядер</span></div>
       <small>${q.sub}</small>
-      <button class="qs-go" type="button" data-qsp="${i}">Перейти</button>
-    </section>`).join("") + `<p class="demo">Специальные квесты заработают в следующих обновлениях</p>`;
+      ${done ? `<div class="qs-ok">✓ Выполнено</div>`
+        : q.soon ? `<button class="qs-go" type="button" data-qsp="${i}">Скоро</button>`
+        : `<div class="qs-btns"><button class="qs-go" type="button" data-qsp="${i}" data-qa="go">Перейти</button><button class="qs-go alt" type="button" data-qsp="${i}" data-qa="check" ${SPQ.busy === q.key ? "disabled" : ""}>${SPQ.busy === q.key ? "Проверяем…" : "Проверить"}</button></div>`}
+    </section>`; }).join("") + `<p class="demo">Вступи или подпишись по кнопке «Перейти», вернись в игру и нажми «Проверить» — бот проверит и выдаст награду</p>`;
   } else {
     const q = qState(), all = q.list.every(t => t.got);
     const end = new Date(); end.setHours(24, 0, 0, 0); const left = end - Date.now(), hh = Math.floor(left/3600000), mm = Math.floor(left%3600000/60000);
@@ -7633,7 +7674,12 @@ openQuests = function(){ qTab = "daily"; showTab("quests"); };
 $("scrQuests").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return;
   if(b.dataset.qtab){ qTab = b.dataset.qtab; $("scrQuests").dataset.tab = ""; renderQuests(); Sfx.play("ui"); return; }
-  if(b.dataset.qsp !== undefined){ toast("Этот квест заработает в следующем обновлении"); Sfx.play("ui"); return; }
+  if(b.dataset.qsp !== undefined){
+    const q = SPECIAL_Q[+b.dataset.qsp]; Sfx.play("ui");
+    if(!q || q.soon){ toast("Этот квест заработает в следующем обновлении"); return; }
+    if(b.dataset.qa === "go") spOpen(q.url); else spClaim(q);
+    return;
+  }
   const q = S.quests; if(!q) return;
   if(b.dataset.qc !== undefined){ const t = q.list[+b.dataset.qc]; if(t && t.done && !t.got){ t.got = true; qGive(t.r); save(); qBadge(); toast("Награда: " + rewText(t.r)); Sfx.play("pick"); renderQuests(); } }
   else if(b.dataset.qb){ if(q.list.every(t => t.got) && !q.bonus){ q.bonus = true; const r = {sph:1, cores:5, scrap:100 + (S.level || 1)*20}; qGive(r); save(); qBadge(); toast("⭐ Бонус дня: " + rewText(r)); Sfx.play("level"); renderQuests(); } }
@@ -7886,7 +7932,7 @@ function groundLight(key){
 function buildGround(){
   const key = locKey + "|" + W + "|" + H + (LOCS[locKey].dungeon && typeof dgRects !== "undefined" ? "|" + dgRects.length : "");
   if(GROUND.key === key) return;
-  GROUND.key = key; GROUND.decals = []; GROUND.light = null;
+  GROUND.key = key; GROUND.decals = []; GROUND.light = null; GROUND.lightPat = null;
   const kinds = DECAL_KINDS[TILE_PAL[locKey] && !LOCS[locKey].dungeon ? locKey : "dungeon"] || DECAL_KINDS.dungeon;
   const pal = TILE_PAL[LOCS[locKey].dungeon ? "dungeon" : locKey] || TILE_PAL.dungeon;
   const rnd = seedRnd("decal|" + locKey);
@@ -7913,10 +7959,18 @@ function drawDecals(cx, cy){
 }
 function drawGround(cx, cy){
   buildGround();
-  if(GROUND.light && !(S.settings && S.settings.lowfx)){
+  if(GROUND.light && GFX.fx && !(S.settings && S.settings.lowfx)){
     // рисуем только видимую часть растянутого холста света
-    const L = GROUND.light, n = L.width, sx = cx/W*n, sy = cy/H*n, sw = vw/W*n, sh = vh/H*n;
-    ctx.imageSmoothingEnabled = true; ctx.drawImage(L, sx, sy, sw, sh, cx, cy, vw, vh);
+    const L = GROUND.light, n = L.width;
+    if(LOCS[locKey].dungeon){
+      // подземелье в десятки раз больше поля: растянутый на всю карту шум давал один пиксель на экран и дорогую отрисовку
+      if(!GROUND.lightPat){ GROUND.lightPat = ctx.createPattern(L, "repeat"); }
+      const k = 180; GROUND.lightPat.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+      ctx.imageSmoothingEnabled = true; ctx.fillStyle = GROUND.lightPat; ctx.fillRect(cx, cy, vw, vh);
+    } else {
+      const sx = cx/W*n, sy = cy/H*n, sw = vw/W*n, sh = vh/H*n;
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(L, sx, sy, sw, sh, cx, cy, vw, vh);
+    }
   }
   drawDecals(cx, cy);
 }
