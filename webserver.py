@@ -298,6 +298,72 @@ async def api_admin_grant(request):
     return web.json_response({"ok": True, "online": delivered, "target": target_name})
 
 
+def set_saved_nick(row, name, now_ms=None):
+    """Обновить индекс позывного и его копию внутри сохранения игрока."""
+    row.nick = name
+    if not row.data:
+        return
+    try:
+        data = json.loads(row.data)
+    except (TypeError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+    state = data.get("S")
+    if not isinstance(state, dict):
+        state = {}
+        data["S"] = state
+    state["name"] = name
+    stamp = int(now_ms if now_ms is not None else time.time() * 1000)
+    state["_ts"] = stamp
+    data["ts"] = stamp
+    row.data = json.dumps(data, ensure_ascii=False)
+    row.updated = stamp // 1000
+
+
+async def api_admin_name(request):
+    body, user = await read_auth(request)
+    if not user["admin"]:
+        raise web.HTTPForbidden(text="not admin")
+    name = str(body.get("name", "")).strip()
+    if not valid_nick(name):
+        return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
+    if name.lower() in RESERVED_NICKS:
+        return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
+
+    target = str(body.get("target", "")).strip().lstrip("@").lower()
+    async with SessionLocal() as s:
+        if target in ("", "me"):
+            row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+            target_name = user["username"] or user["name"]
+            if not row:
+                row = GameSave(tg_id=user["id"], username=user["username"], name=user["name"],
+                               epoch=DATA_EPOCH, data="", updated=int(time.time()))
+                s.add(row)
+        else:
+            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
+            target_name = target
+        if row is None:
+            return web.json_response({"ok": False, "error": "Игрок @" + target_name + " ещё не заходил в игру"})
+        taken = (await s.execute(select(GameSave).where(
+            func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != row.tg_id
+        ))).scalar_one_or_none()
+        if taken:
+            return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
+        tg_id = row.tg_id
+        set_saved_nick(row, name)
+        await s.commit()
+
+    # Не ждать следующего сообщения позиции: всем открытым вкладкам сразу меняем
+    # серверное состояние и приказываем сохранить новый позывной локально.
+    for conn in hub.by_uid.get(tg_id, ()):
+        conn.info["nick"] = name
+    delivered = await push_to_player(tg_id, {"t": "admin_nick", "name": name})
+    log.info("Админ @%s сменил позывной игрока %s на %s", user["username"], target_name, name)
+    return web.json_response({"ok": True, "online": delivered, "target": target_name, "name": name})
+
+
+
 # ---------- гильдии: хранилище документов с проверкой прав ----------
 SEG = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 MAX_DOC = 8_000
