@@ -18,7 +18,8 @@ _hits = {}               # (нападающий, цель) -> [время по�
 _deaths = {}             # жертва -> время последней засчитанной смерти (защита от повторов)
 HIT_WINDOW = 15          # смерть засчитывается, если убийца бил именно эту цель последние 15 с
 DEATH_DEDUP = 5          # повторный pvp_dead той же жертвы в течение 5 с — дубль, игнорируем
-
+RATING_K = 24            # шаг Elo: за равный бой победитель получает 12
+RATING_MIN_GAIN = 4      # даже фаворит получает небольшую награду
 
 def record_hit(attacker_id, target_id, dmg):
     """Сервер запоминает подтверждённые удары: потом по ним проверяется заявка о смерти."""
@@ -79,6 +80,17 @@ def can_fight(a, b):
     return a.get("lvl", 1) >= NEWBIE_LVL and b.get("lvl", 1) >= NEWBIE_LVL
 
 
+def rating_change(winner_rating, loser_rating):
+    """Elo-награда: андердог получает больше, фаворит — меньше.
+
+    Рейтинги из клиента здесь не участвуют: вызывающий код передаёт только
+    значения из PvpStat. Ограничение снизу не даёт победе остаться без награды.
+    """
+    expected = 1.0 / (1.0 + 10 ** ((loser_rating - winner_rating) / 400.0))
+    return max(RATING_MIN_GAIN, min(RATING_K, round(RATING_K * (1.0 - expected))))
+
+
+
 def on_hit(attacker, target):
     """Нападение на «чистого» пилота (без кармы и флага) делает нападающего фиолетовым."""
     if not flagged(target) and not target.get("kr"):
@@ -98,9 +110,9 @@ async def on_death(victim, killer):
         v.deaths += 1
         if guilty:
             if fresh:
-                gain = max(5, min(25, 12 + (victim.get("lvl", 1) - killer.get("lvl", 1))))
+                gain = rating_change(k.rating, v.rating)
                 k.rating += gain
-                v.rating = max(0, v.rating - gain // 2)
+                v.rating = max(0, v.rating - gain)
         else:
             k.pk += 1
             k.karma += 2 if victim.get("lvl", 1) <= killer.get("lvl", 1) - 10 else 1
