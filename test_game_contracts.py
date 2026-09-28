@@ -82,5 +82,19 @@ class ButtonContractTests(unittest.TestCase):
         self.assertEqual(missing, [], f"Кнопки без найденного обработчика: {missing}")
 
 
+class QuestBadgeContractTests(unittest.TestCase):
+    def test_claim_refreshes_badge_before_rerendering_quest_screen(self):
+        """The notification must clear even if the optional screen render fails."""
+        handler = re.search(
+            r'\$\("scrQuests"\)\.addEventListener\("click", e => \{(.*?)\n\}\);',
+            GAME,
+            re.S,
+        )
+        self.assertIsNotNone(handler)
+        claim_branch = handler.group(1)
+        self.assertRegex(claim_branch, r"save\(\); qBadge\(\);.*?renderQuests\(\);")
+
+
+
 if __name__ == "__main__":
     unittest.main()
