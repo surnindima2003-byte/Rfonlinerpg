@@ -7477,8 +7477,8 @@ $("scrQuests").addEventListener("click", e => {
   if(b.dataset.qtab){ qTab = b.dataset.qtab; $("scrQuests").dataset.tab = ""; renderQuests(); Sfx.play("ui"); return; }
   if(b.dataset.qsp !== undefined){ toast("Этот квест заработает в следующем обновлении"); Sfx.play("ui"); return; }
   const q = S.quests; if(!q) return;
-  if(b.dataset.qc !== undefined){ const t = q.list[+b.dataset.qc]; if(t && t.done && !t.got){ t.got = true; qGive(t.r); save(); toast("Награда: " + rewText(t.r)); Sfx.play("pick"); renderQuests(); qBadge(); } }
-  else if(b.dataset.qb){ if(q.list.every(t => t.got) && !q.bonus){ q.bonus = true; const r = {sph:1, cores:5, scrap:100 + (S.level || 1)*20}; qGive(r); save(); toast("⭐ Бонус дня: " + rewText(r)); Sfx.play("level"); renderQuests(); qBadge(); } }
+  if(b.dataset.qc !== undefined){ const t = q.list[+b.dataset.qc]; if(t && t.done && !t.got){ t.got = true; qGive(t.r); save(); qBadge(); toast("Награда: " + rewText(t.r)); Sfx.play("pick"); renderQuests(); } }
+  else if(b.dataset.qb){ if(q.list.every(t => t.got) && !q.bonus){ q.bonus = true; const r = {sph:1, cores:5, scrap:100 + (S.level || 1)*20}; qGive(r); save(); qBadge(); toast("⭐ Бонус дня: " + rewText(r)); Sfx.play("level"); renderQuests(); } }
 });
 // значок на вкладке «Квесты» нижней панели — сколько наград ждёт
 qBadge = function(){
