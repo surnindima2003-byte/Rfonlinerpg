@@ -1638,7 +1638,7 @@ function update(dt){
     p.x += mx*speed*dt; p.y += my*speed*dt;
     const target = Math.atan2(my, mx); const da = ((target - p.ang + Math.PI*3) % (Math.PI*2)) - Math.PI; p.ang += da*Math.min(1, dt*12);
   }
-  pushOut(p, p.r); slide(p, ox0, oy0, p.r); guardGate();
+  pushOut(p, p.r); slide(p, ox0, oy0, p.r); unstick(p, p.r); guardGate();
   if(safeSpot(p)) S.hp = Math.min(st.maxhp, S.hp + st.maxhp*(locKey === "lobby" ? 0.15 : 0.05)*dt);
   if(st.regen) S.hp = Math.min(st.maxhp, S.hp + st.regen*dt);
   if(S.cp === undefined || S.cp > st.maxcp) S.cp = st.maxcp;
@@ -1655,7 +1655,12 @@ function update(dt){
   const CP = classParams();
   const RANGE = CP.range + st.range;
   const locked = typeof lockedEnemy === "function" ? lockedEnemy() : null;
-  const t = locKey === "lobby" ? null : (locked && Math.hypot(locked.x-p.x, locked.y-p.y) < Math.max(RANGE, 240) + 160 ? locked : nearestEnemy(Math.max(RANGE, 240) + (auto ? 40 : 0))); p.target = t;
+  // мобы атакуются, только если взяты в цель или включено АВТО; кнопка «УДАР» без цели берёт в цель ближайшего
+  if(firing && !locked && !auto && locKey !== "lobby" && !(typeof tgtPlayer === "function" && tgtPlayer())){
+    const n = nearestEnemy(Math.max(RANGE, 240)); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); }
+  }
+  const lockedNow = typeof lockedEnemy === "function" ? lockedEnemy() : null;
+  const t = locKey === "lobby" ? null : lockedNow ? (Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : auto ? nearestEnemy(Math.max(RANGE, 240) + 40) : null; p.target = t;
   const inReach = t && Math.hypot(t.x-p.x, t.y-p.y) <= RANGE + NPCS[t.type].r + (auto ? 10 : 0) && los(p.x, p.y, t.x, t.y);
   const wantAim = t ? Math.atan2(t.y-p.y, t.x-p.x) : p.ang;
   const da2 = ((wantAim - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += da2*Math.min(1, dt*16);
@@ -3729,7 +3734,9 @@ function useSkill(i){
   if(!C){ openClassSheet(); return; }
   if(!p || p.dead || paused || CB.cd[i] > 0) return;
   const st = stat(), s = skillAt(C.skills[i], skillLv(C.skills[i].id)), atk = st.atk*(1 + buffV("atk"))*(1 + st.skillDmg);
-  const need = r => { const t = locKey === "lobby" ? null : nearestEnemy(r); if(!t) toast("Нет цели рядом"); return t; };
+  const need = r => { const lk = typeof lockedEnemy === "function" ? lockedEnemy() : null;
+    const t = locKey === "lobby" ? null : lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r ? lk : nearestEnemy(r);
+    if(!t) toast("Нет цели рядом"); else if(!lk){ tgt = {kind:"enemy", e:t}; renderTargetFrame(); } return t; };
   switch(s.type){
     case "strike": { const t = need(C.range + 60); if(!t) return;
       hitEnemy(t, atk*s.mult, s.big ? "plasma" : C.melee ? "strike-m" : "beam"); if(s.stun) t.stun = s.stun; break; }
@@ -3740,13 +3747,13 @@ function useSkill(i){
     case "leap": { const t = need(s.dist); if(!t) return;
       const a = Math.atan2(t.y-p.y, t.x-p.x), d = Math.max(0, Math.hypot(t.x-p.x, t.y-p.y) - NPCS[t.type].r - 24);
       CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*d, y2:p.y + Math.sin(a)*d, life:.3, max:.3, c:C.color});
-      p.x += Math.cos(a)*d; p.y += Math.sin(a)*d; pushOut(p, p.r); p.ang = p.aim = a; p.inv = 0.3;
+      [p.x, p.y] = landAlong(p.x, p.y, p.x + Math.cos(a)*d, p.y + Math.sin(a)*d, p.r); pushOut(p, p.r); unstick(p, p.r); p.ang = p.aim = a; p.inv = 0.3;
       hitEnemy(t, atk*s.mult, "strike-m"); break; }
     case "dash": {
       const a = p.ang;
       if(s.instant){
         CB.fx.push({type:"ring", x:p.x, y:p.y, r:34, life:.35, max:.35, c:C.color});
-        const bx = p.x, by = p.y; p.x += Math.cos(a)*s.dist; p.y += Math.sin(a)*s.dist; pushOut(p, p.r);
+        const bx = p.x, by = p.y; p.x += Math.cos(a)*s.dist; p.y += Math.sin(a)*s.dist; pushOut(p, p.r); unstick(p, p.r);
         if(!walkable(p.x, p.y, 14)){ p.x = bx; p.y = by; toast("Телепорт в стену невозможен"); }
         CB.fx.push({type:"ring", x:p.x, y:p.y, r:34, life:.35, max:.35, c:C.color});
       } else { p.dashT = s.dist/1150; p.dx = Math.cos(a); p.dy = Math.sin(a); }
@@ -5946,10 +5953,35 @@ function los(x1, y1, x2, y2){
   for(let i = 1; i < n; i++){ if(!walkable(x1 + (x2 - x1)*i/n, y1 + (y2 - y1)*i/n, 0)) return false; }
   return true;
 }
+// рывок/притяжение: идём по лучу шагами и останавливаемся в последней точке, где робот целиком на полу
+function landAlong(x0, y0, x1, y1, r){
+  const m = r*0.7, d = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.ceil(d/8));
+  let lx = x0, ly = y0;
+  for(let i = 1; i <= n; i++){
+    const x = x0 + (x1 - x0)*i/n, y = y0 + (y1 - y0)*i/n;
+    if(!walkable(x, y, m)) break;
+    lx = x; ly = y;
+  }
+  return [lx, ly];
+}
+// если робот всё же оказался в стене — переносим в ближайшую свободную точку (по кольцам до 240 px)
+function unstick(o, r){
+  const m = r*0.7;
+  if(walkable(o.x, o.y, m)) return false;
+  for(let rad = 8; rad <= 240; rad += 8){
+    const steps = Math.max(8, Math.round(rad/4));
+    for(let k = 0; k < steps; k++){
+      const a = k/steps*Math.PI*2, x = o.x + Math.cos(a)*rad, y = o.y + Math.sin(a)*rad;
+      if(walkable(x, y, m)){ o.x = x; o.y = y; return true; }
+    }
+  }
+  return false;
+}
 // скольжение вдоль стены: если шаг увёл в стену, пробуем сдвиг только по одной оси
 function slide(o, ox, oy, r){
   const m = r*0.7;
   if(walkable(o.x, o.y, m)) return;
+  if(!walkable(ox, oy, m)){ o.x = ox; o.y = oy; unstick(o, r); return; }   // стояли в стене — выбираемся, а не замираем
   if(walkable(o.x, oy, m)){ o.y = oy; return; }
   if(walkable(ox, o.y, m)){ o.x = ox; return; }
   o.x = ox; o.y = oy;
@@ -6844,8 +6876,7 @@ useSkill = function(i){
   if(s.type === "leap"){                                          // рывок к пилоту, как к мобу
     const a = Math.atan2(o.ry - p.y, o.rx - p.x), step = Math.max(0, d - 40), bx = p.x, by = p.y;
     CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*step, y2:p.y + Math.sin(a)*step, life:.3, max:.3, c:C.color});
-    p.x += Math.cos(a)*step; p.y += Math.sin(a)*step; pushOut(p, p.r);
-    if(!walkable(p.x, p.y, 14)){ p.x = bx; p.y = by; }
+    [p.x, p.y] = landAlong(bx, by, bx + Math.cos(a)*step, by + Math.sin(a)*step, p.r); pushOut(p, p.r); unstick(p, p.r);
     p.ang = p.aim = a; p.inv = 0.3;
   }
   const st = stat(), hits = s.type === "burst" ? (s.n || 3) : 1;
