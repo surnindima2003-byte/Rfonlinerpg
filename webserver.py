@@ -28,6 +28,7 @@ from game_data import STARTING_STATS
 import gram
 import items
 import pvp
+import pvpguard
 import progress
 import stats
 from config import WEBAPP_URL
@@ -772,6 +773,7 @@ async def handle_party(d, info):
         except (TypeError, ValueError):
             amount = 0
         amount = max(1, min(amount, 20 + 5 * info["lvl"], 400))
+        pvpguard.heal(other, amount, tgt.get("mhp", 1))
         await push_to_player(other, {"t": "healed", "from": info["nick"], "amount": amount})
     elif t == "pxp":
         pid = member_party.get(uid)
@@ -794,10 +796,15 @@ def clean_pos(d, info):
     """Берём из сообщения только допустимые поля, чтобы нельзя было прислать мусор другим игрокам."""
     try:
         loc = d.get("loc")
-        if loc in LOCS:
-            info["loc"] = loc
-        for k in ("x", "y"):
-            info[k] = round(max(0.0, min(8000.0, float(d.get(k, 0)))), 1)     # 0,1 px хватает, а снимок короче
+        new_loc = loc if loc in LOCS else info.get("loc")
+        nx = round(max(0.0, min(8000.0, float(d.get("x", 0)))), 1)            # 0,1 px хватает, а снимок короче
+        ny = round(max(0.0, min(8000.0, float(d.get("y", 0)))), 1)
+        # скорость: прыжок дальше возможного не принимаем, телефону отправим поправку
+        if pvpguard.check_move(info, nx, ny, new_loc, d.get("dead")):
+            info["x"], info["y"] = nx, ny
+        else:
+            info["pos_fix"] = True
+        info["loc"] = new_loc
         for k in ("ang", "aim"):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
@@ -819,6 +826,7 @@ def clean_pos(d, info):
         info["cp"] = max(0, min(1000000, int(d.get("cp", 0))))
         info["mcp"] = max(1, min(1000000, int(d.get("mcp", 1))))
         info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
+        info["df"] = int(d["df"]) if isinstance(d.get("df"), (int, float)) else None
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
@@ -826,6 +834,9 @@ def clean_pos(d, info):
         info["seen"] = time.time()
     except (TypeError, ValueError):
         pass
+    # пределы прочности/CP/брони по уровню, в бою — серверный учёт CP и прочности
+    pvpguard.sanitize(info, progress.bm_cap(info.get("lvl", 1)))
+    pvpguard.on_report(info)
 
 
 PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
@@ -929,6 +940,8 @@ async def handle_pvp(d, info):
     if time.time() - info.get("pvp_t", 0) < 0.3:
         metrics.inc("pvp.cooldown_drop")
         return
+    if info.get("srv_dead_until", 0) > time.time() or tgt.get("srv_dead_until", 0) > time.time():
+        return                                   # сервер уже засчитал смерть одного из них
     pid = member_party.get(info["id"])
     if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
         return                                   # союзников не бьём
@@ -943,11 +956,46 @@ async def handle_pvp(d, info):
     dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
     pvp.on_hit(info, tgt)
     pvp.record_hit(info["id"], to, dmg)
-    hit = {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": bool(d.get("crit")), "skill": skill}
+    dead = pvpguard.on_hit(tgt, dmg)                # сервер сам ведёт CP и прочность жертвы
+    crit = bool(d.get("crit"))
+    hit = {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": crit, "skill": skill}
     if d.get("hid"):
         hit["hid"] = str(d.get("hid"))[:24]
     hub.to_uid(to, hit)
+    broadcast_pvp_fx(info, tgt, dmg, crit, skill)
     metrics.inc("pvp.hit")
+    if dead:
+        await server_kill(tgt, info)
+
+
+PVP_FX_RADIUS2 = 1100 ** 2
+
+
+def broadcast_pvp_fx(att, vic, dmg, crit, skill):
+    """Удар видят все рядом: снаряд, цифра урона, полоски прочности обновляются сразу."""
+    fx = realtime.encode({"t": "pfx", "a": att["id"], "v": vic["id"], "d": dmg, "c": 1 if crit else 0, "s": 1 if skill else 0,
+                          "k": att.get("cls", ""), "hp": vic.get("hp", 0), "cp": vic.get("cp", 0)})
+    ax, ay, vx, vy = att.get("x", 0), att.get("y", 0), vic.get("x", 0), vic.get("y", 0)
+    for c in list(hub.by_loc.get(att["loc"], ())):
+        i = c.info
+        x, y = i.get("x", 0), i.get("y", 0)
+        if (x - ax) ** 2 + (y - ay) ** 2 <= PVP_FX_RADIUS2 or (x - vx) ** 2 + (y - vy) ** 2 <= PVP_FX_RADIUS2:
+            c.push(fx)
+
+
+async def server_kill(victim, killer):
+    """По расчёту сервера прочность жертвы кончилась, а её телефон о смерти не сообщил."""
+    if not pvp.claim_death(victim["id"], killer["id"]):
+        return
+    pvpguard.clear(victim["id"])
+    victim["srv_dead_until"] = time.time() + 6
+    victim["dead"] = True
+    to_killer, to_victim = await pvp.on_death(victim, killer)
+    hub.to_uid(killer["id"], to_killer)
+    hub.to_uid(victim["id"], {"t": "pvp_force_dead", "by": killer["id"], "nick": killer["nick"]})
+    hub.to_uid(victim["id"], to_victim)
+    metrics.inc("pvp.death_by_server")
+    log.warning("PvP: смерть засчитана сервером, uid=%s (телефон не сообщил)", victim["id"])
 
 
 async def handle_pvp_dead(d, info):
@@ -961,6 +1009,7 @@ async def handle_pvp_dead(d, info):
     if not pvp.claim_death(info["id"], killer["id"]):
         metrics.inc("pvp.death_rejected")
         return
+    pvpguard.clear(info["id"])
     to_killer, to_victim = await pvp.on_death(info, killer)
     hub.to_uid(killer["id"], to_killer)
     hub.to_uid(info["id"], to_victim)
@@ -1107,6 +1156,9 @@ async def ws_handler(request):
                 clean_pos(d, info)
                 if info["loc"] != old_loc:
                     hub.moved(conn, old_loc)
+                if info.pop("pos_fix", False) and time.time() - info.get("fix_t", 0) > 1:
+                    info["fix_t"] = time.time()                      # вернуть телефон на последнюю честную точку
+                    conn.push(realtime.encode({"t": "pos_fix", "x": info["x"], "y": info["y"]}))
                 # удары по мобам и убийства едут в том же сообщении: сервер гарантированно видит удары раньше убийства
                 if d.get("mh"):
                     mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
@@ -1239,6 +1291,7 @@ async def cleanup_loop():
             for uid in [u for u in member_party if u not in online_ids]:
                 await party_leave(uid)                         # пати без живых участников не висят вечно
             pvp.cleanup(online_ids)
+            pvpguard.cleanup()
             mobguard.cleanup(online_ids)
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})

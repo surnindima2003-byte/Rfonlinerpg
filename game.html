@@ -90,6 +90,9 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .hud-res{display:flex;gap:10px;font-size:12px;margin-top:5px;opacity:.9}
 .side{position:absolute;left:8px;top:calc(var(--hb, 120px) + 6px);display:flex;flex-direction:column;gap:6px}
 .side button{background:rgba(20,27,34,.82);border:1px solid #34414E;color:#E4DED1;border-radius:10px;padding:6px 10px;font-size:12px;text-align:left}
+.side .pk-btn{border-color:#6A3A3A;color:#E08A7A;font-weight:600}
+.side .pk-btn[aria-pressed="true"]{background:rgba(120,24,24,.9);border-color:#FF5A4A;color:#fff;box-shadow:0 0 10px rgba(255,70,50,.55)}
+.side .pk-btn[hidden]{display:none}
 .loc-name{position:absolute;right:8px;top:103px;width:96px;text-align:center;color:#E4DED1;font-size:11px;opacity:.8;pointer-events:none}
 .zone-tag{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);color:#E4DED1;font:20px 'Russo One',sans-serif;opacity:0;transition:opacity .6s;pointer-events:none;text-shadow:0 2px 8px #000;text-align:center;white-space:nowrap}
 .zone-tag small{display:block;font:13px Rubik,sans-serif;opacity:.8}
@@ -468,10 +471,10 @@ button.li{width:100%;font:inherit;color:inherit}
 .tf-tx b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tf-tx small{display:block;font-size:11px;color:#93A0AC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tf-x{background:none;border:0;color:#93A0AC;font-size:15px;padding:2px 4px}
-.tf-bar{position:relative;height:12px;margin-top:4px;border-radius:6px}
+.tf-bar{position:relative;height:16px;margin-top:4px;border-radius:6px}
 .tf-cp{height:5px;margin-top:6px}.tf-cp[hidden]{display:none}.tf-cp i{background:linear-gradient(90deg,#C4901C,#F2C14B)}
 .tf-bar i{background:linear-gradient(90deg,#E0694A,#F2A93B)}
-.tf-bar span{position:absolute;inset:0;display:grid;place-items:center;font-size:9px;font-weight:700;text-shadow:0 1px 2px #000}
+.tf-bar span{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:700;letter-spacing:.3px;text-shadow:0 1px 2px #000}
 .tf-acts{display:flex;gap:5px;margin-top:6px}
 .tf-acts:empty{display:none}
 .tf-acts button{flex:1;border:1px solid #34414E;background:#1B232C;color:#E4DED1;border-radius:8px;padding:6px 2px;font-size:11px;font-weight:500}
@@ -925,6 +928,7 @@ textarea.field{min-height:70px;resize:vertical}
     </div>
     <div class="side">
       <button type="button" id="bagBtn">Сумка</button>
+      <button type="button" id="pkBtn" class="pk-btn" aria-pressed="false" hidden>⚔ ПК</button>
       <button type="button" id="adminBtn" hidden style="color:#F2C14B;border-color:#F2C14B">Админ</button>
     </div>
     <div class="loc-name" id="locName">Ангар</div>
@@ -1729,12 +1733,11 @@ let steam = [];
 const LOBBY_PADS = {trader:"#7BC98A", storage:"#5FD4E8", craft:"#E0694A", portal:"#9B7BFF"};
 function drawLobby(cx, cy, t){
   ctx.fillStyle = "#0F151B"; ctx.fillRect(cx, cy, vw, vh);
-  // пол из стальных плит с заклёпками
-  for(let x = 60; x < W-60; x += 110) for(let y = 60; y < H-60; y += 110){
-    if(x+110 < cx || x > cx+vw || y+110 < cy || y > cy+vh) continue;
-    ctx.fillStyle = ((x+y)/110) % 2 ? "#1C252E" : "#1F2932"; ctx.fillRect(x, y, 108, 108);
-    ctx.fillStyle = "#2A3440";
-    for(const [a, b] of [[6,6],[100,6],[6,100],[100,100]]){ circle(x+a, y+b, 2); ctx.fill(); }
+  // пол как в Железном каньоне: крупная каменистая плитка, пятна света и тени, трещины и мусор
+  if(typeof tilePattern === "function"){
+    const x0 = Math.max(60, cx), y0 = Math.max(60, cy), x1 = Math.min(W - 60, cx + vw), y1 = Math.min(H - 60, cy + vh);
+    if(x1 > x0 && y1 > y0){ ctx.fillStyle = tilePattern("lobby"); ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+    drawGround(cx, cy);
   }
   // решётчатые дорожки от центра к станциям
   ctx.save(); ctx.lineCap = "round";
@@ -2006,7 +2009,9 @@ function drawBot(x, y, ang, aim, t, moving, flash){
   drawMech(ctx, x, y, {cls:S.cls, fac:S.faction, eq:eqGrades(S.eq), aim, moving, t, flash, atk:(p && p.atkT > 0) ? p.atkT/0.25 : 0, ps:1.5});
   const myG = (typeof gCur !== "undefined" && gCur) ? {tag:gCur.tag, name:gCur.name, icon:(gCur.emblem || {}).icon, color:(gCur.emblem || {}).color} : null;
   const myCol = (S.pvpKr || 0) > 0 ? "#E0463A" : (typeof pvpFlagUntil !== "undefined" && pvpFlagUntil > now) ? "#B07CFF" : window.NET_ADMIN ? "#F2C14B" : "#E4DED1";
-  drawNameStack(x, y - 28, (window.NET_ADMIN ? "[ADM] " : "") + S.name, myCol, myG);
+  const bars = typeof unitBars === "function" && unitBars();
+  if(bars){ const st = stat(); drawUnitBars(x, y, S.hp, st.maxhp, Math.min(S.cp ?? st.maxcp, st.maxcp), st.maxcp); }
+  drawNameStack(x, y - (bars ? 36 : 28), (window.NET_ADMIN ? "[ADM] " : "") + S.name, myCol, myG);
 }
 
 function drawEnemy(e, t){
@@ -2119,8 +2124,10 @@ function draw(t){
   drawDrops();
   for(const e of enemies) if(!e.dead && e.x > cx - 80 && e.x < cx + vw + 80 && e.y > cy - 100 && e.y < cy + vh + 80) drawEnemy(e, t);
   drawClassFx(drawDt);
+  if(typeof drawPvpUnder === "function") drawPvpUnder(t);
   if(typeof drawOthers === "function") drawOthers(t, drawDt);
   if(!p.dead) drawBot(p.x, p.y, p.ang, p.aim, t, p.moving, p.flash);
+  if(typeof drawPvpLayer === "function") drawPvpLayer(t, drawDt);
   if(locKey === "lobby") drawLobbyOverlay(t, drawDt);
   for(const b of bolts){ ctx.fillStyle = "#E0694A"; ctx.shadowColor = "#E0694A"; ctx.shadowBlur = 10; circle(b.x, b.y, 5); ctx.fill(); ctx.shadowBlur = 0; }
   for(const b of beams){
@@ -3565,7 +3572,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     const eq = {}; for(const k in S.eq) if(S.eq[k]) eq[k] = S.eq[k].g;
     const msg = {t:"pos", loc:locKey, x:Math.round(p.x), y:Math.round(p.y), ang:+p.ang.toFixed(2), aim:+p.aim.toFixed(2), moving:p.moving, dead:p.dead,
       nick:S.name, fac:S.faction, lvl:S.level, eq, wpn:S.eq.weapon ? S.eq.weapon.id : "", cls:S.cls || "",
-      hp:Math.ceil(S.hp), mhp:stat().maxhp, cp:Math.ceil(S.cp ?? stat().maxcp), mcp:stat().maxcp, bm:combatPower(),
+      hp:Math.ceil(S.hp), mhp:stat().maxhp, cp:Math.ceil(S.cp ?? stat().maxcp), mcp:stat().maxcp, bm:combatPower(), df:stat().def,
       gt:gCur ? gCur.tag : "", gn:gCur ? gCur.name : "", gi:gCur && gCur.emblem ? gCur.emblem.icon : "", gc:gCur && gCur.emblem ? gCur.emblem.color : ""};
     const js = JSON.stringify(msg);
     // удары по мобам и убийства едут в этом же сообщении: так сервер всегда видит удары раньше убийства
@@ -3630,11 +3637,13 @@ function drawOthers(t, dt){
     const cx0 = window.camX || 0, cy0 = window.camY || 0;
     if(o.rx < cx0 - 90 || o.rx > cx0 + vw + 90 || o.ry < cy0 - 40 || o.ry > cy0 + vh + 160) continue;
     const F = FACTIONS[o.fac] || FACTIONS.aegis;
-    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.moving, t:t + (o.id % 7), ps:1.5});
+    if(o.flashT > 0) o.flashT -= dt || 0.016;
+    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.moving, t:t + (o.id % 7), ps:1.5, flash:o.flashT > 0 ? o.flashT : 0});
     const name = String(o.nick || "Пилот").slice(0, 16);
     const mate = typeof inParty === "function" && inParty(o.id);
-    if(typeof tgt !== "undefined" && tgt && tgt.kind === "player" && tgt.id === o.id){ ctx.save(); ctx.strokeStyle = mate ? "rgba(123,201,138,.9)" : "rgba(242,169,59,.9)"; ctx.lineWidth = 2; ctx.setLineDash([6,5]); ctx.lineDashOffset = -t*20; ctx.beginPath(); ctx.ellipse(o.rx, o.ry, 24, 9, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
-    drawNameStack(o.rx, o.ry - 28, (mate ? "◆ " : "") + (o.admin ? "[ADM] " : "") + name + " · " + (+o.lvl || 1), o.kr > 0 ? "#E0463A" : o.fl ? "#B07CFF" : mate ? "#7BC98A" : (o.admin ? "#F2C14B" : F.color),
+    const bars = typeof unitBars === "function" && unitBars();
+    if(bars) drawUnitBars(o.rx, o.ry, +o.hp || 0, +o.mhp || 1, +o.cp || 0, +o.mcp || 1);
+    drawNameStack(o.rx, o.ry - (bars ? 36 : 28), (mate ? "◆ " : "") + (o.admin ? "[ADM] " : "") + name + " · " + (+o.lvl || 1), o.kr > 0 ? "#E0463A" : o.fl ? "#B07CFF" : mate ? "#7BC98A" : (o.admin ? "#F2C14B" : F.color),
       o.gt ? {tag:String(o.gt).slice(0, 4), name:String(o.gn || "").slice(0, 20), icon:o.gi, color:o.gc} : null);
   }
 }
@@ -5932,7 +5941,7 @@ function drawDungeon(cx, cy, t){
     ctx.fillStyle = typeof tilePattern === "function" ? tilePattern(r.corr ? "corr" : "dungeon") : (r.corr ? "#232E3A" : "#283441");
     ctx.fillRect(r.x, r.y, r.w, r.h);
   }
-  if(typeof drawDecals === "function") drawDecals(cx, cy);
+  if(typeof drawGround === "function") drawGround(cx, cy); else if(typeof drawDecals === "function") drawDecals(cx, cy);
   // лицевая грань стены над комнатами и светильники
   for(const r of dgRects){
     if(!vis(r) || r.corr) continue;
@@ -6704,10 +6713,7 @@ function pvpStrike(o, dmg, crit, skill){
   if(!(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1)) return;
   NET.ws.send(JSON.stringify({t:"pvp", to:o.id, dmg, crit, skill:!!skill}));
   if(!o.fl && !(o.kr > 0)) pvpFlagUntil = now + 30;          // напал на «чистого» — сам становишься фиолетовым
-  const C = classParams();
-  if(C.melee) CB.fx.push({type:"slash", x:o.rx, y:o.ry - 16, a:p.aim, life:.2, max:.2, c:C.color || "#fff"});
-  else beams.push({x1:p.x + Math.cos(p.aim)*24, y1:p.y - 26 + Math.sin(p.aim)*24, x2:o.rx, y2:o.ry - 20, life:0.12});
-  addText(o.rx + (Math.random()*16 - 8), o.ry - 60, (crit ? "КРИТ -" : "-") + dmg, crit ? "#F2C14B" : "#FF8A6A");
+  if(typeof spawnPvpShot === "function") spawnPvpShot(NET.id, o.id, S.cls || "", crit, !!skill, dmg, true);
   Sfx.play(crit ? "crit" : "shot");
 }
 // входящие удары и победы
@@ -6777,6 +6783,192 @@ useSkill = function(i){
 };
 // карма смывается убийством мобов — раз в 2 минуты сверяем её с сервером
 setInterval(async () => { if((S.pvpKr || 0) > 0 && typeof NET !== "undefined" && NET.on && NET.id){ try{ const r = await NET.api("/api/pvp/top", {}); if(r && r.ok) S.pvpKr = r.me.karma; }catch(e){} } }, 120000);
+// ===================== PvP 2.0: СНАРЯДЫ, ЦИФРЫ УРОНА, КОЛЬЦА, ПОЛОСКИ, РЕЖИМ ПК =====================
+// Каждый удар в PvP сервер рассылает всем рядом (pfx): все видят снаряд, попадание и цифру урона,
+// а полоски прочности над пилотами обновляются сразу, не дожидаясь следующего снимка мира.
+let pkMode = false;
+const PVPFX = {shots:[], nums:[], sparks:[], slashes:[]};
+// как выглядит удар каждого класса
+const PVP_STYLE = {
+  techno:{kind:"orb", c1:"#C77DFF", c2:"#5FD4E8", speed:620},      // сгустки плазмы с искрами-спутниками
+  sniper:{kind:"tracer", c1:"#EFFFD8", c2:"#7BC98A", speed:1700},   // быстрый трассер
+  guard:{kind:"melee", c1:"#FFB26B", c2:"#E08A4E"},
+  reaper:{kind:"melee", c1:"#D6B8FF", c2:"#9B7BFF"},
+  "":{kind:"bolt", c1:"#BFF6FF", c2:"#5FD4E8", speed:1000}
+};
+const unitBars = () => typeof locKey !== "undefined" && LOCS[locKey] && !LOCS[locKey].safe;
+function pvpPos(id){
+  if(typeof NET !== "undefined" && NET.id && id === NET.id) return p && !p.dead ? {x:p.x, y:p.y} : null;
+  const o = typeof NET !== "undefined" ? NET.others.get(id) : null;
+  return o && !o.dead ? {x:o.rx, y:o.ry} : null;
+}
+function pvpNum(toId, x, y, dmg, crit){
+  const stack = PVPFX.nums.filter(n => n.to === toId && n.life > .55).length;
+  PVPFX.nums.push({to:toId, x:x + (Math.random()*14 - 7), y:y - 86 - stack*16, t:(crit ? "КРИТ " : "") + Math.round(dmg), crit, life:1, max:1});
+  if(PVPFX.nums.length > 40) PVPFX.nums.shift();
+}
+function pvpImpact(x, y, st, crit, skill){
+  const n = crit || skill ? 14 : 8;
+  for(let i = 0; i < n; i++){ const a = Math.random()*Math.PI*2, v = 60 + Math.random()*(crit ? 190 : 120);
+    PVPFX.sparks.push({x, y:y - 22, vx:Math.cos(a)*v, vy:Math.sin(a)*v - 40, life:.35 + Math.random()*.25, c:Math.random() < .5 ? st.c1 : st.c2}); }
+  if(PVPFX.sparks.length > 220) PVPFX.sparks.splice(0, PVPFX.sparks.length - 220);
+  if(skill || crit) CB.fx.push({type:"ring", x, y, r:skill ? 40 : 26, life:.3, max:.3, c:crit ? "#F2C14B" : st.c1});
+}
+// снаряд от атакующего к цели; showNum — рисовать цифру (жертва видит свою цифру через hurtByPlayer)
+function spawnPvpShot(fromId, toId, cls, crit, skill, dmg, showNum){
+  const a = pvpPos(fromId), b = pvpPos(toId); if(!b) return;
+  const st = PVP_STYLE[cls] || PVP_STYLE[""];
+  if(st.kind === "melee" || !a){
+    PVPFX.slashes.push({x:b.x, y:b.y - 22, a:a ? Math.atan2(b.y - a.y, b.x - a.x) : 0, life:.22, max:.22, st, big:crit || skill});
+    pvpImpact(b.x, b.y, st, crit, skill);
+    if(showNum) pvpNum(toId, b.x, b.y, dmg, crit);
+    return;
+  }
+  const d = Math.hypot(b.x - a.x, b.y - a.y), dur = Math.max(.07, Math.min(.5, d/st.speed));
+  PVPFX.shots.push({from:fromId, to:toId, x0:a.x, y0:a.y - 26, x:a.x, y:a.y - 26, bx:b.x, by:b.y, t:0, dur, st, crit, skill, dmg, showNum, trail:[]});
+  if(PVPFX.shots.length > 60) PVPFX.shots.shift();
+}
+// ---- земля под пилотами: своё кольцо и кольцо выбранной цели ----
+function ringAt(x, y, col, t, rx, spin){
+  ctx.save(); ctx.translate(x, y);
+  ctx.globalAlpha = .22; ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, 0, rx, rx*.38, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = .9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, rx, rx*.38, 0, 0, Math.PI*2); ctx.stroke();
+  if(spin){
+    ctx.lineWidth = 3;
+    for(let i = 0; i < 4; i++){ const a0 = t*1.8 + i*Math.PI/2; ctx.beginPath(); ctx.ellipse(0, 0, rx + 5, (rx + 5)*.38, 0, a0, a0 + .55); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+function drawPvpUnder(t){
+  if(!unitBars() || typeof NET === "undefined") return;
+  // пилоты-агрессоры и красные видны издалека по цвету круга под ногами
+  for(const o of NET.others.values()){
+    if(o.dead) continue;
+    if(o.kr > 0) ringAt(o.rx, o.ry, "#E0463A", t, 20, false);
+    else if(o.fl) ringAt(o.rx, o.ry, "#B07CFF", t, 20, false);
+  }
+  if(p && !p.dead){
+    const col = (S.pvpKr || 0) > 0 ? "#E0463A" : pvpFlagUntil > now ? "#B07CFF" : (FACTIONS[S.faction] || FACTIONS.aegis).color;
+    ringAt(p.x, p.y, col, t, 22, S.pvpT > now);
+  }
+  const o = typeof tgtPlayer === "function" ? tgtPlayer() : null;
+  if(o && !o.dead){
+    const mate = isFriend(o), foe = !mate && pvpZone() && !pvpNewbie(o);
+    const pulse = 1 + Math.sin(t*6)*.06;
+    ringAt(o.rx, o.ry, mate ? "#7BC98A" : foe ? "#FF4A3A" : "#F2A93B", t, 26*pulse, true);
+  }
+}
+// ---- полоски прочности и CP над пилотом ----
+function drawUnitBars(x, y, hp, mhp, cp, mcp){
+  const w = 40, bx = Math.round(x - w/2), by = Math.round(y - 60), k = Math.max(0, Math.min(1, hp/mhp));
+  ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(bx - 1, by - 1, w + 2, 8);
+  if(mcp > 1){ ctx.fillStyle = "#3A2E12"; ctx.fillRect(bx, by, w, 2); ctx.fillStyle = "#F2C14B"; ctx.fillRect(bx, by, Math.round(w*Math.max(0, Math.min(1, cp/mcp))), 2); }
+  ctx.fillStyle = "#2A1414"; ctx.fillRect(bx, by + 3, w, 3);
+  ctx.fillStyle = k > .5 ? "#5FD06A" : k > .25 ? "#F2C14B" : "#E0463A"; ctx.fillRect(bx, by + 3, Math.round(w*k), 3);
+}
+// ---- снаряды, вспышки, цифры ----
+function drawPvpLayer(t, dt){
+  dt = dt || 0.016;
+  const low = S.settings && S.settings.lowfx;
+  for(const s of PVPFX.shots){
+    const b = pvpPos(s.to); if(b){ s.bx = b.x; s.by = b.y; }              // снаряд догоняет цель
+    s.t += dt; const k = Math.min(1, s.t/s.dur);
+    s.x = s.x0 + (s.bx - s.x0)*k; s.y = s.y0 + (s.by - 22 - s.y0)*k;
+    s.trail.push([s.x, s.y]); if(s.trail.length > 7) s.trail.shift();
+    const st = s.st, r = (s.skill ? 8 : 5)*(s.crit ? 1.25 : 1);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    if(st.kind === "tracer"){
+      const a = Math.atan2(s.by - s.y0, s.bx - s.x0);
+      ctx.strokeStyle = st.c2; ctx.lineWidth = s.skill ? 5 : 3; ctx.globalAlpha = .55; ctx.beginPath(); ctx.moveTo(s.x - Math.cos(a)*46, s.y - Math.sin(a)*46); ctx.lineTo(s.x, s.y); ctx.stroke();
+      ctx.strokeStyle = st.c1; ctx.lineWidth = 1.6; ctx.globalAlpha = 1; ctx.beginPath(); ctx.moveTo(s.x - Math.cos(a)*30, s.y - Math.sin(a)*30); ctx.lineTo(s.x, s.y); ctx.stroke();
+    } else {
+      s.trail.forEach(([x, y], i) => { ctx.globalAlpha = (i + 1)/s.trail.length*.35; ctx.fillStyle = st.c2; circle(x, y, r*(.5 + i/s.trail.length*.5)); ctx.fill(); });
+      if(!low){ ctx.shadowColor = st.c1; ctx.shadowBlur = 14; }
+      ctx.globalAlpha = 1; ctx.fillStyle = st.c1; circle(s.x, s.y, r); ctx.fill();
+      ctx.fillStyle = "#fff"; circle(s.x, s.y, r*.45); ctx.fill();
+      if(st.kind === "orb") for(let i = 0; i < 2; i++){ const a = t*9 + i*Math.PI; ctx.fillStyle = st.c2; circle(s.x + Math.cos(a)*r*1.9, s.y + Math.sin(a)*r*1.9, 2); ctx.fill(); }
+    }
+    ctx.restore();
+    if(k >= 1){ s.done = true; pvpImpact(s.bx, s.by, st, s.crit, s.skill); if(s.showNum) pvpNum(s.to, s.bx, s.by, s.dmg, s.crit);
+      const o = NET.others.get(s.to); if(o) o.flashT = .15; }
+  }
+  PVPFX.shots = PVPFX.shots.filter(s => !s.done);
+  for(const sl of PVPFX.slashes){
+    sl.life -= dt; const k = Math.max(0, sl.life/sl.max), R = sl.big ? 34 : 26;
+    ctx.save(); ctx.translate(sl.x, sl.y); ctx.rotate(sl.a); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = k; ctx.strokeStyle = sl.st.c1; ctx.lineWidth = 5*k + 1; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(-8, 0, R, -1.1 + (1 - k)*.6, 1.1 + (1 - k)*.6); ctx.stroke();
+    ctx.strokeStyle = sl.st.c2; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(-14, 0, R - 6, -.9, .9); ctx.stroke();
+    ctx.restore();
+  }
+  PVPFX.slashes = PVPFX.slashes.filter(s => s.life > 0);
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for(const sp of PVPFX.sparks){ sp.life -= dt; sp.x += sp.vx*dt; sp.y += sp.vy*dt; sp.vy += 260*dt;
+    ctx.globalAlpha = Math.max(0, Math.min(1, sp.life*3)); ctx.fillStyle = sp.c; ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3); }
+  ctx.restore();
+  PVPFX.sparks = PVPFX.sparks.filter(sp => sp.life > 0);
+  // цифры урона: красные, крит — крупнее и золотой; всплывают и «прыгают» при появлении
+  ctx.save(); ctx.textAlign = "center"; ctx.lineJoin = "round";
+  for(const n of PVPFX.nums){
+    n.life -= dt; n.y -= 26*dt; const age = n.max - n.life, pop = age < .12 ? 1.35 - age*2.9 : 1;
+    ctx.globalAlpha = Math.max(0, Math.min(1, n.life*2.5));
+    ctx.font = `700 ${Math.round((n.crit ? 20 : 16)*pop)}px 'Russo One', sans-serif`;
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(n.t, n.x, n.y);
+    ctx.fillStyle = n.crit ? "#FFD34A" : "#FF4A3A"; ctx.fillText(n.t, n.x, n.y);
+  }
+  ctx.restore();
+  PVPFX.nums = PVPFX.nums.filter(n => n.life > 0);
+}
+// ---- режим ПК: без него нельзя напасть на мирного пилота (агрессоров и красных бить можно всегда) ----
+const _pvpFoeBase = pvpFoe;
+let pkHintId = null;
+pvpFoe = function(){
+  const o = _pvpFoeBase(); if(!o) return null;
+  if(pkMode || o.fl || o.kr > 0) return o;
+  if(pkHintId !== o.id && (firing || auto)){ pkHintId = o.id; toast("Это мирный пилот. Включи режим ⚔ ПК, чтобы напасть"); }
+  return null;
+};
+function renderPkBtn(){
+  const b = $("pkBtn"); if(!b) return;
+  const show = typeof NET !== "undefined" && NET.on && pvpZone();
+  if(b.hidden === show) b.hidden = !show;
+  b.setAttribute("aria-pressed", String(pkMode));
+}
+$("pkBtn").addEventListener("click", () => {
+  pkMode = !pkMode; renderPkBtn(); renderTargetFrame(); Sfx.play("ui");
+  toast(pkMode ? "⚔ Режим ПК включён: можно напасть на мирного пилота. Нападение делает тебя фиолетовым, убийство мирного даёт карму"
+               : "Режим ПК выключен: атакуешь только агрессоров и красных");
+});
+setInterval(() => { if(!pvpZone() && pkMode) pkMode = false; renderPkBtn(); }, 500);
+const _renderTFpk = renderTargetFrame;
+renderTargetFrame = function(){
+  _renderTFpk();
+  const o = tgt && tgt.kind === "player" ? tgtPlayer() : null, sub = $("tfSub");
+  if(o && sub && pvpZone() && !isFriend(o) && !pvpNewbie(o) && !o.fl && !(o.kr > 0) && !pkMode) sub.textContent = sub.textContent.replace(" · ⚔ PvP", " · мирный (нужен ПК)");
+};
+// ---- сообщения сервера: удары рядом, смерть по расчёту сервера, поправка позиции ----
+{
+  const prevPvp2 = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "pfx"){
+      const o = NET.others.get(d.v);
+      if(o){ o.hp = +d.hp || 0; o.cp = +d.cp || 0; }
+      if(d.a !== NET.id) spawnPvpShot(d.a, d.v, String(d.k || ""), !!d.c, !!d.s, +d.d || 0, d.v !== NET.id);
+      return;
+    }
+    if(d.t === "pvp_force_dead"){
+      // сервер насчитал смерть раньше телефона (например, после рассинхрона) — телефон подчиняется
+      if(p && !p.dead){ S.cp = 0; p.inv = 0; hurtPlayer(1e9, String(d.nick || "Пилот").slice(0, 16)); }
+      return;
+    }
+    if(d.t === "pos_fix"){
+      const x = +d.x, y = +d.y;
+      if(p && isFinite(x) && isFinite(y)){ p.x = x; p.y = y; }
+      return;
+    }
+    prevPvp2(d);
+  };
+}
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
@@ -7145,14 +7337,15 @@ const TILE_PAL = {
 const tilePats = {};
 function tilePattern(kind){
   if(tilePats[kind]) return tilePats[kind];
-  // открытые локации — плитка 128×128 px вместо 64×64: повтор узора на земле почти не заметен
-  const big = ["scrapfields", "iron_canyon", "reactor_ruins", "arena_fear"].includes(kind);
+  // все локации — крупная плитка 128×128 px, как в Железном каньоне: повтор узора почти не заметен
+  const big = true;
   const P = TILE_PAL[kind] || TILE_PAL.dungeon, n = big ? 64 : 32, area = (n/32)*(n/32), ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps;
   const g = c.getContext("2d"), px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
   g.fillStyle = P[0]; g.fillRect(0, 0, c.width, c.height);
   let seed = [...kind].reduce((a, ch) => a*31 + ch.charCodeAt(0), 7) >>> 0;
   const rnd = () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296;
-  const rugged = kind === "scrapfields" || kind === "iron_canyon" || kind === "reactor_ruins";
+  // «каменистая» земля Железного каньона теперь во всех локациях (у каждой своя палитра)
+  const rugged = true;
   if(!rugged){
     // стальные плиты 16×16: светлый край сверху-слева, шов снизу-справа, заклёпки по углам
     const offs = []; for(let oy = 0; oy < n; oy += 16) for(let ox = 0; ox < n; ox += 16) offs.push([ox, oy]);
@@ -7195,8 +7388,10 @@ const DECAL_KINDS = {
   scrapfields:["crack", "oil", "debris", "debris", "tracks", "bolts"],
   reactor_ruins:["crack", "toxic", "grate", "debris", "toxic", "crack"],
   iron_canyon:["crack", "crack", "dust", "debris", "tracks", "bolts"],
-  arena_fear:["scorch", "rune", "crack", "scorch"],
-  dungeon:["crack", "oil", "grate", "debris", "bolts"]
+  arena_fear:["scorch", "rune", "crack", "scorch", "dust", "debris"],
+  // остальные локации — набор деталей Железного каньона плюс свои
+  lobby:["crack", "crack", "dust", "debris", "tracks", "bolts", "oil", "grate"],
+  dungeon:["crack", "crack", "dust", "debris", "tracks", "bolts", "oil", "grate"]
 };
 // пиксельная деталь-наклейка: ps = 2, тёмная обводка не нужна — лежит на земле
 function decalSprite(kind, v, pal){
@@ -7279,6 +7474,7 @@ function buildGround(){
   const add = (x, y) => { const kind = kinds[Math.floor(rnd()*kinds.length)], v = Math.floor(rnd()*4); GROUND.decals.push({x, y, kind, v, pal, a:.7 + rnd()*.3}); };
   if(LOCS[locKey].dungeon){
     if(typeof dgRects === "undefined") return;
+    GROUND.light = groundLight(locKey);                   // пятна света и тени, как в каньоне
     for(const r of dgRects){ const cnt = Math.round(r.w*r.h/(170*170)*(r.corr ? .5 : 1) + rnd()*.8); for(let i = 0; i < cnt; i++) add(r.x + 20 + rnd()*(r.w - 40), r.y + 20 + rnd()*(r.h - 40)); }
   } else {
     const cnt = Math.round(W*H/(165*165));
