@@ -39,5 +39,21 @@ class PvpDedupeTest(unittest.TestCase):
         self.assertEqual(pvp._pair_t, {})
 
 
+class PvpRatingTest(unittest.TestCase):
+    def test_equal_ratings_split_k_factor(self):
+        self.assertEqual(pvp.rating_change(1000, 1000), pvp.RATING_K // 2)
+
+    def test_upset_is_worth_more_than_expected_win(self):
+        upset = pvp.rating_change(800, 1200)
+        expected = pvp.rating_change(1200, 800)
+        self.assertGreater(upset, pvp.RATING_K // 2)
+        self.assertLess(expected, pvp.RATING_K // 2)
+
+    def test_rating_change_is_bounded(self):
+        self.assertEqual(pvp.rating_change(10_000, 0), pvp.RATING_MIN_GAIN)
+        self.assertEqual(pvp.rating_change(0, 10_000), pvp.RATING_K)
+
+
+
 if __name__ == "__main__":
     unittest.main()
