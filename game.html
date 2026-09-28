@@ -3478,8 +3478,22 @@ window.NET_GOD = false; window.NET_ADMIN = false;
   }
 
   // ---- вход ----
-  api("/api/state/load").then(r => {
-    if(!r || !r.ok){ NET._ready(); return; }
+  // Сервер не ответил или вернул ошибку — не висим на заставке, а повторяем с паузой
+  let loadTry = 0;
+  function loadFailed(){
+    loadTry++;
+    NET._ready();
+    const wait = Math.min(15, 2 * loadTry);
+    const run = document.querySelector("#splash .sp-run");
+    if(run) run.textContent = "Сервер не отвечает, повтор через " + wait + " с…";
+    setTimeout(loadState, wait * 1000);
+  }
+  function loadState(){
+    api("/api/state/load").then(r => (r && r.ok) ? onLoaded(r) : loadFailed(), loadFailed);
+  }
+  function onLoaded(r){
+    const run = document.querySelector("#splash .sp-run");
+    if(run && loadTry) run.textContent = "ЗАПУСК…";
    serverEpoch = r.epoch;
     // база на сервере была сброшена: очищаем прогресс на телефоне и начинаем заново
     if(r.epoch && localStorage.getItem("mw-epoch") !== r.epoch){
@@ -3501,7 +3515,8 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     (r.grants || []).forEach(applyGrant);
     if(NET.admin){ $("adminBtn").hidden = false; }
     connect();
-  }).catch(() => NET._ready());
+  }
+  loadState();
 
   // ---- живой мир ----
   let retry = 1000;
