@@ -48,19 +48,30 @@ log = logging.getLogger("web")
 
 
 # ---------- сброс базы ----------
+# Эти таблицы вайп НЕ трогает: деньги игроков (GRAM, звёзды, выводы, рефералы) и служебная статистика.
+# Всё остальное — игровой прогресс (сохранения, вещи, рейтинг, маркет) — обнуляется.
+KEEP_ON_WIPE = {"meta", "gram_wallets", "gram_tx", "gram_withdrawals", "referrals", "ref_earn", "star_payments",
+                "client_errors", "funnel_events", "first_seen"}
+
+
 def ensure_epoch():
-    """Если метка сброса изменилась, удаляем ВСЕ таблицы и создаём заново (один раз)."""
+    """Если метка сброса изменилась, один раз обнуляем игровой прогресс. Деньги и статистика сохраняются."""
     Meta.__table__.create(engine, checkfirst=True)
     with engine.begin() as conn:
         row = conn.execute(Meta.__table__.select().where(Meta.key == "epoch")).first()
         current = row.value if row else None
     if current == DATA_EPOCH:
         return
-    log.warning("СБРОС БАЗЫ: эпоха %s -> %s, все данные удаляются", current, DATA_EPOCH)
-    Base.metadata.drop_all(engine)
+    game_tables = [t for t in Base.metadata.sorted_tables if t.name not in KEEP_ON_WIPE]
+    log.warning("СБРОС ПРОГРЕССА: эпоха %s -> %s. Обнуляются: %s. Сохраняются: %s",
+                current, DATA_EPOCH, ", ".join(t.name for t in game_tables), ", ".join(sorted(KEEP_ON_WIPE)))
+    Base.metadata.drop_all(engine, tables=game_tables)
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        conn.execute(Meta.__table__.insert().values(key="epoch", value=DATA_EPOCH))
+        if row:
+            conn.execute(Meta.__table__.update().where(Meta.key == "epoch").values(value=DATA_EPOCH))
+        else:
+            conn.execute(Meta.__table__.insert().values(key="epoch", value=DATA_EPOCH))
 
 
 # ---------- проверка игрока по подписи Telegram ----------
@@ -966,6 +977,64 @@ async def handle_mute(d, info):
         log.exception("не удалось сохранить муты")
 
 
+# ---------- жалобы на сообщения чата ----------
+reports = deque(maxlen=100)          # последние жалобы (в памяти): видят модераторы и админы
+report_t = {}                        # tg_id -> время последней жалобы (не чаще раза в 20 с)
+report_seq = [0]
+REPORT_REASONS = {"spam": "Спам", "insult": "Оскорбления", "ads": "Реклама", "other": "Другое"}
+
+
+def report_view(r):
+    return {k: r[k] for k in ("id", "ts", "uid", "nick", "text", "reason", "by", "n")}
+
+
+async def handle_report(d, info):
+    now = time.time()
+    if now - report_t.get(info["id"], 0) < 20:
+        hub.to_uid(info["id"], {"t": "pinfo", "text": "Жалобу можно отправлять не чаще раза в 20 секунд"})
+        return
+    try:
+        target = int(d.get("uid"))
+    except (TypeError, ValueError):
+        return
+    reason = d.get("reason") if d.get("reason") in REPORT_REASONS else "other"
+    if target == info["id"]:
+        return
+    report_t[info["id"]] = now
+    text = str(d.get("text", ""))[:200]
+    # повторная жалоба на то же сообщение — увеличиваем счётчик, а не плодим записи
+    for r in reports:
+        if r["uid"] == target and r["text"] == text and not r.get("closed"):
+            if info["nick"] not in r["by_all"]:
+                r["by_all"].append(info["nick"])
+                r["n"] = len(r["by_all"])
+                r["by"] = ", ".join(r["by_all"][:3]) + (" и др." if r["n"] > 3 else "")
+            break
+    else:
+        report_seq[0] += 1
+        r = {"id": report_seq[0], "ts": int(now * 1000), "uid": target, "nick": str(d.get("nick", ""))[:16] or "Пилот",
+             "text": text, "reason": REPORT_REASONS[reason], "by": info["nick"], "by_all": [info["nick"]], "n": 1}
+        reports.append(r)
+    hub.to_uid(info["id"], {"t": "pinfo", "text": "Жалоба отправлена модераторам. Спасибо!"})
+    note = realtime.encode({"t": "report_new", "r": report_view(r), "open": sum(1 for x in reports if not x.get("closed"))})
+    for c in list(hub.conns.values()):
+        if c.info.get("mod"):
+            c.push(note)
+    metrics.inc("chat.report")
+
+
+def handle_reports(d, info):
+    """Модератор: список открытых жалоб или закрыть жалобу."""
+    if not info.get("mod"):
+        return
+    if d.get("t") == "report_close":
+        for r in reports:
+            if r["id"] == d.get("id"):
+                r["closed"] = True
+    open_ = [report_view(r) for r in reversed(reports) if not r.get("closed")]
+    hub.to_uid(info["id"], {"t": "reports", "list": open_[:50]})
+
+
 async def handle_chat(d, info):
     text = str(d.get("text", "")).strip()[:200]
     ch = d.get("ch")
@@ -1169,7 +1238,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close"}
 
 
 async def ws_handler(request):
@@ -1271,6 +1340,10 @@ async def ws_handler(request):
                     hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
             elif t == "mute":
                 await handle_mute(d, info)
+            elif t == "report":
+                await handle_report(d, info)
+            elif t in ("reports", "report_close"):
+                handle_reports(d, info)
             elif t == "chat":
                 await handle_chat(d, info)
             elif t == "ping":                                       # клиент может мерить задержку
@@ -1388,6 +1461,8 @@ async def cleanup_loop():
                 await party_leave(uid)                         # пати без живых участников не висят вечно
             pvp.cleanup(online_ids)
             pvpguard.cleanup()
+            for uid in [u for u, t in report_t.items() if now - t > 60]:
+                report_t.pop(uid, None)
             mobguard.cleanup(online_ids)
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})

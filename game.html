@@ -346,6 +346,15 @@ button.li{width:100%;font:inherit;color:inherit}
 .mute-pop .mg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .mute-pop button{border:1px solid #6A3A3A;background:rgba(120,24,24,.35);color:#fff;border-radius:9px;padding:9px 0;font-size:13px}
 .mute-pop button.un{border-color:#3E6A4A;background:rgba(40,110,60,.35)}
+.msg .rep-b{margin-left:auto;background:none;border:0;color:var(--muted);font-size:12px;padding:0 4px;opacity:.6}
+.cp-rep{margin-left:auto;margin-right:8px;border:1px solid #6A3A3A;background:rgba(120,24,24,.3);color:#F2B8AE;border-radius:8px;font-size:12px;padding:3px 8px}
+.cp-rep[hidden]{display:none}
+.cp-rep i{font-style:normal;margin-left:4px;background:#E0463A;color:#fff;border-radius:7px;padding:0 5px;font-size:10px}
+.rep-list{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.rep-it{border:1px solid var(--line,#2A3642);border-radius:10px;padding:8px 10px;font-size:13px}
+.rep-it small{display:block;color:var(--muted);font-size:11px;margin-bottom:3px}
+.rep-it q{display:block;margin:4px 0 8px;quotes:none;color:var(--text)}
+.rep-it .ra{display:flex;gap:6px}.rep-it .ra button{flex:1;padding:7px 0;grid-column:auto}
 .mute-pop button.cx{grid-column:1/-1;border-color:var(--line,#2A3642);background:none;color:var(--muted)}
 .msg .tm{font-size:11px;color:#6B7884}
 .msg .tx{color:#E4DED1}
@@ -1012,7 +1021,7 @@ textarea.field{min-height:70px;resize:vertical}
     </div>
     <button class="chatbar" id="chatBar" type="button" aria-label="Открыть чат" data-lay="chatBar" data-name="Чат"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span id="chatLast">Чат</span><i class="dot"></i></button>
     <section class="chatpanel" id="chatPanel" hidden aria-label="Чат">
-      <div class="cp-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><b>Чат</b><button type="button" class="cp-x" id="chatClose" aria-label="Закрыть чат">✕</button></div>
+      <div class="cp-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><b>Чат</b><button type="button" class="cp-rep" id="repBtn" hidden>⚑ Жалобы</button><button type="button" class="cp-x" id="chatClose" aria-label="Закрыть чат">✕</button></div>
       <div class="cp-tabs" role="tablist">
         <button type="button" role="tab" data-cch="world">Общий</button>
         <button type="button" role="tab" data-cch="guild">Гильдия</button>
@@ -1384,10 +1393,18 @@ function removeItem(list, id, n){
   }
 }
 
+// Уровень не поднимается выше подтверждённого сервером (S.srvCap приходит с ответом на убийства).
+// Раньше телефон поднимал уровень, сервер его срезал, и игрок видел «Уровень выровнен…» снова и снова.
+let capWarnT = 0, capDownT = 0;
 function levelUps(){
   let up = false;
   if(S.level >= LEVEL_CAP){ S.exp = Math.min(S.exp, expNeed(S.level) - 1); return false; }
-  while(S.exp >= expNeed(S.level) && S.level < LEVEL_CAP){ S.exp -= expNeed(S.level); S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; S.hp = stat().maxhp; up = true; }
+  const cap = !window.NET_ADMIN && S.srvCap > 0 ? Math.min(LEVEL_CAP, S.srvCap) : LEVEL_CAP;
+  while(S.exp >= expNeed(S.level) && S.level < cap){ S.exp -= expNeed(S.level); S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; S.hp = stat().maxhp; up = true; }
+  if(S.level >= cap && cap < LEVEL_CAP && S.exp >= expNeed(S.level)){
+    // опыт не теряется: копится и засчитается, когда сервер подтвердит следующий уровень
+    if(Date.now() > capWarnT){ capWarnT = Date.now() + 120000; toast("Уровень " + (S.level + 1) + " ждёт подтверждения сервера — продолжай бой"); }
+  }
   return up;
 }
 
@@ -2266,7 +2283,7 @@ function hud(){
   hudWidth("hHpBar", S.hp/st.maxhp*100);
   const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp));
   hudWidth("hCpBar", cp/st.maxcp*100); hudText("hCpTxt", "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU"));
-  hudWidth("hXpBar", S.exp/expNeed(S.level)*100);
+  hudWidth("hXpBar", Math.min(100, S.exp/expNeed(S.level)*100));
   hudText("hScrap", "Лом " + S.scrap); hudText("hCores", "Ядра " + S.cores);
   if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + combatPower()); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
   hudText("kitCount", String(have("kit_s") + have("kit_l")));
@@ -2710,6 +2727,11 @@ function msgEl(m){
   if(m.admin){ const a = document.createElement("span"); a.className = "lv"; a.style.color = "#F2C14B"; a.textContent = "ADM"; top.append(a); }
   else if(m.mod){ const a = document.createElement("span"); a.className = "lv"; a.style.color = "#5FD4E8"; a.textContent = "MOD"; top.append(a); }
   top.append(lv, tm);
+  // обычный игрок: пожаловаться на чужое сообщение
+  if(!window.NET_MOD && chatCh === "world" && m.uid && String(m.uid) !== String(NET.id) && !m.admin && !m.mod){
+    const rb = document.createElement("button"); rb.type = "button"; rb.className = "rep-b"; rb.textContent = "⚑"; rb.title = "Пожаловаться";
+    rb.dataset.rep = String(m.uid); rb.dataset.rnick = nick; rb.dataset.rtext = String(m.text || "").slice(0, 200); top.append(rb);
+  }
   // модератор: кнопка мута у чужих сообщений мирового чата
   if(window.NET_MOD && chatCh === "world" && m.uid && String(m.uid) !== String(NET.id) && !m.admin && (!m.mod || window.NET_ADMIN)){
     const mb = document.createElement("button"); mb.type = "button"; mb.className = "mute-b"; mb.textContent = "🔇";
@@ -2811,6 +2833,41 @@ function openMutePicker(uid, nick){
   });
   document.body.append(pop);
 }
+function wsSend(o){ if(NET.ws && NET.ws.readyState === 1){ NET.ws.send(JSON.stringify(o)); return true; } toast("Нет связи с сервером"); return false; }
+const escH = t => String(t ?? "").replace(/[<>&"]/g, c => ({"<":"&lt;", ">":"&gt;", "&":"&amp;", '"':"&quot;"}[c]));
+function popup(html, onClick){
+  document.querySelector(".mute-pop")?.remove();
+  const pop = document.createElement("div"); pop.className = "mute-pop"; pop.innerHTML = `<div>${html}</div>`;
+  pop.addEventListener("click", e => { if(e.target === pop || e.target.closest("[data-x]")){ pop.remove(); return; } onClick(e, pop); });
+  document.body.append(pop); return pop;
+}
+function openReportPicker(uid, nick, text){
+  popup(`<b>Жалоба на ${escH(nick)}</b><q style="display:block;color:var(--muted);font-size:13px;margin:-4px 0 10px">«${escH(text)}»</q><div class="mg">
+    <button type="button" data-rr="spam">Спам</button><button type="button" data-rr="insult">Оскорбления</button><button type="button" data-rr="ads">Реклама</button>
+    <button type="button" data-rr="other">Другое</button><button type="button" class="cx" data-x="1">Отмена</button></div>`, (e, pop) => {
+    const b = e.target.closest("[data-rr]"); if(!b) return;
+    wsSend({t:"report", uid, nick, text, reason:b.dataset.rr}); pop.remove(); Sfx.play("ui");
+  });
+}
+let repOpen = 0;
+function renderRepBtn(){
+  const b = $("repBtn"); if(!b) return;
+  b.hidden = !window.NET_MOD;
+  b.innerHTML = "⚑ Жалобы" + (repOpen ? `<i>${repOpen}</i>` : "");
+}
+function showReports(list){
+  repOpen = list.length; renderRepBtn();
+  const items = list.length ? list.map(r => `<div class="rep-it"><small>${escH(r.reason)} · от ${escH(r.by)}${r.n > 1 ? " (" + r.n + " жалобы)" : ""} · ${fmtTime(r.ts)}</small>
+      <b style="margin:0;font-size:14px">${escH(r.nick)}</b><q>«${escH(r.text)}»</q>
+      <div class="ra"><button type="button" data-rm="${r.uid}" data-rn="${escH(r.nick)}" data-ri="${r.id}">🔇 Мут</button><button type="button" class="un" data-rc="${r.id}">Закрыть</button></div></div>`).join("")
+    : `<p style="color:var(--muted);margin:0 0 8px">Открытых жалоб нет</p>`;
+  popup(`<b>Жалобы игроков</b><div class="rep-list">${items}</div><div class="mg" style="margin-top:8px"><button type="button" class="cx" data-x="1">Закрыть окно</button></div>`, (e, pop) => {
+    const m = e.target.closest("[data-rm]"), c = e.target.closest("[data-rc]");
+    if(m){ pop.remove(); openMutePicker(+m.dataset.rm, m.dataset.rn); wsSend({t:"report_close", id:+m.dataset.ri}); }
+    else if(c){ wsSend({t:"report_close", id:+c.dataset.rc}); }
+  });
+}
+setInterval(renderRepBtn, 1500);
 function muteLeft(){ return Math.max(0, (S.mutedUntil || 0) - Date.now()); }
 function muteText(){ const m = Math.ceil(muteLeft()/60000); return m >= 60 ? Math.floor(m/60) + " ч " + (m % 60) + " мин" : m + " мин"; }
 async function sendChat(){
@@ -2849,6 +2906,8 @@ $("chatPanel").addEventListener("click", e => {
   if(b.dataset.cch){ chatCh = b.dataset.cch; Sfx.play("ui"); renderChat(); }
   else if(b.dataset.chip){ dmTo = b.dataset.chip; renderChat(); }
   else if(b.dataset.mute){ openMutePicker(+b.dataset.mute, b.dataset.mnick); }
+  else if(b.dataset.rep){ openReportPicker(+b.dataset.rep, b.dataset.rnick, b.dataset.rtext); }
+  else if(b.id === "repBtn"){ wsSend({t:"reports"}); }
   else if(b.dataset.dm){ if(openDm(b.dataset.dm)) $("chatIn").focus(); }
   else if(b.dataset.cp === "open"){ closeChat(); showTab("guild"); }
 });
@@ -7142,6 +7201,8 @@ renderTargetFrame = function(){
 {
   const prevPvp2 = onNetExtra;
   onNetExtra = function(d){
+    if(d.t === "reports"){ showReports(d.list || []); return; }
+    if(d.t === "report_new"){ repOpen = +d.open || repOpen + 1; renderRepBtn(); toast("⚑ Новая жалоба на " + (d.r && d.r.nick || "пилота") + ": " + (d.r && d.r.reason || "")); return; }
     if(d.t === "muted"){
       S.mutedUntil = +d.until || 0;
       if(muteLeft() > 0){ toast("🔇 Модератор выдал мут в чате на " + muteText()); if(typeof chatError === "function") chatError("🔇 У тебя мут в чате ещё " + muteText()); }
@@ -7194,10 +7255,15 @@ const killQ = [];
 function regKill(e){ if(killQ.length < 60) killQ.push({iid:e.iid || 0, mob:e.type, loc:locKey, x:Math.round(e.x), y:Math.round(e.y)}); e.iid = 0; }
 function mgResult(r){
   const w = MG.wait.get(r.n); MG.wait.delete(r.n);
-  if(r.lvlCap && !window.NET_ADMIN && S.level > r.lvlCap){
-    // сервер считает опыт сам: уровень выше подтверждённого убийствами не принимается
-    S.level = r.lvlCap; S.exp = 0; S.hp = Math.min(S.hp, stat().maxhp); save();
-    toast("Уровень выровнен по данным сервера: " + r.lvlCap);
+  if(r.lvlCap && !window.NET_ADMIN){
+    const prev = S.srvCap || 0; S.srvCap = +r.lvlCap;
+    if(S.level > r.lvlCap){
+      // сервер считает опыт сам: уровень выше подтверждённого убийствами не принимается
+      S.level = r.lvlCap; S.exp = 0; S.hp = Math.min(S.hp, stat().maxhp); save();
+      if(Date.now() > capDownT){ capDownT = Date.now() + 600000; toast("Уровень выровнен по данным сервера: " + r.lvlCap); }
+    } else if(r.lvlCap > prev && levelUps()){                   // сервер подтвердил — отложенный уровень засчитывается
+      save(); toast("Новый уровень: " + S.level + "!"); Sfx.play("level");
+    }
   }
   if(!w || !r.drops) return;
   for(const d of r.drops){
