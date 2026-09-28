@@ -13,6 +13,8 @@ PORT = int(os.getenv("PORT", "8080"))
 
 # Администраторы игры: Telegram-ники через запятую, без @
 ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "D0gEx0").split(",") if u.strip()}
+# Модераторы: могут выдавать мут в чате, АВТО-бой доступен без VIP. Остальных прав админа у них нет.
+MOD_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("MOD_USERNAMES", "yamakaschi").split(",") if u.strip()}
 
 # Сброс базы: сервер сносит все таблицы, когда эта метка меняется.
 # Чтобы снова обнулить игру, поменяй WIPE_TOKEN в Railway → Variables (например на wipe-

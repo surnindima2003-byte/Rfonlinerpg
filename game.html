@@ -339,6 +339,14 @@ button.li{width:100%;font:inherit;color:inherit}
 .msg .who{font-weight:700;background:none;border:0;padding:0;font-size:13px;cursor:pointer}
 .msg .who[disabled]{cursor:default}
 .msg .lv{font-size:11px;color:#93A0AC}
+.msg .mute-b{margin-left:auto;background:none;border:1px solid rgba(224,70,58,.45);color:#E08A7A;border-radius:6px;font-size:11px;padding:0 6px;line-height:18px}
+.mute-pop{position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:rgba(0,0,0,.45)}
+.mute-pop>div{background:var(--panel,#141B22);border:1px solid var(--line,#2A3642);border-radius:14px;padding:14px;width:min(300px,86vw);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.mute-pop b{display:block;font-size:15px;margin-bottom:10px}
+.mute-pop .mg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mute-pop button{border:1px solid #6A3A3A;background:rgba(120,24,24,.35);color:#fff;border-radius:9px;padding:9px 0;font-size:13px}
+.mute-pop button.un{border-color:#3E6A4A;background:rgba(40,110,60,.35)}
+.mute-pop button.cx{grid-column:1/-1;border-color:var(--line,#2A3642);background:none;color:var(--muted)}
 .msg .tm{font-size:11px;color:#6B7884}
 .msg .tx{color:#E4DED1}
 .msg.me .tx{color:#F7E7C6}
@@ -1545,7 +1553,7 @@ fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); firing = true
 $("skKit").addEventListener("click", useKit);
 // ---- АВТО: открывается с VIP 2 (вкладка VIP), админам доступно всегда ----
 const AUTO_VIP = 2;
-function autoAllowed(){ return !!window.NET_ADMIN || (typeof vipLevel === "function" && vipLevel() >= AUTO_VIP); }
+function autoAllowed(){ return !!window.NET_ADMIN || !!window.NET_MOD || (typeof vipLevel === "function" && vipLevel() >= AUTO_VIP); }
 function setAuto(on){
   auto = !!on; $("skAuto").classList.toggle("on", auto);
   if(!auto){ autoS.tgt = null; autoS.stuckT = 0; }
@@ -2700,7 +2708,13 @@ function msgEl(m){
   const tm = document.createElement("span"); tm.className = "tm"; tm.textContent = fmtTime(m.ts);
   top.append(who);
   if(m.admin){ const a = document.createElement("span"); a.className = "lv"; a.style.color = "#F2C14B"; a.textContent = "ADM"; top.append(a); }
+  else if(m.mod){ const a = document.createElement("span"); a.className = "lv"; a.style.color = "#5FD4E8"; a.textContent = "MOD"; top.append(a); }
   top.append(lv, tm);
+  // модератор: кнопка мута у чужих сообщений мирового чата
+  if(window.NET_MOD && chatCh === "world" && m.uid && String(m.uid) !== String(NET.id) && !m.admin && (!m.mod || window.NET_ADMIN)){
+    const mb = document.createElement("button"); mb.type = "button"; mb.className = "mute-b"; mb.textContent = "🔇";
+    mb.title = "Мут"; mb.dataset.mute = String(m.uid); mb.dataset.mnick = nick; top.append(mb);
+  }
   const tx = document.createElement("div"); tx.className = "tx"; tx.textContent = m.text; tx.dataset.notr = "1";
   el.append(top, tx); return el;
 }
@@ -2780,10 +2794,30 @@ function openDm(nick){
   dmTo = nick; chatCh = "dm"; save(); renderChat(); return true;
 }
 
+// ---- мут в чате: окно выбора срока у модератора и блок отправки у замученного ----
+function openMutePicker(uid, nick){
+  document.querySelector(".mute-pop")?.remove();
+  const pop = document.createElement("div"); pop.className = "mute-pop";
+  pop.innerHTML = `<div><b>Мут для ${String(nick || "пилота").replace(/[<>&]/g, "")}</b><div class="mg">
+    ${[[5, "5 мин"], [15, "15 мин"], [60, "1 час"], [180, "3 часа"], [1440, "24 часа"]].map(([m, t]) => `<button type="button" data-mm="${m}">${t}</button>`).join("")}
+    <button type="button" class="un" data-mm="0">Снять</button><button type="button" class="cx" data-mm="x">Отмена</button></div></div>`;
+  pop.addEventListener("click", e => {
+    const b = e.target.closest("[data-mm]");
+    if(e.target === pop || (b && b.dataset.mm === "x")){ pop.remove(); return; }
+    if(!b) return;
+    if(NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify({t:"mute", uid, nick, min:+b.dataset.mm}));
+    else toast("Нет связи с сервером");
+    pop.remove(); Sfx.play("ui");
+  });
+  document.body.append(pop);
+}
+function muteLeft(){ return Math.max(0, (S.mutedUntil || 0) - Date.now()); }
+function muteText(){ const m = Math.ceil(muteLeft()/60000); return m >= 60 ? Math.floor(m/60) + " ч " + (m % 60) + " мин" : m + " мин"; }
 async function sendChat(){
   const inp = $("chatIn");
   let text = inp.value.replace(/\s+/g, " ").trim();
   if(!text) return;
+  if(muteLeft() > 0){ chatError("🔇 У тебя мут в чате ещё " + muteText()); return; }
   // «@ник текст» во вкладке «Личные» открывает беседу
   if(chatCh === "dm" && text.startsWith("@")){
     const sp = text.indexOf(" "), nick = (sp < 0 ? text.slice(1) : text.slice(1, sp)).trim();
@@ -2814,6 +2848,7 @@ $("chatPanel").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   if(b.dataset.cch){ chatCh = b.dataset.cch; Sfx.play("ui"); renderChat(); }
   else if(b.dataset.chip){ dmTo = b.dataset.chip; renderChat(); }
+  else if(b.dataset.mute){ openMutePicker(+b.dataset.mute, b.dataset.mnick); }
   else if(b.dataset.dm){ if(openDm(b.dataset.dm)) $("chatIn").focus(); }
   else if(b.dataset.cp === "open"){ closeChat(); showTab("guild"); }
 });
@@ -3630,6 +3665,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
       if(d.t === "hello"){ S.pvpKr = +d.kr || 0;
         NET.admin = window.NET_ADMIN = !!d.admin; NET.id = d.id;
+        NET.mod = window.NET_MOD = !!(d.mod || d.admin); S.mutedUntil = +d.muted || 0;
         chatUid = String(d.id); chatDb = null;
         chatShared = (d.history || []).filter(m => typeof m.text === "string");
         onChatUpdate();
@@ -7106,6 +7142,12 @@ renderTargetFrame = function(){
 {
   const prevPvp2 = onNetExtra;
   onNetExtra = function(d){
+    if(d.t === "muted"){
+      S.mutedUntil = +d.until || 0;
+      if(muteLeft() > 0){ toast("🔇 Модератор выдал мут в чате на " + muteText()); if(typeof chatError === "function") chatError("🔇 У тебя мут в чате ещё " + muteText()); }
+      else toast("🔈 Мут в чате снят");
+      return;
+    }
     if(d.t === "pfx"){
       const o = NET.others.get(d.v);
       if(o){ o.hp = +d.hp || 0; o.cp = +d.cp || 0; }

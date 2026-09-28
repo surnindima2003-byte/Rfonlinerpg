@@ -13,7 +13,7 @@ from sqlalchemy import select, func, update
 import re
 import secrets
 
-from config import BOT_TOKEN, ADMIN_USERNAMES, DATA_EPOCH, ENV_NAME
+from config import BOT_TOKEN, ADMIN_USERNAMES, MOD_USERNAMES, DATA_EPOCH, ENV_NAME
 from config import (WORLD_HZ, VIEW_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BURST, WS_AUTH_TIMEOUT,
                     METRICS_TOKEN, LOADTEST, LOADTEST_UID_BASE)
 from db import SessionLocal, engine, db_ping, dispose as db_dispose
@@ -77,7 +77,7 @@ def auth(init_data: str):
     u = data.user
     username = (u.username or "").lower()
     return {"id": u.id, "username": username, "name": u.first_name or "Пилот", "start": str(data.start_param or "")[:64],
-            "admin": username in ADMIN_USERNAMES}
+            "admin": username in ADMIN_USERNAMES, "mod": username in MOD_USERNAMES or username in ADMIN_USERNAMES}
 
 
 async def read_auth(request):
@@ -891,12 +891,92 @@ def chat_allowed(uid, ch):
     return b.take()
 
 
+# ---------- модерация чата: мут ----------
+chat_mutes = {}              # tg_id -> {"until": unix, "by": ник модератора}; хранится в таблице meta
+MUTE_CHOICES = {5, 15, 60, 180, 1440}
+
+
+async def load_mutes():
+    try:
+        async with SessionLocal() as s_:
+            row = (await s_.execute(select(Meta).where(Meta.key == "chat_mutes"))).scalar_one_or_none()
+        data = json.loads(row.value) if row and row.value else {}
+        now = time.time()
+        chat_mutes.update({int(k): v for k, v in data.items() if v.get("until", 0) > now})
+    except Exception:
+        log.exception("не удалось загрузить муты чата")
+
+
+async def save_mutes():
+    now = time.time()
+    for k in [k for k, v in chat_mutes.items() if v.get("until", 0) <= now]:
+        chat_mutes.pop(k, None)
+    value = json.dumps({str(k): v for k, v in chat_mutes.items()})
+    async with SessionLocal() as s_:
+        row = (await s_.execute(select(Meta).where(Meta.key == "chat_mutes"))).scalar_one_or_none()
+        if row:
+            row.value = value
+        else:
+            s_.add(Meta(key="chat_mutes", value=value))
+        await s_.commit()
+
+
+def muted_until(uid):
+    m = chat_mutes.get(uid)
+    return m["until"] if m and m["until"] > time.time() else 0
+
+
+def chat_sys(text):
+    """Системная строка в мировом чате (видна всем и попадает в историю)."""
+    m = {"id": f"sys-{int(time.time() * 1000)}", "ch": "world", "sys": 1, "text": text, "ts": int(time.time() * 1000)}
+    chat_history.append(m)
+    hub.to_all({"t": "chat", "m": m})
+
+
+async def handle_mute(d, info):
+    """Мут выдают модераторы и админы. Модератор не может мутить админов и других модераторов."""
+    if not info.get("mod"):
+        return
+    try:
+        target, minutes = int(d.get("uid")), int(d.get("min", 0))
+    except (TypeError, ValueError):
+        return
+    if target == info["id"] or (minutes and minutes not in MUTE_CHOICES):
+        return
+    tgt = online(target)
+    t_admin = bool(tgt and tgt.get("admin"))
+    t_mod = bool(tgt and tgt.get("mod"))
+    if t_admin or (t_mod and not info.get("admin")):
+        hub.to_uid(info["id"], {"t": "pinfo", "text": "Этого пилота замутить нельзя"})
+        return
+    nick = (tgt or {}).get("nick") or str(d.get("nick", ""))[:16] or "Пилот"
+    if minutes:
+        chat_mutes[target] = {"until": time.time() + minutes * 60, "by": info["nick"]}
+        dur = f"{minutes} мин" if minutes < 60 else f"{minutes // 60} ч"
+        chat_sys(f"🔇 {nick}: мут в чате на {dur} (модератор {info['nick']})")
+    else:
+        if not chat_mutes.pop(target, None):
+            return
+        chat_sys(f"🔈 {nick}: мут снят (модератор {info['nick']})")
+    hub.to_uid(target, {"t": "muted", "until": int(muted_until(target) * 1000)})
+    log.warning("Мут: %s (%s) -> uid=%s на %s мин", info["nick"], info["id"], target, minutes)
+    try:
+        await save_mutes()
+    except Exception:
+        log.exception("не удалось сохранить муты")
+
+
 async def handle_chat(d, info):
     text = str(d.get("text", "")).strip()[:200]
     ch = d.get("ch")
     if not text or ch not in ("world", "dm"):
         return
     uid = info["id"]
+    until = muted_until(uid)
+    if until:
+        hub.to_uid(uid, {"t": "muted", "until": int(until * 1000)})
+        metrics.inc("chat.muted_drop")
+        return
     cid = str(d.get("cid", ""))[:40]
     if cid:
         seen = chat_cids.setdefault(uid, deque(maxlen=50))
@@ -911,7 +991,7 @@ async def handle_chat(d, info):
     now = time.time()
     chat_seq[0] += 1
     m = {"id": f"{uid}-{int(now * 1000)}", "seq": chat_seq[0], "ch": ch, "text": text, "nick": info["nick"], "fac": info["fac"],
-         "lvl": info["lvl"], "uid": str(uid), "admin": info["admin"], "ts": int(now * 1000)}
+         "lvl": info["lvl"], "uid": str(uid), "admin": info["admin"], "mod": bool(info.get("mod")) and not info["admin"], "ts": int(now * 1000)}
     if ch == "world":
         chat_history.append(m)
         hub.to_all({"t": "chat", "m": m})
@@ -1089,7 +1169,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute"}
 
 
 async def ws_handler(request):
@@ -1159,7 +1239,8 @@ async def ws_handler(request):
                     break
                 conn = hub.add(ws, info)
                 clients[ws] = info
-                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "history": list(chat_history), "kr": info["kr"],
+                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "mod": user.get("mod", False),
+                                           "muted": int(muted_until(user["id"]) * 1000), "history": list(chat_history), "kr": info["kr"],
                                            "fac": info["fac_srv"], "cw": chipwar.status()}))
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
@@ -1188,6 +1269,8 @@ async def ws_handler(request):
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
                     info["emo_t"] = time.time()
                     hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
+            elif t == "mute":
+                await handle_mute(d, info)
             elif t == "chat":
                 await handle_chat(d, info)
             elif t == "ping":                                       # клиент может мерить задержку
@@ -1347,6 +1430,7 @@ async def start_web(port: int):
     STATE["tasks"]["world"] = asyncio.create_task(world_loop())
     STATE["tasks"]["cleanup"] = asyncio.create_task(cleanup_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
+    await load_mutes()
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
     await items.migrate_gear()
