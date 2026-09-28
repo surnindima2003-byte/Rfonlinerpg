@@ -937,7 +937,9 @@ async def handle_pvp(d, info):
         return
     if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
         return
-    if time.time() - info.get("pvp_t", 0) < 0.3:
+    skill = bool(d.get("skill"))
+    # у обычного удара и умения раздельные перезарядки: умение сразу после удара больше не теряется
+    if not skill and time.time() - info.get("pvp_t", 0) < 0.3:
         metrics.inc("pvp.cooldown_drop")
         return
     if info.get("srv_dead_until", 0) > time.time() or tgt.get("srv_dead_until", 0) > time.time():
@@ -947,12 +949,14 @@ async def handle_pvp(d, info):
         return                                   # союзников не бьём
     if not pvp.can_fight(info, tgt):
         return                                   # защита новичков: до 10-го уровня PvP нет
-    skill = bool(d.get("skill"))
     if skill and time.time() - info.get("pvp_sk", 0) < 0.8:
+        metrics.inc("pvp.skill_cooldown_drop")
         return                                   # умения по игрокам — не чаще раза в 0,8 с
-    info["pvp_t"] = time.time()
     if skill:
         info["pvp_sk"] = time.time()
+    else:
+        info["pvp_t"] = time.time()
+    info["pvp_last"] = time.time()
     dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
     pvp.on_hit(info, tgt)
     pvp.record_hit(info["id"], to, dmg)

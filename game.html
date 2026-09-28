@@ -1703,6 +1703,11 @@ function updateEnemies(dt, st){
         if(k.ranged) bolts.push({x:e.x, y:e.y, vx:dx/d*330, vy:dy/d*330, dmg, life:1.2, by:k.name, src:e});
         else { hurtPlayer(dmg, k.name, e); e.lunge = 0.15; }
       }
+    } else if(e.room){
+      // подземелье: до удара моб стоит на своём месте; после погони спокойно возвращается туда же
+      const wx = e.hx - e.x, wy = e.hy - e.y, wd = Math.hypot(wx, wy);
+      if(wd > 6){ vx = wx/wd*k.speed*0.6; vy = wy/wd*k.speed*0.6; e.ang = Math.atan2(wy, wx); }
+      if(e.hp < e.max) e.hp = Math.min(e.max, e.hp + e.max*0.05*dt);
     } else {
       e.wanderT -= dt;
       if(e.wanderT <= 0){ e.wanderT = 2 + Math.random()*3; e.tx = e.hx + (Math.random()*240-120); e.ty = e.hy + (Math.random()*240-120); }
@@ -1715,6 +1720,11 @@ function updateEnemies(dt, st){
     const sp = npcs[0], sd = Math.hypot(e.x-sp.x, e.y-sp.y);
     if(sd < 190){ e.x = sp.x + (e.x-sp.x)/sd*190; e.y = sp.y + (e.y-sp.y)/sd*190; }
     pushOut(e, k.r); slide(e, eox, eoy, k.r);
+    if(e.room){                                                  // из своей комнаты моб не выходит даже в погоне
+      const rm = e.room, m = Math.min(k.r*(k.boss ? BOSS_SCALE : 1), rm.w/2 - 2, rm.h/2 - 2);
+      e.x = Math.max(rm.x + m, Math.min(rm.x + rm.w - m, e.x));
+      e.y = Math.max(rm.y + m, Math.min(rm.y + rm.h - m, e.y));
+    }
   }
   for(const b of beams) b.life -= dt; beams = beams.filter(b => b.life > 0);
   for(const t of texts){ t.life -= dt; t.y -= 38*dt; } texts = texts.filter(t => t.life > 0);
@@ -5887,6 +5897,12 @@ let gateWarn = 0;
 function guardGate(){
   const m = gateAt(p.x, p.y);
   if(!m){ p.gx = p.x; p.gy = p.y; return; }
+  // уже был за этим барьером (уровень выровнен сервером, телепорт админа) — не запираем, даём уйти
+  if(p.gx != null && gateAt(p.gx, p.gy) === m){
+    p.gx = p.x; p.gy = p.y;
+    if(now > gateWarn){ gateWarn = now + 8; toast("Твой уровень ниже этого прохода: возвращайся к коридору"); }
+    return;
+  }
   p.x = p.gx ?? p.x; p.y = p.gy ?? (m.y - m.side*30); p.dashT = 0;
   if(now > gateWarn){ gateWarn = now + 2; toast("Барьер: проход открыт с " + m.req + " уровня"); Sfx.play("hit"); }
 }
@@ -5927,6 +5943,7 @@ function buildDungeon(key){
 function respawnDungeon(e){
   const k = NPCS[e.type], rm = e.room;
   Object.assign(e, {x:k.boss ? rm.cx : rm.x + 25 + Math.random()*(rm.w - 50), y:k.boss ? rm.cy : rm.y + 25 + Math.random()*(rm.h - 50), hp:k.hp, max:k.hp, dead:false, chase:false, stun:0, flash:0, cd:1});
+  e.hx = e.tx = e.x; e.hy = e.ty = e.y;
 }
 
 // ---- отрисовка ----
@@ -6765,21 +6782,46 @@ renderTargetFrame = function(){
   if(sub && pvpZone()) sub.textContent += isFriend(o) ? " · союзник" : pvpNewbie(o) ? " · защита новичка" : o.kr > 0 ? " · 🩸 красный" : o.fl ? " · агрессор" : " · ⚔ PvP";
 };
 
-// ---- умения по игрокам: удар, взрыв, залп и очередь бьют выбранного противника ----
+// ---- умения по игрокам: удар, взрыв, залп, очередь и рывок к цели бьют выбранного пилота ----
+// Если выбран пилот, умение не «проваливается» в поиск мобов с непонятным «Нет цели рядом»:
+// игрок видит точную причину (союзник, новичок, мирный без ПК, далеко, стена).
+function pvpBlockReason(o){
+  if(!o || o.dead) return "Цель уничтожена";
+  if(!pvpZone()) return "Здесь PvP нет";
+  if(isFriend(o)) return "Это союзник по пати или гильдии";
+  if((S.level || 1) < PVP_MIN_LVL) return "PvP открывается с " + PVP_MIN_LVL + " уровня";
+  if((+o.lvl || 1) < PVP_MIN_LVL) return "Пилот под защитой новичка (до " + PVP_MIN_LVL + " уровня)";
+  if(typeof pkMode !== "undefined" && !pkMode && !o.fl && !(o.kr > 0)) return "Мирный пилот: включи ⚔ ПК, чтобы напасть";
+  return null;
+}
+const PVP_SKILLS = ["strike", "aoe", "volley", "burst", "leap"];
 const _useSkillPvp = useSkill;
 useSkill = function(i){
-  const foe = pvpFoe(), C = clsOf(S.cls);
-  if(!foe || !C || CB.cd[i] > 0 || !p || p.dead || paused) return _useSkillPvp(i);
+  const C = clsOf(S.cls);
+  if(!C || CB.cd[i] > 0 || !p || p.dead || paused) return _useSkillPvp(i);
+  const o = typeof tgtPlayer === "function" ? tgtPlayer() : null;
   const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
-  if(!["strike", "aoe", "volley", "burst"].includes(s.type)) return _useSkillPvp(i);   // баффы и рывки — как обычно
-  const reach = s.type === "aoe" ? s.radius + 20 : classParams().range + 60, d = Math.hypot(foe.rx - p.x, foe.ry - p.y);
-  if(d > reach || !los(p.x, p.y, foe.rx, foe.ry)) return _useSkillPvp(i);
-  const st = stat(), hits = s.type === "burst" ? 3 : 1, mult = s.mult*(s.type === "volley" ? 1 : 1);
-  const dmg = Math.round(st.atk*(1 + buffV("atk"))*(1 + st.skillDmg)*mult*hits);
-  pvpStrike(foe, dmg, false, true);
-  if(s.stun && typeof toast === "function") {}                // оглушение игроков не применяем: слишком сильно в PvP
-  CB.fx.push({type:"ring", x:foe.rx, y:foe.ry, r:36, life:.4, max:.4, c:C.color});
+  if(!o || !pvpZone() || !PVP_SKILLS.includes(s.type)) return _useSkillPvp(i);   // баффы, рывки и бой с мобами — как обычно
+  const why = pvpBlockReason(o);
+  if(why){ toast(why); return; }
+  const d = Math.hypot(o.rx - p.x, o.ry - p.y);
+  const reach = s.type === "aoe" ? s.radius + 40 : s.type === "leap" ? (s.dist || 300) + 40 : classParams().range + stat().range + 80;
+  if(d > reach){ toast("Цель далеко: подойди ближе"); return; }
+  if(!los(p.x, p.y, o.rx, o.ry)){ toast("Цель за стеной"); return; }
+  if(s.type === "leap"){                                          // рывок к пилоту, как к мобу
+    const a = Math.atan2(o.ry - p.y, o.rx - p.x), step = Math.max(0, d - 40), bx = p.x, by = p.y;
+    CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*step, y2:p.y + Math.sin(a)*step, life:.3, max:.3, c:C.color});
+    p.x += Math.cos(a)*step; p.y += Math.sin(a)*step; pushOut(p, p.r);
+    if(!walkable(p.x, p.y, 14)){ p.x = bx; p.y = by; }
+    p.ang = p.aim = a; p.inv = 0.3;
+  }
+  const st = stat(), hits = s.type === "burst" ? (s.n || 3) : 1;
+  const dmg = Math.round(st.atk*(1 + buffV("atk"))*(1 + st.skillDmg)*s.mult*hits);
+  pvpStrike(o, dmg, false, true);                                 // оглушение по игрокам не применяем: слишком сильно в PvP
+  CB.fx.push({type:"ring", x:o.rx, y:o.ry, r:36, life:.4, max:.4, c:C.color});
+  p.atkT = 0.25;
   CB.cd[i] = s.cd*(1 - st.cdr); Sfx.play("crit");
+  if(Sfx.haptic) Sfx.haptic("medium");
 };
 // карма смывается убийством мобов — раз в 2 минуты сверяем её с сервером
 setInterval(async () => { if((S.pvpKr || 0) > 0 && typeof NET !== "undefined" && NET.on && NET.id){ try{ const r = await NET.api("/api/pvp/top", {}); if(r && r.ok) S.pvpKr = r.me.karma; }catch(e){} } }, 120000);
