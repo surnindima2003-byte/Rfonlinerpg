@@ -259,6 +259,10 @@ async def api_admin_grant(request):
     if not user["admin"]:
         raise web.HTTPForbidden(text="not admin")
     kind = body.get("kind")
+      # Смена позывного идёт через давно существующий маршрут выдач. Некоторые
+    # прокси держат список разрешённых URL и возвращают 404 для нового пути.
+    if kind == "name":
+        return await admin_set_name(body, user)
     if kind not in GRANT_KINDS:
         raise web.HTTPBadRequest(text="bad kind")
     try:
@@ -321,10 +325,7 @@ def set_saved_nick(row, name, now_ms=None):
     row.updated = stamp // 1000
 
 
-async def api_admin_name(request):
-    body, user = await read_auth(request)
-    if not user["admin"]:
-        raise web.HTTPForbidden(text="not admin")
+async def admin_set_name(body, user):
     name = str(body.get("name", "")).strip()
     if not valid_nick(name):
         return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
@@ -362,6 +363,13 @@ async def api_admin_name(request):
     log.info("Админ @%s сменил позывной игрока %s на %s", user["username"], target_name, name)
     return web.json_response({"ok": True, "online": delivered, "target": target_name, "name": name})
 
+
+async def api_admin_name(request):
+    """Обратная совместимость для клиентов, уже получивших отдельный URL."""
+    body, user = await read_auth(request)
+    if not user["admin"]:
+        raise web.HTTPForbidden(text="not admin")
+    return await admin_set_name(body, user)
 
 
 # ---------- гильдии: хранилище документов с проверкой прав ----------
@@ -1571,6 +1579,7 @@ async def start_web(port: int):
     app.router.add_post("/api/state/save", api_save)
     app.router.add_post("/api/grants/ack", api_ack)
     app.router.add_post("/api/admin/grant", api_admin_grant)
+    app.router.add_post("/api/admin/name", api_admin_name)
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
