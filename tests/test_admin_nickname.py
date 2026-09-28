@@ -19,6 +19,10 @@ valid_nick = namespace["valid_nick"]
 
 
 class AdminNicknameTests(unittest.TestCase):
+    def test_client_uses_existing_admin_route(self):
+        game = (Path(__file__).resolve().parents[1] / "game.html").read_text(encoding="utf-8")
+        self.assertIn('api("/api/admin/grant", {kind:"name", target, name})', game)
+
     def test_set_saved_nick_updates_index_and_saved_state(self):
         row = SimpleNamespace(
             nick="Старый",
