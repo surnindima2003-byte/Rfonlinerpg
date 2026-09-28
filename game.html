@@ -87,6 +87,8 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .ench-table div{background:var(--panel-2);border-radius:8px;padding:5px 2px;text-align:center;font-size:11px}
 .ench-table div.cur{outline:2px solid #F2C14B}
 .ench-table b{display:block;font-size:12px}.bar.xp{height:4px}.bar.xp i{background:#5FD4E8}
+.bar.xp i.held{background:#F2C14B;animation:xpHeld 1.4s ease-in-out infinite}
+@keyframes xpHeld{50%{opacity:.45}}
 .hud-res{display:flex;gap:10px;font-size:12px;margin-top:5px;opacity:.9}
 .side{position:absolute;left:8px;top:calc(var(--hb, 120px) + 6px);display:flex;flex-direction:column;gap:6px}
 .side button{background:rgba(20,27,34,.82);border:1px solid #34414E;color:#E4DED1;border-radius:10px;padding:6px 10px;font-size:12px;text-align:left}
@@ -2301,6 +2303,9 @@ function hud(){
   const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp));
   hudWidth("hCpBar", cp/st.maxcp*100); hudText("hCpTxt", "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU"));
   hudWidth("hXpBar", Math.min(100, S.exp/expNeed(S.level)*100));
+  // полная золотая мигающая шкала — следующий уровень ждёт подтверждения сервера
+  const held = !window.NET_ADMIN && S.srvCap > 0 && S.level >= S.srvCap && S.exp >= expNeed(S.level);
+  if(HUDC.xpHeld !== held){ HUDC.xpHeld = held; $("hXpBar").classList.toggle("held", held); }
   hudText("hScrap", "Лом " + S.scrap); hudText("hCores", "Ядра " + S.cores);
   if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + combatPower()); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
   hudText("kitCount", String(have("kit_s") + have("kit_l")));

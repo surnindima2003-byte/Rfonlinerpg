@@ -32,6 +32,7 @@ import pvpguard
 import progress
 import stats
 import special_quests
+import saveguard
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -202,6 +203,25 @@ async def api_save(request):
         if not row:
             row = GameSave(tg_id=user["id"])
             s.add(row)
+        elif not user["admin"] and saveguard.MODE != "off" and row.epoch == DATA_EPOCH and row.data:
+            # проверка сохранения: структура и скачки лома/ядер/заточки относительно прошлого сохранения
+            try:
+                old = json.loads(row.data)
+            except ValueError:
+                old = None
+            since = int(row.updated or 0)
+            granted = {}
+            for g in (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.created >= since))).scalars().all():
+                try:
+                    granted[g.kind] = granted.get(g.kind, 0) + int(json.loads(g.payload or "{}").get("amount", 0))
+                except (ValueError, TypeError):
+                    pass
+            data, notes = saveguard.check(user["id"], user["username"] or user["name"], old, data, time.time() - since, granted)
+            if notes:
+                log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
+            if data is None:
+                return web.json_response({"ok": False, "error": "save rejected"}, status=409)
+            raw = json.dumps(data, ensure_ascii=False)
         row.epoch = DATA_EPOCH
         row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
         s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
