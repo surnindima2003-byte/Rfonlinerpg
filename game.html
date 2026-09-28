@@ -3773,6 +3773,10 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         if(d.m.ch === "dm" && d.m.to === S.name && d.m.nick !== S.name && !S.dmList.includes(d.m.nick)) S.dmList.push(String(d.m.nick).slice(0, 16));
         onChatUpdate();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
+      else if(d.t === "admin_nick" && typeof d.name === "string"){
+        S.name = d.name.slice(0, 16); save(); push(true);
+        toast("Администратор изменил твой позывной на «" + S.name + "»");
+      }
       else if(typeof onNetExtra === "function") onNetExtra(d);
     };
     ws.onclose = () => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames(); setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
@@ -3802,6 +3806,8 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       body().innerHTML = `
         <label class="flabel" for="admTarget">Кому: @ник в Telegram или «me» для себя</label>
         <input class="field" id="admTarget" value="me" autocapitalize="off" autocomplete="off">
+                <div class="flabel">Сменить позывной</div>
+        <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="name">Сменить</button></div>
         <div class="flabel">Ресурсы</div>
         <div class="seg">${[["scrap","Лом"],["cores","Ядра"],["exp","Опыт"],["level","Уровни"]].map(([k, n]) => `<button type="button" data-adm="kind" data-v="${k}" aria-pressed="${adm.kind === k}">${n}</button>`).join("")}</div>
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admAmt" type="number" min="1" value="${adm.kind === "level" ? 5 : 10000}" style="margin:0"><button class="act" type="button" data-adm="give">Выдать</button></div>
@@ -3825,6 +3831,13 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     if(r && r.ok) toast("Выдано @" + (r.target || target) + (r.online ? "" : " (получит при входе)"));
     else toast((r && r.error) || "Не получилось");
   }
+    async function admName(){
+    const target = $("admTarget").value.trim() || "me";
+    const name = $("admNick").value.trim();
+    const r = await api("/api/admin/name", {target, name});
+    if(r && r.ok) toast("Позывной @" + (r.target || target) + " изменён на «" + r.name + "»");
+    else toast((r && r.error) || "Не получилось");
+  }
   $("shBody").addEventListener("click", e => {
     const b = e.target.closest("button[data-adm]"); if(!b || !NET.admin) return;
     const a = b.dataset.adm, v = b.dataset.v;
@@ -3833,6 +3846,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     else if(a === "grade"){ adm.item = $("admItem").value; adm.grade = +v; adminSheet(); $("admTarget").value = keep.t; $("admAmt").value = keep.n; }
     else if(a === "give") admGrant({kind:adm.kind, amount:parseInt($("admAmt").value) || 0});
     else if(a === "item") admGrant({kind:"item", amount:1, item:$("admItem").value, grade:adm.grade});
+    else if(a === "name") admName();
     else if(a === "god"){ NET.god = window.NET_GOD = !NET.god; b.setAttribute("aria-checked", String(NET.god)); toast(NET.god ? "Бессмертие включено" : "Бессмертие выключено"); }
     else if(a === "tp"){ closeSheet(); travel(v); }
   });
