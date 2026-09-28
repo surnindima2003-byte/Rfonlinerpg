@@ -16,6 +16,11 @@ log = logging.getLogger("db")
 # Если в Railway подключена PostgreSQL, она сама передаёт DATABASE_URL — тогда работаем с ней.
 # Иначе — SQLite-файл на томе /data, как раньше.
 PG_URL = os.getenv("DATABASE_URL", "").strip()
+if not PG_URL and os.getenv("PGHOST") and os.getenv("PGPASSWORD"):
+    # новые шаблоны PostgreSQL в Railway не создают DATABASE_URL — собираем адрес из PGHOST/PGUSER/…
+    from urllib.parse import quote
+    PG_URL = "postgresql://{}:{}@{}:{}/{}".format(quote(os.getenv("PGUSER", "postgres"), safe=""), quote(os.getenv("PGPASSWORD"), safe=""),
+                                                   os.getenv("PGHOST"), os.getenv("PGPORT", "5432"), os.getenv("PGDATABASE", "railway"))
 SQLITE_URL = DB_URL.replace("+aiosqlite", "")
 IS_PG = PG_URL.startswith(("postgres://", "postgresql://"))
 
