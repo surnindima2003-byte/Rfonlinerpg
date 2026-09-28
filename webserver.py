@@ -34,6 +34,7 @@ import stats
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
+GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear"}
 SAFE_LOCS = {"lobby", "arena_fear"}          # здесь PvP нет никогда
@@ -106,6 +107,14 @@ async def game_page(request):
     resp = web.Response(body=_game_cache["body"], content_type="text/html", charset="utf-8", headers={"Cache-Control": "no-cache"})
     resp.enable_compression()
     return resp
+
+
+async def guide_page(request):
+    """Public game guide. Unlike the WebApp, it does not require Telegram auth."""
+    return web.FileResponse(
+        GUIDE_FILE,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 async def health(request):
@@ -1307,6 +1316,8 @@ async def start_web(port: int):
     ensure_epoch()
     app = web.Application(client_max_size=512 * 1024)
     app.router.add_get("/", game_page)
+    app.router.add_get("/guide.html", guide_page)
+    app.router.add_get("/guide", guide_page)
     app.router.add_get("/health", health)
     app.router.add_get("/live", live)
     app.router.add_get("/ready", ready)
