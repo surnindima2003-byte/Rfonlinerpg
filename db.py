@@ -222,7 +222,14 @@ async def init_db():
     await run_db(Base.metadata.create_all, engine, label="sql.migrate")
     await run_db(add_missing_columns, label="sql.migrate")
     await run_db(migrate_sqlite_to_pg, label="sql.migrate")
-    log.info("База данных: %s (пул %s+%s)", "PostgreSQL" if IS_PG else "SQLite", POOL_SIZE, MAX_OVERFLOW)
+    log.warning("База данных: %s (пул %s+%s)", "PostgreSQL" if IS_PG else "SQLite", POOL_SIZE, MAX_OVERFLOW)
+    # подсказка, почему не подключилась PostgreSQL (пароль из адреса в лог не пишем)
+    if IS_PG:
+        log.warning("PostgreSQL: хост %s", PG_URL.split("@")[-1].split("/")[0])
+    elif PG_URL:
+        log.warning("DATABASE_URL задан, но это не адрес PostgreSQL (начинается с «%s…»). Нужно ${{Postgres.DATABASE_URL}}", PG_URL[:10])
+    else:
+        log.warning("DATABASE_URL пустой — сервер на SQLite. В Railway: Variables → DATABASE_URL = ${{Postgres.DATABASE_URL}} → Deploy")
     if not IS_PG and os.getenv("ENV_NAME", "production") == "production":
         log.warning("Боевой сервер на SQLite: при 100 игроках нужна PostgreSQL (подключи её в Railway)")
 
