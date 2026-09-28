@@ -31,10 +31,14 @@ STACK_MAX = 1_000_000
 
 # мягкие пределы скачков (с запасом: лучше пропустить, чем обидеть честного игрока)
 SCRAP_BASE = 20_000          # разовые поступления: продажа вещей торговцу, награды квестов
-SCRAP_PER_SEC = 400          # фарм лома в секунду даже с бонусами VIP
+SCRAP_PER_SEC = 1200         # фарм лома в секунду даже с бонусами VIP (до +230%)
 CORES_BASE = 60
 CORES_PER_SEC = 2
 ENCH_JUMP = 3                # за одно сохранение (раз в ~10 с) больше +3 к заточке не набрать
+SPHERES = ("sph_cu", "sph_ti")
+SPH_PRICE_MIN = 150          # самая дешёвая сфера у торговца (медная)
+SPH_BASE = 40                # сферы «из ниоткуда» за одно сохранение: награда VIP (до 30), задания дня, выпадение
+ENCH_SLACK = 3
 
 recent = deque(maxlen=200)   # последние подозрительные сохранения (видны в /metrics)
 
@@ -53,6 +57,21 @@ def _items(S):
     if isinstance(eq, dict):
         out += [x for x in eq.values() if isinstance(x, dict)]
     return out
+
+
+def spheres(S):
+    """Сколько сфер заточки лежит в сумке и на складе."""
+    n = 0
+    for key in ("inv", "store"):
+        for x in S.get(key) or []:
+            if isinstance(x, dict) and x.get("id") in SPHERES and _num(x.get("n", 0)):
+                n += max(0, int(x.get("n", 0)))
+    return n
+
+
+def ench_total(S):
+    """Сумма заточки всех вещей: каждая успешная заточка съедает хотя бы одну сферу."""
+    return sum(int(x.get("e") or 0) for x in _items(S) if _num(x.get("e") or 0) and 0 <= (x.get("e") or 0) <= 1000)
 
 
 def max_ench(S):
@@ -110,6 +129,20 @@ def jumps(old, new, dt, granted):
     d_e = max_ench(new) - max_ench(old)
     if d_e > ENCH_JUMP:
         out.append(f"заточка +{d_e} за {int(dt)} с")
+    # сферы: больше, чем можно купить на весь доступный лом, получить наградами и выбить
+    a, b = old.get("scrap", 0), new.get("scrap", 0)
+    scrap_room = 0
+    if _num(a) and _num(b):
+        scrap_room = max(0, a - b + SCRAP_BASE + SCRAP_PER_SEC * dt + granted.get("scrap", 0))
+    sph_gain = SPH_BASE + granted.get("sph", 0) + int(scrap_room // SPH_PRICE_MIN)
+    s_old, s_new = spheres(old), spheres(new)
+    if s_new - s_old > sph_gain:
+        out.append(f"сферы +{s_new - s_old} за {int(dt)} с (предел {sph_gain})")
+    # заточка без сфер: успешных заточек не может быть больше, чем потрачено сфер
+    spent_max = max(0, s_old + sph_gain - s_new)
+    e_gain = ench_total(new) - ench_total(old)
+    if e_gain > spent_max + ENCH_SLACK:
+        out.append(f"заточка +{e_gain} при потраченных сферах не больше {spent_max}")
     return out
 
 

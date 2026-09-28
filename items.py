@@ -376,7 +376,8 @@ async def process_kills(s, uid, me, kills):
     import chipwar
     import funnel
     cap = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
-    drops, lf = [], 1.0
+    import vip
+    drops, lf, vip_lv = [], 1.0, None
     if not isinstance(kills, list):
         kills = []
     for i, k in enumerate(kills[:40]):
@@ -400,7 +401,9 @@ async def process_kills(s, uid, me, kills):
         before = await count_loot_kill(s, uid, 10 if boss else 1)
         lf = loot_factor(before)
         bonus = chipwar.loot_mult(me.get("fac"))
-        for d in roll(lv, mult * lf * bonus):
+        if vip_lv is None:
+            vip_lv = await vip.level(s, uid, bool(me.get("admin")))
+        for d in roll(lv, mult * lf * bonus * vip.drop_mult(vip_lv)):   # VIP-бонус к дропу считает сервер
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)

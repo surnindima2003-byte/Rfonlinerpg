@@ -213,8 +213,10 @@ async def api_save(request):
             granted = {}
             for g in (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.created >= since))).scalars().all():
                 try:
-                    granted[g.kind] = granted.get(g.kind, 0) + int(json.loads(g.payload or "{}").get("amount", 0))
-                except (ValueError, TypeError):
+                    pl = json.loads(g.payload or "{}")
+                    key = "sph" if g.kind == "item" and pl.get("item") in saveguard.SPHERES else g.kind
+                    granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
+                except (ValueError, TypeError, AttributeError):
                     pass
             data, notes = saveguard.check(user["id"], user["username"] or user["name"], old, data, time.time() - since, granted)
             if notes:
@@ -259,10 +261,6 @@ async def api_admin_grant(request):
     if not user["admin"]:
         raise web.HTTPForbidden(text="not admin")
     kind = body.get("kind")
-      # Смена позывного идёт через давно существующий маршрут выдач. Некоторые
-    # прокси держат список разрешённых URL и возвращают 404 для нового пути.
-    if kind == "name":
-        return await admin_set_name(body, user)
     if kind not in GRANT_KINDS:
         raise web.HTTPBadRequest(text="bad kind")
     try:
@@ -300,76 +298,6 @@ async def api_admin_grant(request):
     log.info("Админ @%s выдал %s %s игроку %s", user["username"], kind, payload, target_name)
     delivered = await push_to_player(tg_id, {"t": "grant", "grant": gd})
     return web.json_response({"ok": True, "online": delivered, "target": target_name})
-
-
-def set_saved_nick(row, name, now_ms=None):
-    """Обновить индекс позывного и его копию внутри сохранения игрока."""
-    row.nick = name
-    if not row.data:
-        return
-    try:
-        data = json.loads(row.data)
-    except (TypeError, ValueError):
-        return
-    if not isinstance(data, dict):
-        return
-    state = data.get("S")
-    if not isinstance(state, dict):
-        state = {}
-        data["S"] = state
-    state["name"] = name
-    stamp = int(now_ms if now_ms is not None else time.time() * 1000)
-    state["_ts"] = stamp
-    data["ts"] = stamp
-    row.data = json.dumps(data, ensure_ascii=False)
-    row.updated = stamp // 1000
-
-
-async def admin_set_name(body, user):
-    name = str(body.get("name", "")).strip()
-    if not valid_nick(name):
-        return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
-    if name.lower() in RESERVED_NICKS:
-        return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
-
-    target = str(body.get("target", "")).strip().lstrip("@").lower()
-    async with SessionLocal() as s:
-        if target in ("", "me"):
-            row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
-            target_name = user["username"] or user["name"]
-            if not row:
-                row = GameSave(tg_id=user["id"], username=user["username"], name=user["name"],
-                               epoch=DATA_EPOCH, data="", updated=int(time.time()))
-                s.add(row)
-        else:
-            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
-            target_name = target
-        if row is None:
-            return web.json_response({"ok": False, "error": "Игрок @" + target_name + " ещё не заходил в игру"})
-        taken = (await s.execute(select(GameSave).where(
-            func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != row.tg_id
-        ))).scalar_one_or_none()
-        if taken:
-            return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
-        tg_id = row.tg_id
-        set_saved_nick(row, name)
-        await s.commit()
-
-    # Не ждать следующего сообщения позиции: всем открытым вкладкам сразу меняем
-    # серверное состояние и приказываем сохранить новый позывной локально.
-    for conn in hub.by_uid.get(tg_id, ()):
-        conn.info["nick"] = name
-    delivered = await push_to_player(tg_id, {"t": "admin_nick", "name": name})
-    log.info("Админ @%s сменил позывной игрока %s на %s", user["username"], target_name, name)
-    return web.json_response({"ok": True, "online": delivered, "target": target_name, "name": name})
-
-
-async def api_admin_name(request):
-    """Обратная совместимость для клиентов, уже получивших отдельный URL."""
-    body, user = await read_auth(request)
-    if not user["admin"]:
-        raise web.HTTPForbidden(text="not admin")
-    return await admin_set_name(body, user)
 
 
 # ---------- гильдии: хранилище документов с проверкой прав ----------
@@ -1579,7 +1507,6 @@ async def start_web(port: int):
     app.router.add_post("/api/state/save", api_save)
     app.router.add_post("/api/grants/ack", api_ack)
     app.router.add_post("/api/admin/grant", api_admin_grant)
-    app.router.add_post("/api/admin/name", api_admin_name)
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)

@@ -254,6 +254,8 @@ async def api_gram(request):
             import items
             minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
             await s.commit()
+            import vip
+            vip.forget(uid)                                                # новый VIP действует на дроп сразу
             for who, bonus in notes:
                 await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "items": minted})

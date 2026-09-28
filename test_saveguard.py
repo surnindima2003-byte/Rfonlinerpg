@@ -15,8 +15,11 @@ if "metrics" not in sys.modules:
 import saveguard  # noqa: E402
 
 
-def save(scrap=1000, cores=10, inv=None, eq=None):
-    return {"S": {"scrap": scrap, "cores": cores, "exp": 5, "inv": inv or [{"id": "kit_s", "n": 5}],
+def save(scrap=1000, cores=10, inv=None, eq=None, sph=0):
+    inv = list(inv or [{"id": "kit_s", "n": 5}])
+    if sph:
+        inv.append({"id": "sph_cu", "n": sph})
+    return {"S": {"scrap": scrap, "cores": cores, "exp": 5, "inv": inv,
                   "store": [], "eq": eq or {"weapon": {"id": "g_weapon_1", "g": 1, "e": 3}}}, "bm": 100}
 
 
@@ -64,6 +67,41 @@ class SaveGuardTest(unittest.TestCase):
 
     def test_first_save_without_old(self):
         data, notes = saveguard.check(1, "a", None, save(scrap=5_000_000), 10, {})
+        self.assertEqual(notes, [])
+
+
+class SphereTest(unittest.TestCase):
+    def setUp(self):
+        saveguard.MODE = "on"
+
+    def w(self, e):
+        return {"weapon": {"id": "g_weapon_1", "g": 1, "e": e}}
+
+    def test_buying_spheres_with_scrap_ok(self):
+        # купил 100 медных сфер за 15 000 лома
+        data, notes = saveguard.check(1, "a", save(scrap=20_000, sph=0), save(scrap=5_000, sph=100), 10, {})
+        self.assertEqual(notes, [])
+
+    def test_spheres_from_nothing_flagged(self):
+        data, notes = saveguard.check(1, "a", save(scrap=0, sph=0), save(scrap=0, sph=5000), 10, {})
+        self.assertTrue(any("сферы" in b for _, b in notes))
+
+    def test_enchant_spends_spheres_ok(self):
+        # потратил 3 сферы, заточка +3
+        data, notes = saveguard.check(1, "a", save(sph=10, eq=self.w(3)), save(sph=7, eq=self.w(6)), 10, {})
+        self.assertEqual(notes, [])
+
+    def test_many_items_enchanted_without_spheres(self):
+        # 60 вещей разом +3 и ни одной потраченной сферы (с учётом всего лома, что мог прийти за 10 с)
+        inv_old = [{"id": f"g_armor_{i}", "n": 1, "g": 1, "e": 0} for i in range(60)]
+        inv_new = [{"id": f"g_armor_{i}", "n": 1, "g": 1, "e": 4} for i in range(60)]
+        o, n = save(scrap=0, inv=inv_old), save(scrap=0, inv=inv_new)
+        o["S"]["store"], n["S"]["store"] = [dict(x) for x in inv_old], [dict(x) for x in inv_new]   # ещё 60 вещей на складе
+        data, notes = saveguard.check(1, "a", o, n, 10, {})
+        self.assertTrue(any("потраченных сферах" in b for _, b in notes))
+
+    def test_granted_spheres_count(self):
+        data, notes = saveguard.check(1, "a", save(scrap=0), save(scrap=0, sph=500), 10, {"sph": 500})
         self.assertEqual(notes, [])
 
 
