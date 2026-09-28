@@ -171,7 +171,7 @@ async def api_save(request):
     # Не принимаем его ни от обычного игрока, ни от администратора.
     if body.get("epoch") != DATA_EPOCH:
         raise web.HTTPConflict(text="stale epoch")
-  data = body.get("data")
+    data = body.get("data")
     raw = json.dumps(data, ensure_ascii=False)
     if not isinstance(data, dict) or len(raw.encode()) > MAX_SAVE_BYTES:
         raise web.HTTPBadRequest(text="bad save")
@@ -181,7 +181,7 @@ async def api_save(request):
             row = GameSave(tg_id=user["id"])
             s.add(row)
         row.epoch = DATA_EPOCH
-      row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
+        row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
         s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
         try:
             # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
