@@ -3,7 +3,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy import Boolean, create_engine, event, inspect, select, text
+from sqlalchemy import Boolean, create_engine, event, inspect, literal, select, text
 from sqlalchemy.orm import sessionmaker
 
 import metrics
@@ -171,8 +171,56 @@ def migrate_sqlite_to_pg():
     log.warning("Перенос SQLite → PostgreSQL завершён: %s строк", moved)
 
 
+def _sql_literal(value):
+    return str(literal(value).compile(dialect=engine.dialect, compile_kwargs={"literal_binds": True}))
+
+
+def add_missing_columns():
+    """Добавляет в существующие таблицы колонки, которые появились в models.py после их создания.
+
+    create_all создаёт только новые таблицы, а в старые колонки не дописывает — отсюда
+    ошибки вида «no such column: game_saves.epoch». Данные не удаляются.
+    """
+    from config import DATA_EPOCH
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    added = 0
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in tables:
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                if col.primary_key:
+                    # колонку первичного ключа так не добавить — нужна пересборка таблицы
+                    log.error("Миграция: %s.%s входит в первичный ключ, автоматически не добавлена", table.name, col.name)
+                    continue
+                if col.name == "epoch":
+                    # старые сохранения продолжают жить в текущей эпохе; для вайпа задай LEGACY_EPOCH=<старая эпоха>
+                    value = os.getenv("LEGACY_EPOCH", DATA_EPOCH)
+                elif col.default is not None and getattr(col.default, "is_scalar", False):
+                    value = col.default.arg
+                else:
+                    value = None
+                ddl = col.type.compile(dialect=engine.dialect)
+                default = f" DEFAULT {_sql_literal(value)}" if value is not None else ""
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}{default}'))
+                if value is not None:
+                    conn.execute(text(f'UPDATE "{table.name}" SET "{col.name}" = :v WHERE "{col.name}" IS NULL'), {"v": value})
+                log.warning("Миграция: добавлена колонка %s.%s (значение для старых строк: %r)", table.name, col.name, value)
+                added += 1
+        for table in Base.metadata.sorted_tables:
+            if table.name in tables:
+                for idx in table.indexes:
+                    idx.create(conn, checkfirst=True)
+    return added
+
+
 async def init_db():
     await run_db(Base.metadata.create_all, engine, label="sql.migrate")
+    await run_db(add_missing_columns, label="sql.migrate")
     await run_db(migrate_sqlite_to_pg, label="sql.migrate")
     log.info("База данных: %s (пул %s+%s)", "PostgreSQL" if IS_PG else "SQLite", POOL_SIZE, MAX_OVERFLOW)
     if not IS_PG and os.getenv("ENV_NAME", "production") == "production":
