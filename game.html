@@ -123,6 +123,8 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .sk.mini{width:44px;height:44px;font-size:9px}
 .sk.kit{right:164px;bottom:6px}
 .sk.auto{right:66px;bottom:188px}
+.sk.auto.locked{opacity:.55}
+.sk.auto.locked::after{content:"🔒";position:absolute;right:-4px;top:-6px;font-size:11px;line-height:1;filter:drop-shadow(0 1px 1px #000)}
 .sk svg{width:28px;height:28px;position:relative}
 .sk.c0,.sk.c1,.sk.c2,.sk.c3{padding:0;border:0;background:none;overflow:visible;border-radius:14px;box-shadow:0 3px 8px rgba(0,0,0,.45)}
 .sk .skart{position:absolute;inset:0;width:100%;height:100%}
@@ -1541,7 +1543,35 @@ const fireBtn = $("skFire");
 fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); firing = true; });
 ["pointerup","pointerleave","pointercancel"].forEach(ev => fireBtn.addEventListener(ev, () => firing = false));
 $("skKit").addEventListener("click", useKit);
-$("skAuto").addEventListener("click", () => { auto = !auto; $("skAuto").classList.toggle("on", auto); });
+// ---- АВТО: открывается с VIP 2 (вкладка VIP), админам доступно всегда ----
+const AUTO_VIP = 2;
+function autoAllowed(){ return !!window.NET_ADMIN || (typeof vipLevel === "function" && vipLevel() >= AUTO_VIP); }
+function setAuto(on){
+  auto = !!on; $("skAuto").classList.toggle("on", auto);
+  if(!auto){ autoS.tgt = null; autoS.stuckT = 0; }
+}
+function renderAutoBtn(){ $("skAuto").classList.toggle("locked", !autoAllowed()); }
+$("skAuto").addEventListener("click", () => {
+  if(!auto && !autoAllowed()){ toast("🔒 АВТО открывается с VIP " + AUTO_VIP + " — смотри вкладку VIP в меню"); Sfx.play("ui"); return; }
+  setAuto(!auto); toast(auto ? "АВТО включено" : "АВТО выключено");
+});
+setInterval(() => { renderAutoBtn(); if(auto && !autoAllowed()) setAuto(false); }, 1000);
+// состояние автобоя: цель, застревание, «плохие» цели (за стеной, недостижимые)
+const autoS = {tgt:null, stuckT:0, lastD:0, losT:0, bad:new Map()};
+function autoPick(radius){
+  const nowT = performance.now()/1000;
+  let best = null, bestScore = Infinity;
+  for(const e of enemies){
+    if(e.dead || (autoS.bad.get(e) || 0) > nowT) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if(d > radius || !los(p.x, p.y, e.x, e.y)) continue;
+    // сначала те, кто уже атакует нас, потом ближайшие
+    const score = d - (e.chase ? 220 : 0);
+    if(score < bestScore){ bestScore = score; best = e; }
+  }
+  return best;
+}
+function autoDrop(e, sec){ if(e) autoS.bad.set(e, performance.now()/1000 + sec); if(tgt && tgt.kind === "enemy" && tgt.e === e) clearTarget(); autoS.tgt = null; autoS.stuckT = 0; autoS.losT = 0; }
 $("talkBtn").addEventListener("click", () => { if(nearNpc) UI[nearNpc.kind](); });
 window.addEventListener("keydown", e => {
   if(paused || !running) return; keys[e.code] = true;
@@ -1659,19 +1689,36 @@ function update(dt){
   if(firing && !locked && !auto && locKey !== "lobby" && !(typeof tgtPlayer === "function" && tgtPlayer())){
     const n = nearestEnemy(Math.max(RANGE, 240)); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); }
   }
-  const lockedNow = typeof lockedEnemy === "function" ? lockedEnemy() : null;
-  const t = locKey === "lobby" ? null : lockedNow ? (Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : auto ? nearestEnemy(Math.max(RANGE, 240) + 40) : null; p.target = t;
-  const inReach = t && Math.hypot(t.x-p.x, t.y-p.y) <= RANGE + NPCS[t.type].r + (auto ? 10 : 0) && los(p.x, p.y, t.x, t.y);
+  let lockedNow = typeof lockedEnemy === "function" ? lockedEnemy() : null;
+  // АВТО сам берёт цель в таргет (видна в рамке цели) и держит её до смерти, а не прыгает между мобами
+  if(auto && locKey !== "lobby" && !(typeof tgtPlayer === "function" && tgtPlayer())){
+    if(lockedNow && Math.hypot(lockedNow.x - p.x, lockedNow.y - p.y) > 560) { autoDrop(lockedNow, 3); lockedNow = null; }   // убежали слишком далеко
+    if(!lockedNow){ const n = autoPick(Math.max(RANGE, 240) + 80); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); lockedNow = n; autoS.stuckT = 0; autoS.losT = 0; autoS.lastD = Infinity; } }
+    // ремкомплект при 35% прочности
+    if(S.hp < st.maxhp*0.35 && !(p.kitCd > 0) && (have("kit_s") || have("kit_l"))) useKit();
+  }
+  const t = locKey === "lobby" ? null : lockedNow ? (auto || Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : null; p.target = t;
+  const tDist = t ? Math.hypot(t.x-p.x, t.y-p.y) : 0, tLos = t ? los(p.x, p.y, t.x, t.y) : false;
+  const inReach = t && tDist <= RANGE + NPCS[t.type].r + (auto ? 10 : 0) && tLos;
   const wantAim = t ? Math.atan2(t.y-p.y, t.x-p.x) : p.ang;
   const da2 = ((wantAim - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += da2*Math.min(1, dt*16);
-  if(CP.melee && auto && t && !inReach && !p.moving && stick.id === null){ const a = Math.atan2(t.y-p.y, t.x-p.x); const ax = p.x, ay = p.y; p.x += Math.cos(a)*speed*dt; p.y += Math.sin(a)*speed*dt; p.ang = a; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
+  // подход к цели: ближний бой — вплотную, стрелки — на дистанцию выстрела (раньше подходил только ближний бой)
+  if(auto && t && !inReach && !p.moving && stick.id === null){
+    const a = Math.atan2(t.y-p.y, t.x-p.x); const ax = p.x, ay = p.y;
+    p.x += Math.cos(a)*speed*dt; p.y += Math.sin(a)*speed*dt; p.ang = a; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate();
+    // застряли об стену или камень — через 1,2 с бросаем эту цель и берём другую
+    if(tDist < autoS.lastD - 3){ autoS.lastD = tDist; autoS.stuckT = 0; } else autoS.stuckT += dt;
+    if(autoS.stuckT > 1.2){ autoDrop(t, 8); }
+  } else if(inReach){ autoS.stuckT = 0; autoS.lastD = tDist; }
+  // цель долго за стеной — тоже меняем
+  if(auto && t){ if(tLos) autoS.losT = 0; else if((autoS.losT += dt) > 2.5) autoDrop(t, 8); }
   if(p.atkT > 0) p.atkT -= dt;
   // PvP: выбран живой игрок-противник вне безопасной зоны — атака идёт по нему
   const foe = typeof pvpFoe === "function" ? pvpFoe() : null;
   if(foe){
     const fr = Math.hypot(foe.rx - p.x, foe.ry - p.y), fReach = fr <= RANGE + 22 && los(p.x, p.y, foe.rx, foe.ry);
     const fa = Math.atan2(foe.ry - p.y, foe.rx - p.x), fd = ((fa - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += fd*Math.min(1, dt*16);
-    if(CP.melee && auto && !fReach && !p.moving && stick.id === null && fr < 520){ const ax = p.x, ay = p.y; p.x += Math.cos(fa)*speed*dt; p.y += Math.sin(fa)*speed*dt; p.ang = fa; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
+    if(auto && !fReach && !p.moving && stick.id === null && fr < 520){ const ax = p.x, ay = p.y; p.x += Math.cos(fa)*speed*dt; p.y += Math.sin(fa)*speed*dt; p.ang = fa; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
     if((firing || auto) && fReach && p.fireCd <= 0){
       p.atkT = 0.25; p.fireCd = 1/(CP.rate*(1 + buffV("rate"))*st.rate);
       const isCrit = Math.random()*100 < st.crit, dmg = Math.round((st.atk*(1 + buffV("atk")) + Math.floor(Math.random()*3))*(isCrit ? st.critPow : 1));
@@ -1728,7 +1775,7 @@ function updateEnemies(dt, st){
     const dx = p.x-e.x, dy = p.y-e.y, d = Math.hypot(dx,dy);
     const safe = p.dead || safeSpot(p);
     if(!safe && d < 240 && !e.room) e.chase = true;             // в подземельях моб агрится только когда его ударили
-    if(safe || d > (e.room ? 560 : 480)) e.chase = false;
+    if(safe || d > (e.room ? 560 : 480)){ e.chase = false; e.roomAggro = false; }
     let vx = 0, vy = 0;
     if(e.chase){
       e.ang = Math.atan2(dy,dx);
@@ -3719,6 +3766,9 @@ function hitEnemy(e, dmg, kind){
   const edef = NPCS[e.type].def || 0; if(edef) dmg *= 30/(30 + edef);
   dmg = Math.max(1, Math.round(dmg));
   e.hp -= dmg; e.flash = 0.12; e.chase = true;
+  if(e.room && !e.roomAggro){                                   // в подземелье на удар отвечает вся комната
+    for(const o of enemies) if(o.room === e.room && !o.dead){ o.chase = true; o.roomAggro = true; }
+  }
   const col = kind === "crit" ? "#F2C14B" : kind === "aoe" ? "#FFB347" : "#fff";
   addText(e.x + (Math.random()*16-8), e.y - 24, (kind === "crit" ? "КРИТ -" : "-") + dmg, col);
   const a = Math.atan2(e.y - p.y, e.x - p.x);
