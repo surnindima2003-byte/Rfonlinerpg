@@ -3773,7 +3773,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         if(d.m.ch === "dm" && d.m.to === S.name && d.m.nick !== S.name && !S.dmList.includes(d.m.nick)) S.dmList.push(String(d.m.nick).slice(0, 16));
         onChatUpdate();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
-      else if(d.t === "admin_nick" && typeof d.name === "string"){
+            else if(d.t === "admin_nick" && typeof d.name === "string"){
         S.name = d.name.slice(0, 16); save(); push(true);
         toast("Администратор изменил твой позывной на «" + S.name + "»");
       }
@@ -3806,7 +3806,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       body().innerHTML = `
         <label class="flabel" for="admTarget">Кому: @ник в Telegram или «me» для себя</label>
         <input class="field" id="admTarget" value="me" autocapitalize="off" autocomplete="off">
-                <div class="flabel">Сменить позывной</div>
+        <div class="flabel">Сменить позывной</div>
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="name">Сменить</button></div>
         <div class="flabel">Ресурсы</div>
         <div class="seg">${[["scrap","Лом"],["cores","Ядра"],["exp","Опыт"],["level","Уровни"]].map(([k, n]) => `<button type="button" data-adm="kind" data-v="${k}" aria-pressed="${adm.kind === k}">${n}</button>`).join("")}</div>
@@ -3831,10 +3831,10 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     if(r && r.ok) toast("Выдано @" + (r.target || target) + (r.online ? "" : " (получит при входе)"));
     else toast((r && r.error) || "Не получилось");
   }
-    async function admName(){
+      async function admName(){
     const target = $("admTarget").value.trim() || "me";
     const name = $("admNick").value.trim();
-    const r = await api("/api/admin/name", {target, name});
+    const r = await api("/api/admin/grant", {kind:"name", target, name});
     if(r && r.ok) toast("Позывной @" + (r.target || target) + " изменён на «" + r.name + "»");
     else toast((r && r.error) || "Не получилось");
   }
