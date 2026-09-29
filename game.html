@@ -230,6 +230,9 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.bag-h{display:flex;align-items:baseline;gap:6px}.bag-h small{font-weight:400;color:var(--muted);font-size:11px;text-transform:none}.bag-h span{margin-left:auto;font-size:12px;color:var(--muted)}
+.item-pop .detail{margin:0}
+#bagBtn[hidden]{display:none}
 .pot-acts{display:flex;flex-direction:column;gap:5px;align-items:stretch}.pot-on{color:var(--ok);font-size:11px}.pot-hint{color:var(--muted);font-size:10px;max-width:130px}
 .ench-opt{border:1px solid color-mix(in srgb,var(--c) 45%,var(--line));border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--panel-2)}
 .ench-opt .eo-top{display:flex;align-items:center;gap:8px}.ench-opt .eo-top svg{width:28px;height:28px;flex:none}
@@ -1036,7 +1039,7 @@ textarea.field{min-height:70px;resize:vertical}
       </div>
     </div>
     <div class="side">
-      <button type="button" id="bagBtn">Сумка</button>
+      <button type="button" id="bagBtn" hidden>Сумка</button>
       <button type="button" id="pkBtn" class="pk-btn" aria-pressed="false" hidden>⚔ ПК</button>
       <button type="button" id="adminBtn" hidden style="color:#F2C14B;border-color:#F2C14B">Админ</button>
     </div>
@@ -2579,6 +2582,36 @@ function unequip(slot){
 
 // ---- сумка ----
 let bagSel = null, bagMoveMode = false, bagMove = null;
+function bagDetail(){
+  const x = S.inv[bagSel]; if(!x) return "";
+  let h = "";
+    const it = ITEMS[x.id], gc = it.type === "gear" ? gradeColor(x.g) : null;
+    let btn = "";
+    if(it.type === "use") btn = `<button class="act" type="button" data-use="${bagSel}">Использовать</button>`;
+    if(it.type === "pot"){
+      const left = potLeft(it.pot), au = !!(S.potAuto || {})[x.id];
+      btn = `<div class="pot-acts">${left > 0 ? `<small class="pot-on">✓ Активно · осталось ~${Math.ceil(left/60)} мин</small>` : ""}
+        <button class="act" type="button" data-pot="${bagSel}" ${left > 0 ? "disabled" : ""}>${left > 0 ? "Уже активно" : "Использовать"}</button>
+        <button class="act ${au ? "" : "alt"}" type="button" data-potauto="${x.id}">Авто: ${au ? "ВКЛ" : "ВЫКЛ"}</button>
+        <small class="pot-hint">«Авто» само выпьет новое зелье, когда действие закончится</small></div>`;
+    }
+    if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}" ${it.lvl && S.level < it.lvl ? "disabled" : ""}>${it.lvl && S.level < it.lvl ? "Нужен ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
+    h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
+  return h;
+}
+function renderItem(){
+  const x = S.inv[bagSel];
+  if(!x){ closeSheet(); return; }
+  body().innerHTML = `<div class="item-pop">${bagDetail()}</div>`;
+}
+// закрыли карточку предмета — обновить Персонажа (надетое, сумку, характеристики)
+{ const _closeItem = closeSheet; closeSheet = function(){ const wasItem = sheetRender === renderItem; _closeItem(); if(wasItem && !$("scrChar").hidden) renderChar(); }; }
+function openItem(i){
+  bagSel = i; bagMoveMode = false; bagMove = null;
+  const x = S.inv[i]; if(!x) return;
+  const it = ITEMS[x.id];
+  openSheet((x.e ? "+" + x.e + " " : "") + it.name, it.type === "gear" ? GRADES[x.g || 0].name + " · " + (SLOT_NAME[it.slot] || "") : it.type === "pot" ? "Зелье усиления" : "Предмет", renderItem);
+}
 function renderBag(){
   const st = stat();
   let h = `<div class="money">Атака <b>${st.atk}</b> · Броня <b>${st.def}</b> · Прочность <b>${st.maxhp}</b> · Крит <b>${st.crit}%</b></div>
@@ -2594,18 +2627,7 @@ function renderBag(){
   if(bagMoveMode){ body().innerHTML = h; return; }
   const x = S.inv[bagSel];
   if(x){
-    const it = ITEMS[x.id], gc = it.type === "gear" ? gradeColor(x.g) : null;
-    let btn = "";
-    if(it.type === "use") btn = `<button class="act" type="button" data-use="${bagSel}">Использовать</button>`;
-    if(it.type === "pot"){
-      const left = potLeft(it.pot), au = !!(S.potAuto || {})[x.id];
-      btn = `<div class="pot-acts">${left > 0 ? `<small class="pot-on">✓ Активно · осталось ~${Math.ceil(left/60)} мин</small>` : ""}
-        <button class="act" type="button" data-pot="${bagSel}" ${left > 0 ? "disabled" : ""}>${left > 0 ? "Уже активно" : "Использовать"}</button>
-        <button class="act ${au ? "" : "alt"}" type="button" data-potauto="${x.id}">Авто: ${au ? "ВКЛ" : "ВЫКЛ"}</button>
-        <small class="pot-hint">«Авто» само выпьет новое зелье, когда действие закончится</small></div>`;
-    }
-    if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}" ${it.lvl && S.level < it.lvl ? "disabled" : ""}>${it.lvl && S.level < it.lvl ? "Нужен ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
-    h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
+    h += bagDetail();
   } else h += `<p class="hint">Нажми на предмет, чтобы посмотреть его. Всё надетое видно во вкладке Персонаж.</p>`;
   body().innerHTML = h;
 }
@@ -2728,16 +2750,10 @@ function renderGearTab(){
       <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-ench-eq="${cSlot}">Заточить</button><button class="act alt" type="button" data-cun="${cSlot}">Снять</button></div></div></section>`;
   }
 
-  // снаряжение из сумки
-  const list = S.inv.map((x, i) => ({x, i})).filter(o => ITEMS[o.x.id].type === "gear" && (!cSlot || ITEMS[o.x.id].slot === cSlot))
-    .sort((a, b) => (b.x.g - a.x.g) || ITEMS[a.x.id].slot.localeCompare(ITEMS[b.x.id].slot));
-  h += `<section class="pcard"><h3>Снаряжение в сумке</h3>
-    <div class="chips wrap"><button type="button" data-cslot="" aria-pressed="${!cSlot}">Все</button>${Object.keys(SLOT_NAME).map(s => `<button type="button" data-cslot="${s}" aria-pressed="${cSlot === s}">${SLOT_NAME[s]}</button>`).join("")}</div><div class="list">`;
-  h += list.length ? list.map(({x, i}) => {
-    const it = ITEMS[x.id], gc = gradeColor(x.g);
-    return `<button type="button" class="li gear" data-cpick="${i}" style="border-left-color:${gc};text-align:left;${cSel === i ? "box-shadow:0 0 0 2px var(--faction)" : ""}"><div class="ic" style="position:relative">${icon(x.id, x.g)}${encBadge(x)}</div>
-      <div class="tx"><span style="color:${gc}">${x.e ? "+" + x.e + " " : ""}${it.name}</span><small>${SLOT_NAME[it.slot]} · ${gearDesc(x.id, x.g, x.e)}</small><div class="cmp">${cmpHtml(x.id, x.g, x.e)}</div></div></button>`;
-  }).join("") : `<p class="hint" style="margin:0">${cSlot ? "Нет вещей для этого слота." : "В сумке нет снаряжения."} Купи обычные у торговца, выбей из врагов или собери в мастерской.</p>`;
+  // сумка прямо в Персонаже: все предметы сеткой, нажатие открывает карточку предмета
+  h += `<section class="pcard"><h3 class="bag-h">Предметы <small>(нажми для экипировки)</small><span>${S.inv.length}/${INV_MAX}</span></h3>
+    <div class="bagbar"><button class="act alt" type="button" data-csort="1">⇅ Сортировать</button></div><div class="grid cbag">`;
+  for(let i = 0; i < INV_MAX; i++){ const x = S.inv[i]; h += x ? cellHtml(x, `data-citem="${i}"`, "") : `<div class="cell empty"></div>`; }
   h += `</div></section>`;
   el.innerHTML = charTabsHtml() + h;
 }
@@ -2745,6 +2761,8 @@ $("scrChar").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return; const d = b.dataset;
   if(d.upsub){ upSub = d.upsub; renderChar(); return; }
   if(d.cchange){ openClassSheet(); return; }
+  if(d.citem !== undefined){ openItem(+d.citem); return; }
+  if(d.csort){ sortItems(S.inv); toast("Предметы отсортированы"); renderChar(); return; }
   if(d.cslot !== undefined){ cSlot = d.cslot || null; cSel = null; }
   else if(d.cpick !== undefined){ cSel = cSel === +d.cpick ? null : +d.cpick; }
   else if(d.cequip !== undefined){ if(equipAt(+d.cequip)) cSel = null; }
