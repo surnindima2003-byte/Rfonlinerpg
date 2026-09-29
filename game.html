@@ -1583,12 +1583,14 @@ function buildLoc(key){
     if(Math.hypot(x-spawn.x, y-spawn.y) < 260) continue;
     rocks.push({x, y, r, shade:rng()});
   }
-  for(let i = 0; i < L.count; i++) enemies.push(makeEnemy(L.npcs[i % L.npcs.length], spawn));
+  // места мобов — из того же зерна, что и камни: у всех игроков моб №N стоит в одном месте (общие мобы)
+  for(let i = 0; i < L.count; i++) enemies.push(makeEnemy(L.npcs[i % L.npcs.length], spawn, rng));
+  enemies.forEach((e, i) => e.idx = i);
   return spawn;
 }
-function makeEnemy(type, spawn){
-  const k = NPCS[type]; let x, y, tries = 0;
-  do { x = 80 + Math.random()*(W-160); y = 80 + Math.random()*(H-160); tries++; }
+function makeEnemy(type, spawn, rng){
+  const k = NPCS[type], R = rng || Math.random; let x, y, tries = 0;
+  do { x = 80 + R()*(W-160); y = 80 + R()*(H-160); tries++; }
   while(tries < 200 && (Math.hypot(x-spawn.x, y-spawn.y) < 480 || rocks.some(r => Math.hypot(r.x-x, r.y-y) < r.r + k.r + 10)));
   return {type, x, y, hx:x, hy:y, tx:x, ty:y, hp:k.hp, max:k.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:0, lunge:0};
 }
@@ -6239,6 +6241,7 @@ function slide(o, ox, oy, r){
 
 function buildDungeon(key){
   dgLayout(key);
+  const rngD = seeded(Object.keys(LOCS).indexOf(key)*1319 + 71);     // разброс мобов в комнате одинаков у всех игроков
   W = DG.W; H = DG.H; rocks = [];
   npcs = [{kind:"back", x:150, y:DG.corrY - 40}];
   for(const rm of dgRooms){
@@ -6248,11 +6251,12 @@ function buildDungeon(key){
     if(far === rm){ const bk = NPCS["db" + rm.lv]; enemies.push({type:"db" + rm.lv, x:rm.cx, y:rm.cy, hx:rm.cx, hy:rm.cy, tx:rm.cx, ty:rm.cy, hp:bk.hp, max:bk.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:2, lunge:0, room:rm, boss:true}); }
     for(let j = 0; j < rm.n; j++){
       const k = NPCS[type], col = j % cols, row = Math.floor(j/cols), rows = Math.ceil(rm.n/cols);
-      const x = rm.x + rm.w*(col + 0.5)/cols + (Math.random()*20 - 10);
-      const y = rm.y + rm.h*(row + 0.5)/rows + (Math.random()*20 - 10);
+      const x = rm.x + rm.w*(col + 0.5)/cols + (rngD()*20 - 10);
+      const y = rm.y + rm.h*(row + 0.5)/rows + (rngD()*20 - 10);
       enemies.push({type, x, y, hx:x, hy:y, tx:x, ty:y, hp:k.hp, max:k.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:Math.random()*3, lunge:0, room:rm});
     }
   }
+  enemies.forEach((e, i) => e.idx = i);
   return {x:210, y:DG.corrY};
 }
 function respawnDungeon(e){
@@ -8658,6 +8662,63 @@ hitEnemy = function(e, dmg, kind){
   if(done > 0 && locKey !== "lobby"){ const h = MG.hits.get(iid); if(h) h[2] += done; else MG.hits.set(iid, [iid, e.type, done]); }
   return r;
 };
+// ===================== ОБЩИЕ МОБЫ =====================
+// У всех игроков в локации одни и те же мобы: урон копится на сервере, он же объявляет смерть
+// (лут и опыт — тому, кто нанёс больше урона) и возрождение. Без связи с сервером всё работает как раньше.
+const SH = {q:new Map()};
+const shOn = () => typeof NET !== "undefined" && NET.on && NET.ws && NET.ws.readyState === 1 && locKey !== "lobby" && LOCS[locKey] && !LOCS[locKey].arena;
+const _hitSH = hitEnemy;
+hitEnemy = function(e, dmg, kind){
+  if(!e || e.dead || e.idx == null || !shOn()) return _hitSH(e, dmg, kind);
+  const before = e.hp;
+  const r = _hitSH(e, dmg, kind);
+  const done = Math.round(before - e.hp);
+  if(done > 0){ const q = SH.q.get(e.idx); if(q) q[2] += done; else SH.q.set(e.idx, [e.idx, e.type, done]); }
+  return r;
+};
+const _killSH = killEnemy;
+killEnemy = function(e){
+  if(e._srv || e.idx == null || !shOn()){ e._srv = false; return _killSH(e); }
+  e.hp = 1;                                              // ждём решения сервера (кто нанёс больше урона)
+  if(!e.pend) e.pend = now;
+};
+function shHome(e){
+  const k = NPCS[e.type];
+  Object.assign(e, {x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:k.hp, max:k.hp, dead:false, chase:false, roomAggro:false, stun:0, flash:0, cd:1, pend:0, iid:0});
+}
+setInterval(() => {
+  if(SH.q.size && shOn()){ NET.ws.send(JSON.stringify({t:"mhit", loc:locKey, h:[...SH.q.values()].slice(0, 60)})); SH.q.clear(); }
+  else if(!shOn()) SH.q.clear();
+  for(const e of enemies){
+    if(e.pend && now - e.pend > 3){ e.pend = 0; e._srv = true; killEnemy(e); }         // сервер молчит — убиваем сами
+    if(e.dead && e.respawn === Infinity && !shOn()) e.respawn = now + 10;             // связь пропала — возрождаем сами
+  }
+}, 150);
+{
+  const prevSH = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "mhp" || d.t === "mdie" || d.t === "mres" || d.t === "mstate"){
+      if(d.loc !== locKey) return;
+      if(d.t === "mhp"){ for(const [i, hp, max] of d.u || []){ const e = enemies[i]; if(!e || e.dead || e.idx !== i) continue;
+          e.max = max; e.hp = hp >= max ? max : Math.max(e.pend ? 1 : 0, Math.min(e.hp, hp)); } }
+      else if(d.t === "mdie"){ const e = enemies[d.i]; if(!e || e.idx !== d.i) return;
+        if(d.by === NET.id){ if(!e.dead){ e.iid = d.iid; e.pend = 0; e._srv = true; killEnemy(e); } }
+        else if(!e.dead){ e.dead = true; e.pend = 0; e.chase = false; Sfx.play("kill");
+          if(typeof tgt !== "undefined" && tgt && tgt.kind === "enemy" && tgt.e === e && typeof clearTarget === "function") clearTarget(); }
+        e.respawn = Infinity; }
+      else if(d.t === "mres"){ const e = enemies[d.i]; if(e && e.idx === d.i && e.dead) shHome(e); }
+      else {
+        const dead = new Set((d.dead || []).map(x => x[0]));
+        for(const e of enemies){ if(e.idx == null) continue;
+          if(dead.has(e.idx)){ if(!e.dead){ e.dead = true; e.chase = false; } e.respawn = Infinity; }
+          else if(e.dead && e.respawn === Infinity) shHome(e); }
+        for(const [i, hp, max] of d.hp || []){ const e = enemies[i]; if(e && !e.dead){ e.max = max; e.hp = Math.min(e.hp, hp); } }
+      }
+      return;
+    }
+    prevSH(d);
+  };
+}
 function mgTake(){
   if(!MG.hits.size && !killQ.length) return null;
   const out = {};

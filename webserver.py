@@ -33,6 +33,7 @@ import progress
 import stats
 import special_quests
 import saveguard
+import mobworld
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -256,11 +257,57 @@ async def api_ack(request):
     return web.json_response({"ok": True})
 
 
+async def admin_set_name(user, body):
+    """Админ меняет позывной игроку: проверка формата и занятости, запись в сохранение, обновление в игре."""
+    name = str(body.get("name", "")).strip()
+    if not valid_nick(name):
+        return web.json_response({"ok": False, "error": "Позывной: 3–16 символов — буквы, цифры, пробел, _ или -"})
+    if name.lower() in RESERVED_NICKS:
+        return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
+    target = str(body.get("target", "")).strip().lstrip("@").lower()
+    async with SessionLocal() as s:
+        if target in ("", "me"):
+            row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+        else:
+            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
+        if not row:
+            return web.json_response({"ok": False, "error": ("Игрок @" + target if target not in ("", "me") else "Ты") + " ещё не заходил в игру"})
+        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != row.tg_id))).scalar_one_or_none()
+        if taken:
+            return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
+        old = row.nick or ""
+        row.nick = name
+        try:                                                     # чтобы при следующем входе в сохранении был новый позывной
+            data = json.loads(row.data) if row.data else None
+            if isinstance(data, dict) and isinstance(data.get("S"), dict):
+                data["S"]["name"] = name
+                row.data = json.dumps(data, ensure_ascii=False)
+        except ValueError:
+            pass
+        tg_id, uname = row.tg_id, row.username or ""
+        await s.commit()
+    for c in list(hub.by_uid.get(tg_id, [])):                   # игрок в сети — меняем сразу
+        c.info["nick"] = name
+    delivered = await push_to_player(tg_id, {"t": "rename", "name": name, "by": user["username"]})
+    log.warning("Админ @%s сменил позывной игрока %s: «%s» → «%s»", user["username"], tg_id, old, name)
+    return web.json_response({"ok": True, "online": delivered, "target": uname or str(tg_id), "name": name, "old": old})
+
+
+async def api_admin_name(request):
+    """Старый адрес смены позывного — для клиентов, которые загрузили прошлую версию страницы."""
+    body, user = await read_auth(request)
+    if not user["admin"]:
+        raise web.HTTPForbidden(text="not admin")
+    return await admin_set_name(user, body)
+
+
 async def api_admin_grant(request):
     body, user = await read_auth(request)
     if not user["admin"]:
         raise web.HTTPForbidden(text="not admin")
     kind = body.get("kind")
+    if kind == "name":                                           # смена позывного идёт через тот же маршрут
+        return await admin_set_name(user, body)
     if kind not in GRANT_KINDS:
         raise web.HTTPBadRequest(text="bad kind")
     try:
@@ -1261,7 +1308,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit"}
 
 
 async def ws_handler(request):
@@ -1342,6 +1389,7 @@ async def ws_handler(request):
                 clean_pos(d, info)
                 if info["loc"] != old_loc:
                     hub.moved(conn, old_loc)
+                    conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
                 if info.pop("pos_fix", False) and time.time() - info.get("fix_t", 0) > 1:
                     info["fix_t"] = time.time()                      # вернуть телефон на последнюю честную точку
                     conn.push(realtime.encode({"t": "pos_fix", "x": info["x"], "y": info["y"]}))
@@ -1361,6 +1409,8 @@ async def ws_handler(request):
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
                     info["emo_t"] = time.time()
                     hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
+            elif t == "mhit":
+                mobworld.on_hits(info, d, hub)
             elif t == "mute":
                 await handle_mute(d, info)
             elif t == "report":
@@ -1451,6 +1501,7 @@ async def world_loop():
             if tick % WORLD_HZ == 0:
                 for pid in list(parties):
                     await send_party(pid)
+            mobworld.tick(hub)                              # общие мобы: прочность, смерть, возрождение
             world_tick(keepalive=tick % WORLD_HZ == 0,      # раз в секунду шлём даже без изменений
                        full_tick=tick % (WORLD_HZ * 10) == 0)   # дельта-клиентам — полный снимок раз в 10 с
         except Exception:
@@ -1507,6 +1558,7 @@ async def start_web(port: int):
     app.router.add_post("/api/state/save", api_save)
     app.router.add_post("/api/grants/ack", api_ack)
     app.router.add_post("/api/admin/grant", api_admin_grant)
+    app.router.add_post("/api/admin/name", api_admin_name)
     app.router.add_post("/api/db", api_db)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
