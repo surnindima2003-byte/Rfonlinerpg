@@ -230,6 +230,19 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.ench-opt{border:1px solid color-mix(in srgb,var(--c) 45%,var(--line));border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--panel-2)}
+.ench-opt .eo-top{display:flex;align-items:center;gap:8px}.ench-opt .eo-top svg{width:28px;height:28px;flex:none}
+.ench-opt .eo-top b{flex:1;font-size:14px}.ench-opt .eo-top em{font-style:normal;font:13px 'Russo One',sans-serif}
+.ench-opt small{display:block;color:var(--muted);font-size:12px;margin:5px 0 8px;line-height:1.35}
+.ench-run{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 6px;text-align:center}
+.ench-run b{font:16px 'Russo One',sans-serif}.ench-run small{color:var(--muted)}
+.ench-prog{width:70%;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.ench-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#F2C14B,#5FD4E8);animation:enchProg 1.25s linear forwards}
+@keyframes enchProg{to{width:100%}}
+.ench-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:34px;color:#fff;animation:enchPop .35s ease-out}
+.ench-run.ok .ench-mark{background:#3FA35A;box-shadow:0 0 24px rgba(63,163,90,.6)}.ench-run.fail .ench-mark{background:#B8742A}
+.ench-run h3{margin:0;font:20px 'Russo One',sans-serif}.ench-run.ok h3{color:var(--ok)}.ench-run p{margin:0;color:var(--muted)}
+@keyframes enchPop{from{transform:scale(.4);opacity:0}}
 .bonlist{display:flex;flex-direction:column;gap:6px}
 .bonrow{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel-2)}
 .bonrow span{font-size:13px;font-weight:600}.bonrow small{display:block;font-weight:400;color:var(--muted);font-size:11px;margin-top:2px}
@@ -5984,9 +5997,13 @@ function renderEnchant(){
       <div class="ench-stats"><div><small>Сейчас</small>${gearDesc(x.id, x.g, e)}</div><span>→</span><div><small>После заточки</small><span style="color:var(--ok)">${gearDesc(x.id, x.g, e + 1)}</span></div></div>`}
     </div>
     <div class="ench-res" id="enchRes">${enchResult}</div>
-    <div class="sphs">${sph("sph_cu", "#F0A060")}${sph("sph_ti", "#8FD8F0")}</div>
-    <button class="btn pri wide" type="button" data-ench="go" ${max || enchBusy || !have(enchSph) ? "disabled" : ""}>${max ? "Максимум" : !have(enchSph) ? "Нет сферы: купи у торговца" : "Заточить · 1 " + (enchSph === "sph_cu" ? "медная" : "титановая") + " сфера"}</button>
-    ${enchSph === "sph_cu" && !max && ch < 100 ? `<p class="hint" style="color:var(--rust);text-align:center">Внимание: при неудаче предмет будет разрушен</p>` : ""}
+    ${max ? "" : [["sph_cu", "Обычная заточка", "#F0A060", ch >= 100 ? "Медная сфера. На этом уровне заточка безопасна." : "Дешёвая медная сфера. Если заточка не удастся — предмет сломается и будет потерян навсегда."],
+                 ["sph_ti", "Безопасная заточка", "#8FD8F0", "Редкая титановая сфера. Если заточка не удастся — предмет останется целым, пропадёт только попытка."]]
+      .map(([id, title, col, txt]) => `<div class="ench-opt" style="--c:${col}">
+        <div class="eo-top">${icon(id)}<b>${title}</b><em style="color:${have(id) ? "var(--ok)" : "var(--rust)"}">×${have(id)}</em></div>
+        <small>${txt}</small>
+        <button class="btn ${id === "sph_ti" ? "pri" : ""} wide" type="button" data-ench-go="${id}" ${enchBusy || !have(id) ? "disabled" : ""}>${have(id) ? "Заточить" : "Нет сферы: купи у торговца"}</button>
+      </div>`).join("")}
     <h3 style="margin:14px 0 4px;font:14px 'Russo One',sans-serif">Шансы заточки</h3>
     <div class="ench-table">${ENCH_CHANCE.map((c, i) => `<div class="${i === e ? "cur" : ""}"><b>+${i + 1}</b>${c}%</div>`).join("")}</div>
     <p class="hint">До +3 заточка безопасна для любых сфер. Каждый уровень даёт +${Math.round(ENCH_STEP*100)}% к характеристикам вещи.</p>`;
@@ -5996,8 +6013,9 @@ function doEnchant(forced){
   const x = enchGet(); if(!x || enchBusy) return;
   const e = x.e || 0; if(e >= ENCH_MAX || !have(enchSph)) return;
   enchBusy = true; removeItem(S.inv, enchSph, 1);
-  const el = $("enchItem"); el.classList.remove("ok", "fail"); el.classList.add("flash"); Sfx.play("portal");
-  $("enchRes").textContent = "…";
+  body().innerHTML = `<div class="ench-run"><div class="ench-item flash" id="enchItem" style="border-color:${gradeColor(x.g)}">${icon(x.id, x.g)}</div>
+    <b>Идёт заточка…</b><div class="ench-prog"><i></i></div><small>+${e} → +${e + 1} · шанс ${ENCH_CHANCE[e]}%</small></div>`;
+  Sfx.play("portal");
   setTimeout(() => {
     const chance = ENCH_CHANCE[e], ok = forced ? forced === "ok" : Math.random()*100 < chance, it = ITEMS[x.id];
     if(ok){
@@ -6016,16 +6034,21 @@ function doEnchant(forced){
       if(typeof bagSel !== "undefined") bagSel = null; if(typeof cSel !== "undefined") cSel = null;
       return;
     }
-    enchBusy = false; save(); renderEnchant();
-    const el2 = $("enchItem"); if(el2) el2.classList.add(ok ? "ok" : "fail");
-  }, 900);
+    enchBusy = false; save();
+    if(ok && typeof seasonAddXp === "function"){ seasonAddXp(5); toast("+5 очков сезона"); }
+    body().innerHTML = `<div class="ench-run done ${ok ? "ok" : "fail"}"><div class="ench-mark">${ok ? "✓" : "✕"}</div>
+      <h3>${ok ? "+" + x.e + " Успех!" : "Неудача"}</h3><p>${ok ? it.name + " заточен до +" + x.e : "Титановая сфера сохранила предмет: он остался +" + e}</p>
+      <button class="btn pri wide" type="button" data-ench="cont">Продолжить</button></div>`;
+  }, 1300);
 }
 
 $("shBody").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return;
   if(b.dataset.enchInv !== undefined){ openEnchant({where:"inv", i:+b.dataset.enchInv}); return; }
   if(b.dataset.sph){ enchSph = b.dataset.sph; enchResult = ""; renderEnchant(); return; }
+  if(b.dataset.enchGo){ enchSph = b.dataset.enchGo; enchResult = ""; doEnchant(); return; }
   if(b.dataset.ench === "go") doEnchant();
+  if(b.dataset.ench === "cont"){ enchResult = ""; renderEnchant(); return; }
   if(b.dataset.ench === "close") closeSheet();
 });
 $("scrChar").addEventListener("click", e => {
@@ -7505,7 +7528,7 @@ doEnchant = async function(){
     if(!doEnchant._warned || doEnchant._warned !== x.uid){ doEnchant._warned = x.uid; toast("Учтённых сфер нет: после заточки вещь нельзя будет продать за GRAM. Нажми ещё раз"); return; }
     regGone([x.uid]); delete x.uid; save(); _doEnchantLocal(); regClampSph(); return;
   }
-  const b = body().querySelector('[data-ench="go"]'); if(b) b.disabled = true;
+  const b = body().querySelector(`[data-ench-go="${enchSph}"]`); if(b) b.disabled = true;
   let r;
   try{ r = await regApi("enchant", {uid:x.uid, sphere:enchSph}); }catch(e){ r = null; }
   if(b) b.disabled = false;
