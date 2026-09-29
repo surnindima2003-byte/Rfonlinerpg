@@ -54,6 +54,30 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .bar.cp{position:relative;height:9px;margin-top:5px}
 .bar.cp i{background:linear-gradient(90deg,#C4901C,#F2C14B)}
 .bar.cp span{position:absolute;inset:0;display:grid;place-items:center;font-size:8px;font-weight:700;color:#1B232C;letter-spacing:.3px}
+/* ---- панель игрока: аватар с уровнем и классом, три полоски с цифрами, валюты ---- */
+.hud2{padding:7px 8px 6px;border-radius:14px;background:linear-gradient(180deg,rgba(24,33,44,.92),rgba(14,19,26,.9));border-color:#3A4B5E;box-shadow:inset 0 0 0 1px rgba(95,212,232,.06)}
+.h2-top{display:flex;align-items:center;gap:8px;min-width:0}
+.h2-av{position:relative;width:46px;height:46px;flex:none}
+.h2-img{width:46px;height:46px;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 50% 35%,#2E3E50,#141B24);border:2px solid #4E6A86}
+.h2-lv{position:absolute;left:-5px;bottom:-5px;min-width:21px;height:21px;border-radius:50%;background:#141B24;border:2px solid #F2C14B;color:#F2E6C8;font:11px/17px 'Russo One',sans-serif;text-align:center;padding:0 2px}
+.h2-cls{position:absolute;right:-5px;bottom:-5px;width:19px;height:19px;border-radius:50%;background:#7A2E36;border:2px solid #141B24;font-style:normal;font-size:10px;line-height:15px;text-align:center}
+.h2-id{min-width:0;flex:1}
+.h2-id .nm{display:block;font:16px 'Russo One',sans-serif;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #000}
+.h2-tour{pointer-events:auto;align-self:flex-start;flex:none;border:1px solid #8A6414;border-radius:9px;padding:4px 9px;background:linear-gradient(180deg,#F7D46A,#E0A52A);color:#2A1C04;font:12px 'Russo One',sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.h2-sub{display:flex;gap:8px;font-size:12px;white-space:nowrap}
+.h2-sub #hCls{color:#C06A6A;font-weight:600}
+.h2-bm{color:#F2C14B;font-family:'Russo One',sans-serif}
+.h2-bars .bar{position:relative;height:12px;border-radius:6px;margin-top:4px;background:#1A232D;border:1px solid #2A3846}
+.h2-bars .bar span{position:absolute;inset:0;display:grid;place-items:center;font:700 9px/1 Rubik,sans-serif;color:#fff;text-shadow:0 1px 1px #000,0 0 2px #000;letter-spacing:.3px}
+.h2-bars .bar.cp i{background:linear-gradient(90deg,#B98517,#F2C14B)}
+.h2-bars .bar.cp span{color:#1B1405;text-shadow:none}
+.h2-bars .bar.hp i{background:linear-gradient(90deg,#3E9E4E,#7BD58A)}
+.h2-bars .bar.xp{height:12px}.h2-bars .bar.xp i{background:linear-gradient(90deg,#A8661C,#E3A043)}
+.h2-res{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px}
+.h2-res span{display:flex;align-items:center;gap:5px;background:#131A22;border:1px solid #2A3846;border-radius:8px;padding:2px 6px;font-size:12px;min-width:0}
+.h2-res i{font-style:normal;font-size:12px;flex:none}
+.h2-res b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-scrap i,.r-scrap b{color:#F2C14B}.r-cores i{color:#E0694A}.r-cores b{color:#7BD58A}.r-gram i{color:#5FC8F2}.r-gram b{color:#BFE8FF}
 .cell,.slot .ic,.li .ic,.cslot{position:relative}
 .enc{position:absolute;left:3px;top:2px;font:10px 'Russo One',sans-serif;font-style:normal;color:#F2C14B;text-shadow:0 1px 2px #000,0 0 3px #000;z-index:1}
 /* заточка */
@@ -205,6 +229,11 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-go:disabled{opacity:.6}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
+.upseg{margin:8px 12px 0}
+.bonlist{display:flex;flex-direction:column;gap:6px}
+.bonrow{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel-2)}
+.bonrow span{font-size:13px;font-weight:600}.bonrow small{display:block;font-weight:400;color:var(--muted);font-size:11px;margin-top:2px}
+.bonrow b{font:13px 'Russo One',sans-serif;color:var(--muted);text-align:right}.bonrow b.up{color:#7BD58A}
 .qs-go{display:block;width:100%;margin-top:9px;border:0;border-radius:8px;padding:9px;background:linear-gradient(180deg,#F2C14B,#D99A2B);color:#fff;font:600 13px Rubik,sans-serif;text-shadow:0 1px 1px rgba(0,0,0,.25)}
 
 /* ---- окна ---- */
@@ -719,6 +748,13 @@ button.li{width:100%;font:inherit;color:inherit}
 .vip-bon{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
 .vip-bon div{background:var(--panel-2);border:1px solid rgba(242,169,59,.35);border-radius:10px;padding:8px 4px;text-align:center;font-size:12px;font-weight:700}
 .vip-bon div.off{opacity:.45}
+.cx-bonus{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;border:1px solid #5A4A9A;background:rgba(90,74,154,.18);color:#D6C8FF;border-radius:12px;padding:10px 12px;margin:6px 0}
+.cx-bonus span{font-size:18px;line-height:1}
+.cx-bontot{font-size:13px;color:#7BD58A;margin:-2px 2px 8px}
+.cx-filters{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px}.cx-filters .field{margin:0;min-width:0;padding:8px}
+.cx-count{font-size:12px;color:var(--muted);margin:6px 2px}
+.cxcard .cx-fav{background:none;border:0;color:var(--muted);font-size:18px;padding:0 4px;flex:none}.cxcard .cx-fav.on{color:#F2C14B}
+.cx-bon em{font-style:normal;color:#7BD58A;font-weight:700;margin-right:8px}
 .vipcard,.packcard,.cxcard{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
 .vipcard.got{border-color:rgba(123,201,138,.5)}
 .vc-top{display:flex;align-items:center;gap:8px}
@@ -972,12 +1008,18 @@ textarea.field{min-height:70px;resize:vertical}
   <main class="screen game" id="scrGame" aria-label="Игра">
     <canvas id="cv"></canvas>
     <div class="hud">
-      <div class="hud-card">
-        <div class="hud-top"><b id="hLvl">1</b><span class="nm" id="hName" data-notr>Пилот</span><span style="margin-left:auto" id="hHp">50/50</span></div>
-        <div class="bar cp" title="CP: очки боя, работают только против игроков"><i id="hCpBar"></i><span id="hCpTxt"></span></div>
-        <div class="bar hp"><i id="hHpBar"></i></div>
-        <div class="bar xp"><i id="hXpBar"></i></div>
-        <div class="hud-res"><span id="hScrap">Лом 0</span><span id="hCores">Ядра 0</span><span id="hBM" style="margin-left:auto;color:#F2C14B">БМ 0</span></div>
+      <div class="hud-card hud2">
+        <div class="h2-top">
+          <div class="h2-av"><div class="h2-img" id="hAv"></div><b class="h2-lv" id="hLvl">1</b><i class="h2-cls" id="hClsIc"></i></div>
+          <div class="h2-id"><span class="nm" id="hName" data-notr>Пилот</span><div class="h2-sub"><span id="hCls">Пилот</span><span class="h2-bm" id="hBM">БМ 0</span></div></div>
+          <button type="button" class="h2-tour" id="tourBtn">Турнир 🏆</button>
+        </div>
+        <div class="h2-bars">
+          <div class="bar cp" title="CP: очки боя, работают только против игроков"><i id="hCpBar"></i><span id="hCpTxt"></span></div>
+          <div class="bar hp"><i id="hHpBar"></i><span id="hHp">50 / 50</span></div>
+          <div class="bar xp"><i id="hXpBar"></i><span id="hXpTxt"></span></div>
+        </div>
+        <div class="h2-res"><span class="r-scrap" title="Лом"><i>⚙</i><b id="hScrap">0</b></span><span class="r-cores" title="Энергоядра"><i>◉</i><b id="hCores">0</b></span><span class="r-gram" title="GRAM"><i>◆</i><b id="hGram">0</b></span></div>
       </div>
     </div>
     <div class="side">
@@ -2297,8 +2339,15 @@ const hudWidth = (id, pct) => { const v = (Math.round(Math.max(0, Math.min(100, 
 let hudBmT = 0;
 function hud(){
   const st = stat();
-  hudText("hLvl", "Ур. " + S.level); hudText("hName", S.name);
-  hudText("hHp", Math.ceil(S.hp) + "/" + st.maxhp);
+  hudText("hLvl", String(S.level)); hudText("hName", S.name);
+  const nf = v => Math.round(v).toLocaleString("ru-RU");
+  hudText("hHp", nf(Math.ceil(S.hp)) + " / " + nf(st.maxhp));
+  hudText("hXpTxt", nf(S.exp) + " / " + nf(expNeed(S.level)));
+  const C0 = S.cls && CLASSES[S.cls];
+  hudText("hCls", C0 ? C0.name : "Пилот");
+  // аватар — портрет своего робота; перерисовывается только при смене класса, фракции или снаряжения
+  const avKey = (S.cls || "") + "|" + (S.faction || "") + "|" + JSON.stringify(typeof eqGrades === "function" ? eqGrades(S.eq) : {});
+  if(HUDC.av !== avKey && typeof mechImg === "function"){ HUDC.av = avKey; try{ $("hAv").innerHTML = mechImg(S.cls || "guard", S.faction || "aegis", typeof eqGrades === "function" ? eqGrades(S.eq) : {}, 46); }catch(e){} $("hClsIc").textContent = ({guard:"🛡", reaper:"⚔", sniper:"🎯", techno:"✦"})[S.cls] || "•"; $("hClsIc").style.background = C0 ? C0.color : "#7A2E36"; }
   hudWidth("hHpBar", S.hp/st.maxhp*100);
   const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp));
   hudWidth("hCpBar", cp/st.maxcp*100); hudText("hCpTxt", "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU"));
@@ -2306,8 +2355,9 @@ function hud(){
   // полная золотая мигающая шкала — следующий уровень ждёт подтверждения сервера
   const held = !window.NET_ADMIN && S.srvCap > 0 && S.level >= S.srvCap && S.exp >= expNeed(S.level);
   if(HUDC.xpHeld !== held){ HUDC.xpHeld = held; $("hXpBar").classList.toggle("held", held); }
-  hudText("hScrap", "Лом " + S.scrap); hudText("hCores", "Ядра " + S.cores);
-  if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + combatPower()); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
+  hudText("hScrap", nf(S.scrap)); hudText("hCores", nf(S.cores));
+  hudText("hGram", typeof gramBal === "function" ? (Math.floor(gramBal()*100)/100).toLocaleString("ru-RU") : "0");
+  if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + nf(combatPower())); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
   hudText("kitCount", String(have("kit_s") + have("kit_l")));
   const cd = (id, v, max) => { const k = `scaleY(${Math.round(Math.max(0, Math.min(1, v/max))*50)/50})`; if(HUDC[id + ":cd"] !== k){ HUDC[id + ":cd"] = k; $(id).querySelector(".cd").style.transform = k; } };
   cd("skFire", Math.max(0, p.fireCd), 1/classParams().rate); cd("skKit", p.kitCd, 2);
@@ -2635,6 +2685,7 @@ function renderGearTab(){
 }
 $("scrChar").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return; const d = b.dataset;
+  if(d.upsub){ upSub = d.upsub; renderChar(); return; }
   if(d.cchange){ openClassSheet(); return; }
   if(d.cslot !== undefined){ cSlot = d.cslot || null; cSel = null; }
   else if(d.cpick !== undefined){ cSel = cSel === +d.cpick ? null : +d.cpick; }
@@ -2661,6 +2712,7 @@ $("navGame").addEventListener("click", () => showTab("game"));
 $("navChar").addEventListener("click", () => showTab("char"));
 $("navMap").addEventListener("click", () => showTab("map"));
 $("navQuests").addEventListener("click", () => showTab("quests"));
+$("tourBtn").addEventListener("click", () => { if(typeof openEvents === "function"){ openEvents(); Sfx.play("ui"); } });
 $("navGuild").addEventListener("click", () => showTab("guild"));
 $("navProfile").addEventListener("click", () => showTab("profile"));
 
@@ -3809,6 +3861,8 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         <select class="field" id="admItem">${GEAR_OPTS.map(k => `<option value="${k}" ${adm.item === k ? "selected" : ""}>${ITEMS[k].name}</option>`).join("")}</select>
         <div class="pick">${GRADES.map((g, i) => `<button type="button" data-adm="grade" data-v="${i}" aria-pressed="${adm.grade === i}" aria-label="${g.name}"><span class="sw2" style="background:${g.color}"></span></button>`).join("")}</div>
         <button class="btn pri wide" type="button" data-adm="item">Выдать предмет</button>
+        <div class="flabel" style="margin-top:10px">Сменить позывной игроку из поля «Кому»</div>
+        <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="nick">Сменить</button></div>
         <div class="set" style="margin-top:8px"><div class="tx">Бессмертие<small>Только для тебя, пока открыта игра</small></div><button class="sw" type="button" role="switch" data-adm="god" aria-checked="${NET.god}" aria-label="Бессмертие"></button></div>
         <div class="flabel" style="margin-top:6px">Телепорт без ограничений по уровню</div>
         <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
@@ -3833,6 +3887,15 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     else if(a === "grade"){ adm.item = $("admItem").value; adm.grade = +v; adminSheet(); $("admTarget").value = keep.t; $("admAmt").value = keep.n; }
     else if(a === "give") admGrant({kind:adm.kind, amount:parseInt($("admAmt").value) || 0});
     else if(a === "item") admGrant({kind:"item", amount:1, item:$("admItem").value, grade:adm.grade});
+    else if(a === "nick"){
+      const name = ($("admNick").value || "").trim();
+      if(name.length < 3 || name.length > 16){ toast("Позывной: 3–16 символов — буквы, цифры, пробел, _ или -"); return; }
+      const target = $("admTarget").value.trim() || "me";
+      api("/api/admin/grant", {kind:"name", target, name}).then(r => {
+        if(r && r.ok){ toast("Позывной @" + (r.target || target) + ": «" + r.old + "» → «" + r.name + "»" + (r.online ? "" : " (увидит при входе)")); $("admNick").value = ""; }
+        else toast((r && r.error) || "Не получилось");
+      });
+    }
     else if(a === "god"){ NET.god = window.NET_GOD = !NET.god; b.setAttribute("aria-checked", String(NET.god)); toast(NET.god ? "Бессмертие включено" : "Бессмертие выключено"); }
     else if(a === "tp"){ closeSheet(); travel(v); }
   });
@@ -4398,7 +4461,26 @@ function pointsCard(extra){
 }
 
 // ---- улучшения ----
+let upSub = "stats";
+// «Все бонусы»: откуда что берётся — VIP, гильдия, кодекс, снаряжение
+function bonusesView(){
+  const st = stat(), vb = typeof vipBonus === "function" ? vipBonus() : {xp:0, scrap:0, drop:0}, vl = typeof vipLevel === "function" ? vipLevel() : 0;
+  const gx = typeof guildExpMult === "function" ? guildExpMult() - 1 : 0, cb = typeof codexBonus === "function" ? codexBonus() : {atk:0, def:0, hp:0, crit:0};
+  const pct = v => (v > 0 ? "+" : "") + Math.round(v*100) + "%";
+  const rows = [
+    ["⭐", "Опыт", vb.xp + gx, `VIP ${vl}: ${pct(vb.xp)}${gx ? ` · гильдия ${pct(gx)}` : ""}`],
+    ["⚙", "Лом", vb.scrap + (st.loot || 0), `VIP ${vl}: ${pct(vb.scrap)}${st.loot ? ` · снаряжение ${pct(st.loot)}` : ""}`],
+    ["🎁", "Доп. шанс дропа", vb.drop, `VIP ${vl}`]
+  ];
+  return `<section class="pcard"><h3>Все бонусы</h3><div class="bonlist">${rows.map(([ic, n, v, src]) => `<div class="bonrow"><span>${ic} ${n}<small>${src}</small></span><b class="${v > 0 ? "up" : ""}">${pct(v)}${v > 0 ? " ▲" : ""}</b></div>`).join("")}
+    <div class="bonrow"><span>📘 Кодекс<small>завершённые наборы</small></span><b class="${cb.atk || cb.def || cb.hp || cb.crit ? "up" : ""}">+${cb.atk} АТК · +${cb.def} ЗАЩ · +${cb.hp} ПРОЧ · +${cb.crit}% КРИТ</b></div></div></section>`;
+}
 function upgradesView(){
+  const seg = `<div class="seg upseg">${[["stats", "Характеристики"], ["bonus", "Все бонусы"]].map(([k, n]) => `<button type="button" data-upsub="${k}" aria-pressed="${upSub === k}">${n}</button>`).join("")}</div>`;
+  if(upSub === "bonus") return seg + bonusesView();
+  return seg + upgradesStatsView();
+}
+function upgradesStatsView(){
   const st = stat(), C = classParams();
   const cards = [["Прочность", st.maxhp], ["Атака", st.atk], ["Броня", st.def], ["Атак/сек", (C.rate*st.rate).toFixed(2)], ["Шанс крита", st.crit + "%"], ["Сила крита", "×" + st.critPow.toFixed(2)], ["Регенерация", fmtN(st.regen) + "/с"], ["БМ", combatPower().toLocaleString("ru-RU")]];
   let h = pointsCard(`<section class="pcard"><div class="upstats">${cards.map(([n, v]) => `<div><b>${v}</b>${n}</div>`).join("")}</div></section>`);
@@ -6320,16 +6402,16 @@ const VIP = [
   {need:16, xp:0.1, scrap:0.1, drop:0, rew:[{id:"sph_cu", n:2}, {id:"kit_l", n:5}]},
   {need:41, xp:0.2, scrap:0.2, drop:0, rew:[{id:"sph_cu", n:5}, {id:"cores", n:20}, {id:"bookcls", n:2}]},
   {need:91, xp:0.35, scrap:0.35, drop:0.1, rew:[{id:"sph_ti", n:1}, {id:"cores", n:40}]},
-  {need:166, xp:0.5, scrap:0.5, drop:0.2, rew:[{id:"sph_ti", n:2}, {id:"bookcls", n:4}]},
-  {need:266, xp:0.6, scrap:0.6, drop:0.25, rew:[{id:"sph_ti", n:3}, {id:"scrap", n:30000}]},
-  {need:416, xp:0.75, scrap:0.75, drop:0.3, rew:[{id:"sph_ti", n:5}, {id:"bookcls", n:6}]},
-  {need:616, xp:0.9, scrap:0.9, drop:0.4, rew:[{id:"wcls", t:3, n:1, g:3}]},
-  {need:866, xp:1.0, scrap:1.0, drop:1.0, rew:[{id:"sph_ti", n:8}, {id:"cores", n:150}]},
-  {need:1166, xp:1.2, scrap:1.2, drop:1.2, rew:[{id:"g_core_7", n:1, g:3}]},
-  {need:1566, xp:1.4, scrap:1.4, drop:1.4, rew:[{id:"sph_ti", n:12}, {id:"bookcls", n:10}]},
-  {need:2066, xp:1.6, scrap:1.6, drop:1.6, rew:[{id:"g_armor_7", n:1, g:3}, {id:"g_module_7", n:1, g:3}]},
-  {need:2666, xp:1.8, scrap:1.8, drop:1.8, rew:[{id:"sph_ti", n:20}, {id:"scrap", n:200000}]},
-  {need:3366, xp:2.3, scrap:2.3, drop:2.3, rew:[{id:"g_sensor_9", n:1, g:3}, {id:"g_legs_9", n:1, g:3}, {id:"sph_ti", n:30}]}
+  {need:191, xp:0.5, scrap:0.5, drop:0.2, rew:[{id:"sph_ti", n:2}, {id:"bookcls", n:4}]},
+  {need:341, xp:0.6, scrap:0.6, drop:0.25, rew:[{id:"sph_ti", n:3}, {id:"scrap", n:30000}]},
+  {need:541, xp:0.75, scrap:0.75, drop:0.3, rew:[{id:"sph_ti", n:5}, {id:"bookcls", n:6}]},
+  {need:841, xp:0.9, scrap:0.9, drop:0.4, rew:[{id:"wcls", t:3, n:1, g:3}]},
+  {need:1341, xp:1.0, scrap:1.0, drop:1.0, rew:[{id:"sph_ti", n:8}, {id:"cores", n:150}]},
+  {need:2041, xp:1.2, scrap:1.2, drop:1.2, rew:[{id:"g_core_7", n:1, g:3}]},
+  {need:3041, xp:1.4, scrap:1.4, drop:1.4, rew:[{id:"sph_ti", n:12}, {id:"bookcls", n:10}]},
+  {need:4541, xp:1.6, scrap:1.6, drop:1.6, rew:[{id:"g_armor_7", n:1, g:3}, {id:"g_module_7", n:1, g:3}]},
+  {need:6541, xp:1.8, scrap:1.8, drop:1.8, rew:[{id:"sph_ti", n:20}, {id:"scrap", n:200000}]},
+  {need:9541, xp:2.3, scrap:2.3, drop:2.3, rew:[{id:"g_sensor_9", n:1, g:3}, {id:"g_legs_9", n:1, g:3}, {id:"sph_ti", n:30}]}
 ];
 S.vipSpent = S.vipSpent || 0; S.vipClaimed = S.vipClaimed || [];
 // админ всегда на максимальном VIP (бонусы, награды, АВТО); остальным уровень считается по потраченным GRAM
@@ -6470,44 +6552,120 @@ function arenaTick(dt){
 }
 
 // ===================== КОДЕКС =====================
+// ~1300 наборов: 48 прежних (прогресс игроков сохраняется) и новые — по грейду, тиру и классу.
+// Набор — 2–5 конкретных вещей, часть с требованием по заточке; бонус — две характеристики сразу.
 const CODEX_T = [["Комплект стойкости", "def"], ["Комплект мощи", "atk"], ["Комплект живучести", "hp"], ["Комплект точности", "crit"]];
 const CODEX = [];
+const CX_STATS = ["atk", "def", "hp", "crit"];
+const CX_SLOT_RU = {head:"шлем", armor:"броня", module:"модуль", core:"ядро", legs:"опоры"};
+const CX_PAIR_THEME = [["Комплект стойкости", "def", "hp"], ["Комплект мощи", "atk", "crit"], ["Комплект живучести", "hp", "def"], ["Комплект точности", "crit", "atk"], ["Комплект брони", "def", "atk"]];
+const CX_CLS_GEN = {guard:"Стража", reaper:"Жнеца", sniper:"Снайпера", techno:"Техноманта"};
+const CX_TIER_RU = ["Ржавый", "Железный", "Стальной", "Хромовый", "Титановый", "Кобальтовый", "Плазменный", "Нейтронный", "Квантовый", "Звёздный"];
 (() => {
   const gear = GEAR_IDS.filter(id => !ITEMS[id].starter);
+  // прежние 48 наборов — с теми же id и значениями, чтобы вложенные вещи не пропали
   let seed = 7; const rnd01 = () => (seed = (seed*9301 + 49297) % 233280)/233280;
   for(let g = 0; g < 4; g++) for(const [tn, stat] of CODEX_T) for(let n = 1; n <= 3; n++){
     const cnt = 2 + ((n + g) % 3), slots = [], used = new Set();
     while(slots.length < cnt){ const id = gear[Math.floor(rnd01()*gear.length)]; if(used.has(ITEMS[id].slot)) continue; used.add(ITEMS[id].slot); slots.push({id, e:g >= 1 && slots.length === 0 && n % 2 ? g : 0}); }
     const val = stat === "hp" ? (g + 1)*12 : stat === "crit" ? (g >= 2 ? 2 : 1) : g + 1;
-    CODEX.push({id:"cx" + g + stat + n, name:tn + ": " + GRADES[g].name + " №" + n, g, stat, val, slots});
+    CODEX.push({id:"cx" + g + stat + n, name:tn + ": " + GRADES[g].name + " №" + n, g, stat, val, slots, cls:"", tier:0, bon:{[stat]:val}});
+  }
+  // новые наборы: для каждого грейда (4) и тира (10) — 10 пар брони, 20 боевых пар «оружие класса + вещь» и 2 полных комплекта
+  const byTier = {};
+  for(const id of gear){ const it = ITEMS[id]; (byTier[it.tier] = byTier[it.tier] || []).push(id); }
+  // значения маленькие (+0.2 АТК у простого набора), зато наборов много: суммарно кодекс даёт ощутимую прибавку
+  const val = (st, g, t, k) => { const base = (0.2 + 0.05*(t - 1))*(1 + 0.35*g)*k;
+    return st === "hp" ? Math.max(1, Math.round(base*5)) : st === "crit" ? Math.max(0.1, Math.round(base*0.12*10)/10) : Math.max(0.1, Math.round(base*10)/10); };
+  const req = (g, t, i, n) => ((t + i + n) % 3 === 0 ? Math.min(12, Math.floor(t/2) + g) : 0);
+  for(let g = 0; g < 4; g++) for(let t = 1; t <= 10; t++){
+    const ids = byTier[t] || [], armor = ids.filter(id => ITEMS[id].slot !== "weapon"), weap = ids.filter(id => ITEMS[id].slot === "weapon");
+    let n = 0;
+    for(let a = 0; a < armor.length; a++) for(let b = a + 1; b < armor.length; b++){
+      const [tn, s1, s2] = CX_PAIR_THEME[n % CX_PAIR_THEME.length]; n++;
+      CODEX.push({id:`c3_${g}_${t}_a${a}${b}`, name:`${tn}: ${CX_TIER_RU[t - 1]} ${GRADES[g].name.toLowerCase()} №${n}`, g, tier:t, cls:"",
+        slots:[{id:armor[a], e:0}, {id:armor[b], e:req(g, t, 1, n)}], bon:{[s1]:val(s1, g, t, 1), [s2]:val(s2, g, t, 1)}});
+    }
+    for(const w of weap) armor.forEach((a, k) => {
+      const cls = ITEMS[w].cls, C = CLASSES[cls]; n++;
+      CODEX.push({id:`c3_${g}_${t}_w${cls}${k}`, name:`Боевой комплект ${CX_CLS_GEN[cls] || ""}: ${CX_TIER_RU[t - 1].toLowerCase()} комплект, ${CX_SLOT_RU[ITEMS[a].slot] || ""}`, g, tier:t, cls,
+        slots:[{id:w, e:req(g, t, 0, n)}, {id:a, e:0}], bon:{atk:val("atk", g, t, 1), def:val("def", g, t, 1)}});
+    });
+    if(armor.length >= 5){
+      CODEX.push({id:`c3_${g}_${t}_full`, name:`Полный доспех: ${CX_TIER_RU[t - 1]} ${GRADES[g].name.toLowerCase()}`, g, tier:t, cls:"",
+        slots:armor.slice(0, 5).map((id, i) => ({id, e:i === 4 ? Math.min(15, t + g) : 0})), bon:{def:val("def", g, t, 3), hp:val("hp", g, t, 3)}});
+      CODEX.push({id:`c3_${g}_${t}_core`, name:`Ядро и модуль: ${CX_TIER_RU[t - 1]} ${GRADES[g].name.toLowerCase()}`, g, tier:t, cls:"",
+        slots:armor.filter(id => ["core", "module", "head"].includes(ITEMS[id].slot)).map((id, i) => ({id, e:i === 0 ? Math.min(15, Math.floor(t/2) + g + 1) : 0})), bon:{atk:val("atk", g, t, 1.5), crit:val("crit", g, t, 2)}});
+    }
+  }
+  // ещё 120 наборов по 3–4 вещи (всего ~1450): для каждого грейда и тира — «защитник», «охотник» и «квартет»
+  const TRIO = [
+    ["Тройка защитника", ["head", "armor", "legs"], ["def", "hp"], 1.4, 1],
+    ["Тройка охотника", ["module", "core", "head"], ["atk", "crit"], 1.4, 0],
+    ["Боевой квартет", ["armor", "legs", "module", "core"], ["hp", "atk"], 2, 2]
+  ];
+  for(let g = 0; g < 4; g++) for(let t = 1; t <= 10; t++){
+    const ids = (byTier[t] || []).filter(id => ITEMS[id].slot !== "weapon");
+    TRIO.forEach(([tn, slotsWanted, [s1, s2], k, reqAt], j) => {
+      const pick = slotsWanted.map(sl => ids.find(id => ITEMS[id].slot === sl));
+      if(pick.some(x => !x)) return;
+      const r = Math.min(15, Math.floor(t/2) + g + j);
+      CODEX.push({id:`c4_${g}_${t}_${j}`, name:`${tn}: ${CX_TIER_RU[t - 1]} ${GRADES[g].name.toLowerCase()}`, g, tier:t, cls:"",
+        slots:pick.map((id, i) => ({id, e:i === reqAt ? r : 0})), bon:{[s1]:val(s1, g, t, k), [s2]:val(s2, g, t, k)}});
+    });
   }
 })();
 S.codex = S.codex2 = S.codex2 || {};                 // кодекс пересобран под новое снаряжение
+S.cxFav = S.cxFav || {};
 const codexDone = c => (S.codex[c.id] || []).filter(Boolean).length === c.slots.length;
+// бонус кодекса считается один раз и хранится, пока игрок не вложит вещь (stat() вызывается очень часто)
+let cxBonusCache = null;
 function codexBonus(){
+  if(!codexReady) return {atk:0, def:0, hp:0, crit:0};
+  if(cxBonusCache) return cxBonusCache;
   const b = {atk:0, def:0, hp:0, crit:0};
-  if(!codexReady) return b;
-  for(const c of CODEX) if(codexDone(c)) b[c.stat] += c.val;
-  return b;
+  for(const c of CODEX) if(codexDone(c)) for(const k in c.bon) b[k] += c.bon[k];
+  for(const k in b) b[k] = Math.round(b[k]*10)/10;
+  return (cxBonusCache = b);
 }
 const STAT_RU = {atk:"атаки", def:"брони", hp:"прочности", crit:"% крита"};
-let cxTab = "all", cxQ = "", cxArm = null;
+const STAT_SHORT = {atk:"АТК", def:"ЗАЩ", hp:"ПРОЧ", crit:"КРИТ%"};
+const cxBonText = bon => Object.entries(bon).map(([k, v]) => `<em>+${v} ${STAT_SHORT[k]}</em>`).join("");
+let cxTab = "all", cxQ = "", cxArm = null, cxCls = "all", cxGrade = "all", cxShow = 40, cxOpenBon = false;
 function openCodex(){
   openSheet("Кодекс", "Коллекции снаряжения с вечными бонусами", renderCodex);
 }
 function renderCodex(){
-  const done = CODEX.filter(codexDone).length, b = codexBonus();
-  const list = CODEX.filter(c => (cxTab === "all" || (cxTab === "done" ? codexDone(c) : !codexDone(c) && (S.codex[c.id] || []).some(Boolean))) && (!cxQ || c.name.toLowerCase().includes(cxQ.toLowerCase())));
-  body().innerHTML = `<p class="hint" style="margin-top:0">Каждый набор — 2–4 конкретных предмета, часть с требованием по заточке. Вложенный предмет расходуется без возврата. Бонус набора остаётся навсегда, как только заполнены все его слоты.</p>
-    <div class="cx-bonus"><b>Бонус кодекса · наборов завершено ${done}/${CODEX.length}</b><span>+${b.atk} атаки · +${b.def} брони · +${b.hp} прочности · +${b.crit}% крита</span></div>
-    <input class="field" id="cxSearch" placeholder="Поиск по названию" value="${esc(cxQ)}">
+  const done = CODEX.filter(codexDone).length, b = codexBonus(), q = cxQ.toLowerCase();
+  const list = CODEX.filter(c => (cxTab === "all" || (cxTab === "done" ? codexDone(c) : !codexDone(c) && (S.codex[c.id] || []).some(Boolean)))
+      && (cxCls === "all" || (cxCls === "none" ? !c.cls : c.cls === cxCls)) && (cxGrade === "all" || c.g === +cxGrade)
+      && (!q || c.name.toLowerCase().includes(q) || c.slots.some(s => ITEMS[s.id].name.toLowerCase().includes(q))))
+    .sort((a, b2) => (S.cxFav[b2.id] ? 1 : 0) - (S.cxFav[a.id] ? 1 : 0));
+  const shown = list.slice(0, cxShow);
+  body().innerHTML = `<p class="hint" style="margin-top:0">Каждый набор — 2–5 конкретных предметов, часто с требованием по заточке. Вложенный предмет расходуется без возврата; бонус набора остаётся навсегда, как только заполнены все его слоты.</p>
+    <button type="button" class="cx-bonus" data-cxbon="1"><b>Бонус кодекса · наборов завершено ${done}/${CODEX.length}</b><span>${cxOpenBon ? "−" : "+"}</span></button>
+    ${cxOpenBon ? `<div class="cx-bontot">+${b.atk} атаки · +${b.def} брони · +${b.hp} прочности · +${b.crit}% крита</div>` : ""}
+    <div class="cx-filters"><input class="field" id="cxSearch" placeholder="Поиск по названию" value="${esc(cxQ)}">
+      <select class="field" id="cxCls"><option value="all">Все классы</option>${Object.entries(CLASSES).map(([k, C]) => `<option value="${k}" ${cxCls === k ? "selected" : ""}>${C.name}</option>`).join("")}<option value="none" ${cxCls === "none" ? "selected" : ""}>Без класса</option></select>
+      <select class="field" id="cxGrade"><option value="all">Все редкости</option>${GRADES.map((g, i) => `<option value="${i}" ${cxGrade === String(i) ? "selected" : ""}>${g.name}</option>`).join("")}</select></div>
     <div class="seg">${[["all", "Все"], ["prog", "В процессе"], ["done", "Завершено"]].map(([k, n]) => `<button type="button" data-cx="${k}" aria-pressed="${cxTab === k}">${n}</button>`).join("")}</div>
-    <div class="cx-list">${list.map(c => { const f = S.codex[c.id] || [], cnt = f.filter(Boolean).length, ok = cnt === c.slots.length;
-      return `<section class="cxcard ${ok ? "done" : ""}"><div class="cx-tx"><b style="color:${c.g ? GRADES[c.g].color : "var(--text)"}">${c.name}</b><small>+${c.val} ${STAT_RU[c.stat]}</small></div>
+    <p class="cx-count">Показано ${shown.length} из ${list.length}</p>
+    <div class="cx-list">${shown.map(c => { const f = S.codex[c.id] || [], cnt = f.filter(Boolean).length, ok = cnt === c.slots.length;
+      return `<section class="cxcard ${ok ? "done" : ""}"><button type="button" class="cx-fav ${S.cxFav[c.id] ? "on" : ""}" data-cxf="${c.id}" aria-label="В избранное">${S.cxFav[c.id] ? "★" : "☆"}</button>
+        <div class="cx-tx"><b style="color:${c.g ? GRADES[c.g].color : "var(--text)"}">${c.name}</b><small class="cx-bon">${cxBonText(c.bon)}</small></div>
         <div class="cx-slots">${c.slots.map((s, i) => `<button type="button" class="cx-slot ${f[i] ? "in" : ""} ${cxArm === c.id + ":" + i ? "arm" : ""}" data-cxs="${c.id}:${i}" style="border-color:${GRADES[c.g].color}" aria-label="${ITEMS[s.id].name}">${icon(s.id, c.g)}${s.e ? `<i class="enc">+${s.e}</i>` : ""}</button>`).join("")}</div>
-        <span class="cx-cnt">${cnt}/${c.slots.length}</span></section>`; }).join("") || `<div class="empty">Ничего не найдено</div>`}</div>`;
-  const sIn = $("cxSearch"); if(sIn){ sIn.addEventListener("input", () => { cxQ = sIn.value; const pos = sIn.selectionStart; renderCodex(); const n2 = $("cxSearch"); n2.focus(); n2.setSelectionRange(pos, pos); }); sIn.addEventListener("keydown", e => e.stopPropagation()); }
+        <span class="cx-cnt">${cnt}/${c.slots.length}</span></section>`; }).join("") || `<div class="empty">Ничего не найдено</div>`}</div>
+    ${list.length > shown.length ? `<button class="btn wide" type="button" data-cxmore="1">Показать ещё ${Math.min(40, list.length - shown.length)}</button>` : ""}`;
+  const sIn = $("cxSearch"); if(sIn){ sIn.addEventListener("input", () => { cxQ = sIn.value; cxShow = 40; const pos = sIn.selectionStart; renderCodex(); const n2 = $("cxSearch"); n2.focus(); n2.setSelectionRange(pos, pos); }); sIn.addEventListener("keydown", e => e.stopPropagation()); }
+  const sc = $("cxCls"); if(sc) sc.addEventListener("change", () => { cxCls = sc.value; cxShow = 40; renderCodex(); });
+  const sg = $("cxGrade"); if(sg) sg.addEventListener("change", () => { cxGrade = sg.value; cxShow = 40; renderCodex(); });
 }
+$("shBody").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.cxf){ S.cxFav[b.dataset.cxf] = !S.cxFav[b.dataset.cxf]; if(!S.cxFav[b.dataset.cxf]) delete S.cxFav[b.dataset.cxf]; save(); renderCodex(); }
+  else if(b.dataset.cxmore){ cxShow += 40; renderCodex(); }
+  else if(b.dataset.cxbon){ cxOpenBon = !cxOpenBon; renderCodex(); }
+});
 function codexSlot(cid, i){
   const c = CODEX.find(x => x.id === cid), s = c.slots[i], f = S.codex[cid] || (S.codex[cid] = []);
   if(f[i]) return;
@@ -6515,8 +6673,8 @@ function codexSlot(cid, i){
   if(idx < 0){ toast("Нужен предмет: " + ITEMS[s.id].name + " (" + GRADES[c.g].name.toLowerCase() + (s.e ? ", +" + s.e : "") + ") в сумке"); cxArm = null; renderCodex(); return; }
   if(cxArm !== cid + ":" + i){ cxArm = cid + ":" + i; toast("Нажми ещё раз, чтобы вложить предмет навсегда"); renderCodex(); return; }
   if(S.inv[idx].uid && typeof regGone === "function") regGone([S.inv[idx].uid]);
-  S.inv.splice(idx, 1); f[i] = true; cxArm = null; Sfx.play("pick");
-  if(codexDone(c)){ toast("Набор завершён: +" + c.val + " " + STAT_RU[c.stat]); Sfx.play("level"); }
+  S.inv.splice(idx, 1); f[i] = true; cxArm = null; Sfx.play("pick"); cxBonusCache = null;
+  if(codexDone(c)){ toast("Набор завершён: " + Object.entries(c.bon).map(([k, v]) => "+" + v + " " + STAT_RU[k]).join(", ")); Sfx.play("level"); }
   save(); renderCodex();
 }
 codexReady = true;
@@ -6679,7 +6837,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.ev) openEvent(d.ev);
   else if(d.evback) openEvents();
   else if(d.evgo){ closeSheet(); showTab("game"); travel("arena_fear"); }
-  else if(d.cx){ cxTab = d.cx; renderCodex(); }
+  else if(d.cx){ cxTab = d.cx; cxShow = 40; renderCodex(); }
   else if(d.cxs){ const [cid, i] = d.cxs.split(":"); codexSlot(cid, +i); }
   else if(d.mktab){ mkTab = d.mktab; renderMarket(); }
   else if(d.mkcat){ mkCat = d.mkcat; renderMarket(); }
@@ -7226,6 +7384,12 @@ renderTargetFrame = function(){
 {
   const prevPvp2 = onNetExtra;
   onNetExtra = function(d){
+    if(d.t === "rename" && d.name){
+      // позывной сменил администратор: принимаем, сохраняем и показываем
+      S.name = String(d.name).slice(0, 16); S.nameChosen = true; save();
+      toast("Администратор сменил твой позывной на «" + S.name + "»");
+      return;
+    }
     if(d.t === "reports"){ showReports(d.list || []); return; }
     if(d.t === "report_new"){ repOpen = +d.open || repOpen + 1; renderRepBtn(); toast("⚑ Новая жалоба на " + (d.r && d.r.nick || "пилота") + ": " + (d.r && d.r.reason || "")); return; }
     if(d.t === "muted"){
