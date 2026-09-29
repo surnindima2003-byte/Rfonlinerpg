@@ -1654,7 +1654,7 @@ gameEl.addEventListener("pointerdown", e => {
 const fireBtn = $("skFire");
 fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); firing = true; });
 ["pointerup","pointerleave","pointercancel"].forEach(ev => fireBtn.addEventListener(ev, () => firing = false));
-$("skKit").addEventListener("click", useKit);
+tapBtn($("skKit"), useKit);
 // ---- АВТО: открывается с VIP 2 (вкладка VIP), админам доступно всегда ----
 const AUTO_VIP = 2;
 function autoAllowed(){ return !!window.NET_ADMIN || !!window.NET_MOD || (typeof vipLevel === "function" && vipLevel() >= AUTO_VIP); }
@@ -4305,7 +4305,14 @@ function classHud(){
     const ready = cd <= 0; if(b.classList.contains("ready") !== ready){ b.classList.toggle("ready", ready); if(ready && b.dataset.was) { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); } b.dataset.was = "1"; }
   }
 }
-for(let i = 0; i < 4; i++) $("skC" + i).addEventListener("click", () => useSkill(i));
+// умения срабатывают по касанию (pointerdown), а не по click: click на телефоне не приходит,
+// пока другой палец держит джойстик, — поэтому раньше нельзя было жать умения на ходу
+function tapBtn(el, fn){
+  let lastT = 0;
+  el.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); lastT = Date.now(); fn(); });
+  el.addEventListener("click", () => { if(Date.now() - lastT > 600) fn(); });   // клавиатура и старые браузеры
+}
+for(let i = 0; i < 4; i++) tapBtn($("skC" + i), () => useSkill(i));
 window.addEventListener("keydown", e => { if(!running || paused) return; const n = ["Digit1","Digit2","Digit3","Digit4"].indexOf(e.code); if(n >= 0) useSkill(n); });
 
 // ---- окно выбора класса ----
