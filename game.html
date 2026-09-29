@@ -7857,7 +7857,8 @@ function storyEvent(kind, info, n, type){
   const q = stCur(); if(!q || q.t !== kind) return;
   if(kind === "kill" || kind === "boss"){
     const k = info, where = typeof locKey !== "undefined" ? locKey : "";
-    const inDg = !!k.dungeon, ok = q.where === "field" ? !inDg && !k.arena && where !== "arena_fear" : q.where === "dg" ? inDg : where === "sector2";
+    // "field" — 1-й этаж: любой моб нужного вида где угодно, кроме арены (раньше только открытый мир — в подземелье не засчитывалось)
+    const inDg = !!k.dungeon, ok = q.where === "field" ? !k.arena && where !== "arena_fear" : q.where === "dg" ? inDg : where === "sector2";
     if(!ok || (kind === "kill" && (k.base || type) !== q.mob)) return;
   }
   stState().p = (stState().p || 0) + (n || 1); save();
