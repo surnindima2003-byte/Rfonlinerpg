@@ -1026,7 +1026,6 @@ textarea.field{min-height:70px;resize:vertical}
         <div class="h2-top">
           <div class="h2-av"><div class="h2-img" id="hAv"></div><b class="h2-lv" id="hLvl">1</b><i class="h2-cls" id="hClsIc"></i></div>
           <div class="h2-id"><span class="nm" id="hName" data-notr>Пилот</span><div class="h2-sub"><span id="hCls">Пилот</span><span class="h2-bm" id="hBM">БМ 0</span></div></div>
-          <button type="button" class="h2-tour" id="tourBtn">Турнир 🏆</button>
         </div>
         <div class="h2-bars">
           <div class="bar cp" title="CP: очки боя, работают только против игроков"><i id="hCpBar"></i><span id="hCpTxt"></span></div>
@@ -2771,7 +2770,6 @@ $("navGame").addEventListener("click", () => showTab("game"));
 $("navChar").addEventListener("click", () => showTab("char"));
 $("navMap").addEventListener("click", () => showTab("map"));
 $("navQuests").addEventListener("click", () => showTab("quests"));
-$("tourBtn").addEventListener("click", () => { if(typeof openEvents === "function"){ openEvents(); Sfx.play("ui"); } });
 $("navGuild").addEventListener("click", () => showTab("guild"));
 $("navProfile").addEventListener("click", () => showTab("profile"));
 
@@ -3859,6 +3857,8 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       if(d.t === "hello"){ S.pvpKr = +d.kr || 0;
         NET.admin = window.NET_ADMIN = !!d.admin; NET.id = d.id;
         NET.mod = window.NET_MOD = !!(d.mod || d.admin); S.mutedUntil = +d.muted || 0;
+        NET.mw = +d.mw || 0;                                        // сервер умеет общих мобов
+        if(!NET.mw && NET.admin) setTimeout(() => toast("⚠ Сервер без общих мобов: залей на него webserver.py и mobworld.py"), 4000);
         chatUid = String(d.id); chatDb = null;
         chatShared = (d.history || []).filter(m => typeof m.text === "string");
         onChatUpdate();
@@ -8739,7 +8739,7 @@ hitEnemy = function(e, dmg, kind){
 // У всех игроков в локации одни и те же мобы: урон копится на сервере, он же объявляет смерть
 // (лут и опыт — тому, кто нанёс больше урона) и возрождение. Без связи с сервером всё работает как раньше.
 const SH = {q:new Map()};
-const shOn = () => typeof NET !== "undefined" && NET.on && NET.ws && NET.ws.readyState === 1 && locKey !== "lobby" && LOCS[locKey] && !LOCS[locKey].arena;
+const shOn = () => typeof NET !== "undefined" && NET.on && NET.mw >= 2 && NET.ws && NET.ws.readyState === 1 && locKey !== "lobby" && LOCS[locKey] && !LOCS[locKey].arena;
 const _hitSH = hitEnemy;
 hitEnemy = function(e, dmg, kind){
   if(!e || e.dead || e.idx == null || !shOn()) return _hitSH(e, dmg, kind);
@@ -8774,7 +8774,7 @@ setInterval(() => {
   }
   else if(!shOn()) SH.q.clear();
   for(const e of enemies){
-    if(e.pend && now - e.pend > 3){ e.pend = 0; e._srv = true; killEnemy(e); }         // сервер молчит — убиваем сами
+    if(e.pend && now - e.pend > 1.2){ e.pend = 0; e._srv = true; killEnemy(e); }       // сервер молчит — убиваем сами
     if(e.dead && e.respawn === Infinity && !shOn()) e.respawn = now + 10;             // связь пропала — возрождаем сами
   }
 }, 150);

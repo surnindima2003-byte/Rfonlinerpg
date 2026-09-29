@@ -58,6 +58,7 @@ def on_hits(info, d, hub):
     if loc != info.get("loc") or loc in ARENA or not isinstance(d.get("h"), list):
         return
     now = time.time()
+    metrics.inc("mobs.hit_msgs")
     for h in d["h"][:60]:
         try:
             i, typ, dmg = int(h[0]), str(h[1])[:24], int(h[2])

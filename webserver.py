@@ -1378,7 +1378,7 @@ async def ws_handler(request):
                     break
                 conn = hub.add(ws, info)
                 clients[ws] = info
-                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "mod": user.get("mod", False),
+                conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "mod": user.get("mod", False), "mw": 2,
                                            "muted": int(muted_until(user["id"]) * 1000), "history": list(chat_history), "kr": info["kr"],
                                            "fac": info["fac_srv"], "cw": chipwar.status()}))
                 funnel.mark(user["id"], "world")
