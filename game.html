@@ -230,6 +230,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.pot-acts{display:flex;flex-direction:column;gap:5px;align-items:stretch}.pot-on{color:var(--ok);font-size:11px}.pot-hint{color:var(--muted);font-size:10px;max-width:130px}
 .ench-opt{border:1px solid color-mix(in srgb,var(--c) 45%,var(--line));border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--panel-2)}
 .ench-opt .eo-top{display:flex;align-items:center;gap:8px}.ench-opt .eo-top svg{width:28px;height:28px;flex:none}
 .ench-opt .eo-top b{flex:1;font-size:14px}.ench-opt .eo-top em{font-style:normal;font:13px 'Russo One',sans-serif}
@@ -1193,6 +1194,9 @@ const ITEMS = {
   kit_s:{name:"Ремкомплект", type:"use", heal:40, price:15, sell:5, desc:"Восстанавливает 40 прочности"},
   kit_l:{name:"Большой ремкомплект", type:"use", heal:150, price:60, sell:20, desc:"Восстанавливает 150 прочности"},
   wire:{name:"Провода", type:"mat", sell:3, desc:"Материал для крафта"},
+  pot_hp:{name:"Зелье прочности", type:"pot", pot:"hp", v:0.10, dur:600, price:120, sell:30, desc:"+10% прочности на 10 минут"},
+  pot_atk:{name:"Зелье силы", type:"pot", pot:"atk", v:0.10, dur:600, price:160, sell:40, desc:"+10% атаки на 10 минут"},
+  pot_xp:{name:"Зелье опыта", type:"pot", pot:"xp", v:0.20, dur:600, price:300, sell:75, desc:"+20% опыта на 10 минут"},
   sph_cu:{name:"Медная сфера заточки", type:"ench", price:150, sell:40, desc:"Заточка снаряжения. При неудаче предмет разрушается"},
   sph_ti:{name:"Титановая сфера заточки", type:"ench", price:900, sell:200, desc:"Безопасная заточка: при неудаче предмет не ломается и сохраняет уровень"},
   plate:{name:"Бронепластина", type:"mat", sell:4, desc:"Материал для крафта"},
@@ -1251,7 +1255,7 @@ function migrateGearIds(){
   for(const x of all){ if(!x || !LEGACY_GEAR[x.id]) continue; const m = LEGACY_GEAR[x.id]; x.id = m[0] === "W" ? weaponId(S.cls, +m[1]) : m; }
 }
 const STARTER = {head:"g_sensor_1", weapon:"g_hammer_1", module:"g_module_1", armor:"g_armor_1", core:"g_core_1", legs:"g_legs_1"};
-const SHOP = ["kit_s", "kit_l", "sph_cu", "sph_ti", "g_sensor_1", "g_armor_1", "g_legs_1", "g_module_1", "g_core_1"];
+const SHOP = ["kit_s", "kit_l", "pot_hp", "pot_atk", "pot_xp", "sph_cu", "sph_ti", "g_sensor_1", "g_armor_1", "g_legs_1", "g_module_1", "g_core_1"];
 // мастерская: из материалов собираются вещи Железного (2) и Стального (3) поколений
 const RECIPES = Object.keys(GEAR_FAM).flatMap(fam => [
   {id:"g_" + fam + "_2", need:{scrap:260, wire:4, plate:3, chip:2, cores:3}},
@@ -1402,6 +1406,24 @@ function logBattle(type, name){ S.log.unshift({type, name, loc:typeof locKey !==
 const save = () => { try{ localStorage.setItem("mw-save-v2", JSON.stringify(S)); }catch(e){} };
 
 // итоговые характеристики с учётом экипировки
+// ---- зелья усиления: действие хранится как время окончания (переживает перезапуск игры) ----
+function potLeft(kind){ const t = (S.pots || {})[kind]; return t ? Math.max(0, (t - Date.now())/1000) : 0; }
+function potV(kind){
+  if(potLeft(kind) <= 0) return 0;
+  const id = Object.keys(ITEMS).find(k => ITEMS[k].type === "pot" && ITEMS[k].pot === kind);
+  return id ? ITEMS[id].v : 0;
+}
+function usePot(id){
+  const it = ITEMS[id]; if(!it || it.type !== "pot" || !have(id)) return false;
+  if(potLeft(it.pot) > 0){ toast("Зелье уже действует"); return false; }
+  removeItem(S.inv, id, 1); S.pots = S.pots || {}; S.pots[it.pot] = Date.now() + it.dur*1000;
+  toast("🧪 " + it.name + ": " + it.desc); Sfx.play("pick"); save(); return true;
+}
+// «Авто»: как только действие закончилось — пьём следующее
+setInterval(() => {
+  if(typeof S === "undefined" || !S.potAuto) return;
+  for(const id in S.potAuto) if(S.potAuto[id] && ITEMS[id] && potLeft(ITEMS[id].pot) <= 0 && have(id)) usePot(id);
+}, 3000);
 function stat(){
   const C = classParams(), U = S.up || {};
   let atk = Math.round(S.attack*C.atk) + (U.atk || 0), def = Math.round(S.defense*C.def) + (U.def || 0);
@@ -1411,6 +1433,8 @@ function stat(){
   // комплект: 3 вещи одного поколения — +1,5% атаки за номер поколения, 6 вещей — ещё +2% прочности и +крит
   for(const [t, n] of Object.entries(setCounts())){ if(n >= 3) atk = Math.round(atk*(1 + 0.015*t)); if(n >= 6){ maxhp = Math.round(maxhp*(1 + 0.02*t)); crit += Math.ceil(t/2); } }
   maxhp = Math.round(maxhp*(1 + 0.03*pasLv("vital")));
+  // зелья усиления
+  if(typeof potV === "function"){ maxhp = Math.round(maxhp*(1 + potV("hp"))); atk = Math.round(atk*(1 + potV("atk"))); }
   crit += 2*pasLv("eagle");
   spd += 0.02*pasLv("servo");
   return {atk, def, maxhp, spd, crit, maxcp:maxhp*10,
@@ -1717,7 +1741,7 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
 function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
-  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0)));
+  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)));
   if(typeof seasonAddXp === "function") seasonAddXp(3 + Math.floor((k.lvl || 1)/2));
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
@@ -2574,6 +2598,13 @@ function renderBag(){
     const it = ITEMS[x.id], gc = it.type === "gear" ? gradeColor(x.g) : null;
     let btn = "";
     if(it.type === "use") btn = `<button class="act" type="button" data-use="${bagSel}">Использовать</button>`;
+    if(it.type === "pot"){
+      const left = potLeft(it.pot), au = !!(S.potAuto || {})[x.id];
+      btn = `<div class="pot-acts">${left > 0 ? `<small class="pot-on">✓ Активно · осталось ~${Math.ceil(left/60)} мин</small>` : ""}
+        <button class="act" type="button" data-pot="${bagSel}" ${left > 0 ? "disabled" : ""}>${left > 0 ? "Уже активно" : "Использовать"}</button>
+        <button class="act ${au ? "" : "alt"}" type="button" data-potauto="${x.id}">Авто: ${au ? "ВКЛ" : "ВЫКЛ"}</button>
+        <small class="pot-hint">«Авто» само выпьет новое зелье, когда действие закончится</small></div>`;
+    }
     if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}" ${it.lvl && S.level < it.lvl ? "disabled" : ""}>${it.lvl && S.level < it.lvl ? "Нужен ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
     h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
   } else h += `<p class="hint">Нажми на предмет, чтобы посмотреть его. Всё надетое видно во вкладке Персонаж.</p>`;
@@ -2631,6 +2662,8 @@ $("shBody").addEventListener("click", e => {
       bagMove = null; Sfx.play("pick");
     }
   }
+  else if(d.pot !== undefined){ const x = S.inv[+d.pot]; if(x && usePot(x.id)) { if(!S.inv[bagSel] || S.inv[bagSel].id !== x.id) bagSel = null; } }
+  else if(d.potauto){ S.potAuto = S.potAuto || {}; S.potAuto[d.potauto] = !S.potAuto[d.potauto]; toast("Авто для «" + ITEMS[d.potauto].name + "»: " + (S.potAuto[d.potauto] ? "ВКЛ" : "ВЫКЛ")); if(S.potAuto[d.potauto] && potLeft(ITEMS[d.potauto].pot) <= 0) usePot(d.potauto); save(); }
   else if(d.use !== undefined){
     const x = S.inv[+d.use], mh = stat().maxhp;
     if(S.hp >= mh){ toast("Прочность и так полная"); return; }
@@ -5451,6 +5484,12 @@ function drawItemPixels(id, g){
   if(id.startsWith("g_") && ITEMS[id]) gearArt(ITEMS[id].fam, ITEMS[id].tier, {put, rect, line, disc, block, G});
   else switch(id){
     // ---- расходники и материалы ----
+    case "pot_hp": case "pot_atk": case "pot_xp": {
+      const liq = id === "pot_hp" ? IPAL.red : id === "pot_atk" ? IPAL.orange : IPAL.green;
+      rect(8, 2, 4, 2, D[2]); rect(8, 2, 4, 1, D[0]); rect(9, 4, 2, 3, S[1]);
+      disc(10, 12, 5, S[2]); disc(10, 12, 4, liq[1], true); rect(6, 13, 9, 3, liq[2]); put(8, 10, "#FFFFFF"); put(7, 11, liq[0]);
+      break;
+    }
     case "kit_s":
       block(3, 7, 14, 10, IPAL.red); rect(7, 5, 6, 2, IPAL.dark[2]); rect(8, 5, 4, 1, IPAL.dark[0]);
       rect(9, 9, 2, 6, "#FFFFFF"); rect(7, 11, 6, 2, "#FFFFFF"); put(9, 9, "#FFE8E0");
