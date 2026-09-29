@@ -1308,7 +1308,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl"}
 
 
 async def ws_handler(request):
@@ -1411,6 +1411,10 @@ async def ws_handler(request):
                     hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
             elif t == "mhit":
                 mobworld.on_hits(info, d, hub)
+            elif t == "mpos":
+                mobworld.on_pos(info, d)
+            elif t == "mctl":
+                mobworld.on_claim(info, d, hub)
             elif t == "mute":
                 await handle_mute(d, info)
             elif t == "report":

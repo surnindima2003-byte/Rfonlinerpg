@@ -1844,6 +1844,12 @@ function updateEnemies(dt, st){
   for(const e of enemies){
     if(e.dead){ if(now > e.respawn){ if(e.room) respawnDungeon(e); else Object.assign(e, makeEnemy(e.type, npcs[0])); } continue; }
     const k = NPCS[e.type];
+    if(e.owner && e.owner !== NET.id && typeof shOn === "function" && shOn()){
+      // общий моб: его ИИ считает телефон игрока, за которым он гонится; здесь — только плавное движение к его позиции
+      e.flash -= dt; e.lunge -= dt; e.chase = false;
+      if(e.rx != null){ const f = Math.min(1, dt*8), mx = e.rx - e.x, my = e.ry - e.y; e.x += mx*f; e.y += my*f; e.moving = Math.hypot(mx, my) > 3; if(e.rang != null) e.ang = e.rang; }
+      continue;
+    }
     if(e.room && !e.chase && (Math.abs(e.x - p.x) > 700 + vw/2 || Math.abs(e.y - p.y) > 700 + vh/2)) continue;   // далёкие мобы подземелья спят
     e.flash -= dt;
     if(e.stun > 0){ e.stun -= dt; e.moving = false; continue; }
@@ -1857,7 +1863,7 @@ function updateEnemies(dt, st){
       e.ang = Math.atan2(dy,dx);
       if(d > k.range*0.85){ vx = dx/d*k.speed; vy = dy/d*k.speed; }
       if(d <= k.range && e.cd <= 0 && los(e.x, e.y, p.x, p.y)){
-        e.cd = 1.3; const K = 20 + 5*(k.lvl || 1), dmg = Math.max(1, Math.round(k.atk*K/(K + st.def*(1 + buffV("def")))));
+        e.cd = 1.3; e.atkN = (e.atkN || 0) + 1; const K = 20 + 5*(k.lvl || 1), dmg = Math.max(1, Math.round(k.atk*K/(K + st.def*(1 + buffV("def")))));
         if(k.ranged) bolts.push({x:e.x, y:e.y, vx:dx/d*330, vy:dy/d*330, dmg, life:1.2, by:k.name, src:e});
         else { hurtPlayer(dmg, k.name, e); e.lunge = 0.15; }
       }
@@ -1867,8 +1873,13 @@ function updateEnemies(dt, st){
       if(wd > 6){ vx = wx/wd*k.speed*0.6; vy = wy/wd*k.speed*0.6; e.ang = Math.atan2(wy, wx); }
       if(e.hp < e.max) e.hp = Math.min(e.max, e.hp + e.max*0.05*dt);
     } else {
-      e.wanderT -= dt;
-      if(e.wanderT <= 0){ e.wanderT = 2 + Math.random()*3; e.tx = e.hx + (Math.random()*240-120); e.ty = e.hy + (Math.random()*240-120); }
+      if(e.idx != null && typeof shOn === "function" && shOn()){
+        const slot = Math.floor(Date.now()/4000);                  // общее для всех расписание блужданий
+        if(e.wslot !== slot){ e.wslot = slot; const r = seeded(e.idx*7919 + slot*31); e.tx = e.hx + (r()*240 - 120); e.ty = e.hy + (r()*240 - 120); }
+      } else {
+        e.wanderT -= dt;
+        if(e.wanderT <= 0){ e.wanderT = 2 + Math.random()*3; e.tx = e.hx + (Math.random()*240-120); e.ty = e.hy + (Math.random()*240-120); }
+      }
       const wx = e.tx-e.x, wy = e.ty-e.y, wd = Math.hypot(wx,wy);
       if(wd > 8){ vx = wx/wd*k.speed*0.45; vy = wy/wd*k.speed*0.45; e.ang = Math.atan2(wy,wx); }
       if(e.hp < e.max) e.hp = Math.min(e.max, e.hp + e.max*0.05*dt);
@@ -8684,10 +8695,21 @@ killEnemy = function(e){
 };
 function shHome(e){
   const k = NPCS[e.type];
-  Object.assign(e, {x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:k.hp, max:k.hp, dead:false, chase:false, roomAggro:false, stun:0, flash:0, cd:1, pend:0, iid:0});
+  Object.assign(e, {x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:k.hp, max:k.hp, dead:false, chase:false, roomAggro:false, stun:0, flash:0, cd:1, pend:0, iid:0, owner:0, rx:null, ry:null});
 }
 setInterval(() => {
   if(SH.q.size && shOn()){ NET.ws.send(JSON.stringify({t:"mhit", loc:locKey, h:[...SH.q.values()].slice(0, 60)})); SH.q.clear(); }
+  if(shOn()){
+    // моб погнался за мной — прошу сервер отдать его мне; свои мобы — шлю их позиции
+    const claim = [], mine = [];
+    for(const e of enemies){
+      if(e.dead || e.idx == null) continue;
+      if(e.chase && !e.owner && (!e.claimT || now - e.claimT > 1)){ e.claimT = now; claim.push(e.idx); }
+      if(e.owner === NET.id && (e.chase || Math.hypot(e.x - e.hx, e.y - e.hy) > 6)) mine.push([e.idx, Math.round(e.x), Math.round(e.y), Math.round(e.ang*100)/100, e.atkN || 0]);
+    }
+    if(claim.length) NET.ws.send(JSON.stringify({t:"mctl", loc:locKey, i:claim.slice(0, 40)}));
+    if(mine.length) NET.ws.send(JSON.stringify({t:"mpos", loc:locKey, m:mine.slice(0, 60)}));
+  }
   else if(!shOn()) SH.q.clear();
   for(const e of enemies){
     if(e.pend && now - e.pend > 3){ e.pend = 0; e._srv = true; killEnemy(e); }         // сервер молчит — убиваем сами
@@ -8697,6 +8719,21 @@ setInterval(() => {
 {
   const prevSH = onNetExtra;
   onNetExtra = function(d){
+    if(d.t === "mown" || d.t === "mmv"){
+      if(d.loc !== locKey) return;
+      if(d.t === "mown"){ const e = enemies[d.i]; if(e && e.idx === d.i){ e.owner = d.uid || 0; if(e.owner !== NET.id){ e.rx = e.rx ?? e.x; e.ry = e.ry ?? e.y; } else { e.chase = true; } } }
+      else for(const [i, x, y, a, n, uid] of d.m || []){
+        const e = enemies[i]; if(!e || e.idx !== i || e.dead || uid === NET.id) continue;
+        e.owner = uid; e.rx = x; e.ry = y; e.rang = a;
+        if(n > (e.atkN || 0)){                                    // моб ударил своего игрока — показываем удар
+          const k = NPCS[e.type], o = NET.others.get(uid);
+          if(k.ranged && o) beams.push({x1:e.x, y1:e.y - 14, x2:o.rx, y2:o.ry - 20, life:0.12});
+          else e.lunge = 0.15;
+        }
+        e.atkN = n;
+      }
+      return;
+    }
     if(d.t === "mhp" || d.t === "mdie" || d.t === "mres" || d.t === "mstate"){
       if(d.loc !== locKey) return;
       if(d.t === "mhp"){ for(const [i, hp, max] of d.u || []){ const e = enemies[i]; if(!e || e.dead || e.idx !== i) continue;
@@ -8705,7 +8742,7 @@ setInterval(() => {
         if(d.by === NET.id){ if(!e.dead){ e.iid = d.iid; e.pend = 0; e._srv = true; killEnemy(e); } }
         else if(!e.dead){ e.dead = true; e.pend = 0; e.chase = false; Sfx.play("kill");
           if(typeof tgt !== "undefined" && tgt && tgt.kind === "enemy" && tgt.e === e && typeof clearTarget === "function") clearTarget(); }
-        e.respawn = Infinity; }
+        e.respawn = Infinity; e.owner = 0; }
       else if(d.t === "mres"){ const e = enemies[d.i]; if(e && e.idx === d.i && e.dead) shHome(e); }
       else {
         const dead = new Set((d.dead || []).map(x => x[0]));
@@ -8713,6 +8750,7 @@ setInterval(() => {
           if(dead.has(e.idx)){ if(!e.dead){ e.dead = true; e.chase = false; } e.respawn = Infinity; }
           else if(e.dead && e.respawn === Infinity) shHome(e); }
         for(const [i, hp, max] of d.hp || []){ const e = enemies[i]; if(e && !e.dead){ e.max = max; e.hp = Math.min(e.hp, hp); } }
+        for(const [i, uid, x, y] of d.own || []){ const e = enemies[i]; if(e && !e.dead && uid !== NET.id){ e.owner = uid; e.x = e.rx = x; e.y = e.ry = y; } }
       }
       return;
     }
