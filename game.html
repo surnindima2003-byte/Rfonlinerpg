@@ -230,6 +230,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+#skKit.kauto::after{content:"A";position:absolute;right:-3px;top:-3px;width:16px;height:16px;border-radius:50%;background:#3FA35A;color:#fff;font:10px/16px 'Russo One',sans-serif;text-align:center}
 .bag-h{display:flex;align-items:baseline;gap:6px}.bag-h small{font-weight:400;color:var(--muted);font-size:11px;text-transform:none}.bag-h span{margin-left:auto;font-size:12px;color:var(--muted)}
 .item-pop .detail{margin:0}
 #bagBtn[hidden]{display:none}
@@ -541,7 +542,7 @@ button.li{width:100%;font:inherit;color:inherit}
 .dv{font-weight:700;white-space:nowrap}
 
 /* ---- меню под мини-картой ---- */
-.gmenu{position:absolute;right:8px;top:122px;width:108px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.gmenu{position:absolute;right:8px;top:calc(var(--hb, 120px) + 6px);width:108px;display:flex;flex-direction:column;gap:6px;z-index:3}
 .gm-list{position:absolute;right:0;top:46px;width:236px;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:rgba(12,17,23,.96);border:1px solid #2E3B49;border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.55);z-index:4}
 .gm-list[hidden]{display:none}
 .gm-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3}
@@ -1409,6 +1410,13 @@ const save = () => { try{ localStorage.setItem("mw-save-v2", JSON.stringify(S));
 
 // итоговые характеристики с учётом экипировки
 // ---- зелья усиления: действие хранится как время окончания (переживает перезапуск игры) ----
+// авто-ремкомплект: включается в карточке ремкомплекта, срабатывает ниже 35% прочности
+function renderKitBtn(){ const b = $("skKit"); if(b) b.classList.toggle("kauto", !!S.kitAuto); }
+setInterval(() => {
+  if(typeof S === "undefined" || !S.kitAuto || typeof p === "undefined" || !p || p.dead || paused) return;
+  if(S.hp < stat().maxhp*0.35 && !(p.kitCd > 0) && (have("kit_s") || have("kit_l"))) useKit();
+}, 300);
+setTimeout(() => { if(typeof renderKitBtn === "function") renderKitBtn(); }, 1500);
 function potLeft(kind){ const t = (S.pots || {})[kind]; return t ? Math.max(0, (t - Date.now())/1000) : 0; }
 function potV(kind){
   if(potLeft(kind) <= 0) return 0;
@@ -1734,9 +1742,8 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
   S.hp -= dmg; p.flash = 0.15; Sfx.play("hit"); addText(p.x + (Math.random()*20-10), p.y-28, "-" + dmg, "#E0694A");
   if(S.hp <= 0){
     S.hp = 0; p.dead = true; p.deadT = 2.2; firing = false; logBattle("death", lastHitBy);
-    const loss = Math.min(S.scrap, Math.max(2, Math.floor(S.scrap*0.1)));
-    S.scrap -= loss;
-    $("death").innerHTML = `Робот уничтожен<br><small style="font:14px Rubik">на ремонт ушло ${loss} лома, возврат в ангар…</small>`;
+    // при гибели ничего не теряется
+    $("death").innerHTML = `Робот уничтожен<br><small style="font:14px Rubik">возврат в ангар…</small>`;
     $("death").classList.add("show");
   }
 }
@@ -1809,8 +1816,6 @@ function update(dt){
   if(auto && locKey !== "lobby" && !(typeof tgtPlayer === "function" && tgtPlayer())){
     if(lockedNow && Math.hypot(lockedNow.x - p.x, lockedNow.y - p.y) > 560) { autoDrop(lockedNow, 3); lockedNow = null; }   // убежали слишком далеко
     if(!lockedNow){ const n = autoPick(Math.max(RANGE, 240) + 80); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); lockedNow = n; autoS.stuckT = 0; autoS.losT = 0; autoS.lastD = Infinity; } }
-    // ремкомплект при 35% прочности
-    if(S.hp < st.maxhp*0.35 && !(p.kitCd > 0) && (have("kit_s") || have("kit_l"))) useKit();
   }
   const t = locKey === "lobby" ? null : lockedNow ? (auto || Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : null; p.target = t;
   const tDist = t ? Math.hypot(t.x-p.x, t.y-p.y) : 0, tLos = t ? los(p.x, p.y, t.x, t.y) : false;
@@ -2407,7 +2412,9 @@ function hud(){
   // полная золотая мигающая шкала — следующий уровень ждёт подтверждения сервера
   const held = !window.NET_ADMIN && S.srvCap > 0 && S.level >= S.srvCap && S.exp >= expNeed(S.level);
   if(HUDC.xpHeld !== held){ HUDC.xpHeld = held; $("hXpBar").classList.toggle("held", held); }
-  hudText("hScrap", nf(S.scrap)); hudText("hCores", nf(S.cores));
+  // крупные суммы в плашке — коротко (280K, 1,4M), чтобы число не обрезалось
+  const cn = v => v >= 1e6 ? (Math.floor(v/1e5)/10).toString().replace(".", ",") + "M" : v >= 1e5 ? Math.floor(v/1e3) + "K" : nf(v);
+  hudText("hScrap", cn(S.scrap)); hudText("hCores", cn(S.cores));
   hudText("hGram", typeof gramBal === "function" ? (Math.floor(gramBal()*100)/100).toLocaleString("ru-RU") : "0");
   if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + nf(combatPower())); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
   hudText("kitCount", String(have("kit_s") + have("kit_l")));
@@ -2587,7 +2594,10 @@ function bagDetail(){
   let h = "";
     const it = ITEMS[x.id], gc = it.type === "gear" ? gradeColor(x.g) : null;
     let btn = "";
-    if(it.type === "use") btn = `<button class="act" type="button" data-use="${bagSel}">Использовать</button>`;
+    if(it.type === "use"){ const au = !!S.kitAuto;
+      btn = `<div class="pot-acts"><button class="act" type="button" data-use="${bagSel}">Использовать</button>
+        <button class="act ${au ? "" : "alt"}" type="button" data-kitauto="1">Авто: ${au ? "ВКЛ" : "ВЫКЛ"}</button>
+        <small class="pot-hint">«Авто» само применит ремкомплект, когда прочность упадёт ниже 35%</small></div>`; }
     if(it.type === "pot"){
       const left = potLeft(it.pot), au = !!(S.potAuto || {})[x.id];
       btn = `<div class="pot-acts">${left > 0 ? `<small class="pot-on">✓ Активно · осталось ~${Math.ceil(left/60)} мин</small>` : ""}
@@ -2683,6 +2693,7 @@ $("shBody").addEventListener("click", e => {
       bagMove = null; Sfx.play("pick");
     }
   }
+  else if(d.kitauto){ S.kitAuto = !S.kitAuto; toast("Авто-ремкомплект: " + (S.kitAuto ? "ВКЛ — сработает ниже 35% прочности" : "ВЫКЛ")); renderKitBtn(); save(); }
   else if(d.pot !== undefined){ const x = S.inv[+d.pot]; if(x && usePot(x.id)) { if(!S.inv[bagSel] || S.inv[bagSel].id !== x.id) bagSel = null; } }
   else if(d.potauto){ S.potAuto = S.potAuto || {}; S.potAuto[d.potauto] = !S.potAuto[d.potauto]; toast("Авто для «" + ITEMS[d.potauto].name + "»: " + (S.potAuto[d.potauto] ? "ВКЛ" : "ВЫКЛ")); if(S.potAuto[d.potauto] && potLeft(ITEMS[d.potauto].pot) <= 0) usePot(d.potauto); save(); }
   else if(d.use !== undefined){
@@ -7248,7 +7259,7 @@ if(typeof onNetExtra === "function"){
       return;
     }
     if(d.t === "pvp_died"){
-      if(d.red){ const lost = Math.floor(S.scrap*0.1); S.scrap -= lost; save(); toast("🩸 Красный пилот при гибели теряет 10% лома: −" + lost); }
+      // при гибели лом не теряется (в том числе у красных пилотов)
       return;
     }
     if(d.t === "pvp_kill"){
