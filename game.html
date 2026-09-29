@@ -6184,6 +6184,9 @@ function rollDrops(e){
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   const srv = typeof regOnline === "function" && regOnline();
   if(srv) regKill(e);                                   // ценный лут решает сервер
+  // зелья усиления: небольшой шанс с любого моба (бонус VIP к дропу тоже действует)
+  for(const [pid, ch] of [["pot_hp", 0.012], ["pot_atk", 0.008], ["pot_xp", 0.005]]) if(Math.random() < ch*(k.boss ? 10 : 1)*(1 + vb.drop))
+    drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:pid, amt:1, t:0});
   for(const it of D.items) if(!(srv && (it.id === "sph_cu" || it.id === "sph_ti")) && Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
   // снаряжение: один бросок на грейд, шанс = шанс вещи × число вещей
   if(!srv && D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
@@ -6474,21 +6477,21 @@ const gramF = v => (+v || 0).toLocaleString("ru-RU", {maximumFractionDigits:2});
 
 // ===================== VIP =====================
 const VIP = [
-  {need:1, xp:0.05, scrap:0, drop:0, rew:[{id:"kit_s", n:5}]},
-  {need:6, xp:0.05, scrap:0.05, drop:0, rew:[{id:"kit_l", n:3}]},
-  {need:16, xp:0.1, scrap:0.1, drop:0, rew:[{id:"sph_cu", n:2}, {id:"kit_l", n:5}]},
-  {need:41, xp:0.2, scrap:0.2, drop:0, rew:[{id:"sph_cu", n:5}, {id:"cores", n:20}, {id:"bookcls", n:2}]},
-  {need:91, xp:0.35, scrap:0.35, drop:0.1, rew:[{id:"sph_ti", n:1}, {id:"cores", n:40}]},
-  {need:191, xp:0.5, scrap:0.5, drop:0.2, rew:[{id:"sph_ti", n:2}, {id:"bookcls", n:4}]},
-  {need:341, xp:0.6, scrap:0.6, drop:0.25, rew:[{id:"sph_ti", n:3}, {id:"scrap", n:30000}]},
-  {need:541, xp:0.75, scrap:0.75, drop:0.3, rew:[{id:"sph_ti", n:5}, {id:"bookcls", n:6}]},
-  {need:841, xp:0.9, scrap:0.9, drop:0.4, rew:[{id:"wcls", t:3, n:1, g:3}]},
-  {need:1341, xp:1.0, scrap:1.0, drop:1.0, rew:[{id:"sph_ti", n:8}, {id:"cores", n:150}]},
-  {need:2041, xp:1.2, scrap:1.2, drop:1.2, rew:[{id:"g_core_7", n:1, g:3}]},
-  {need:3041, xp:1.4, scrap:1.4, drop:1.4, rew:[{id:"sph_ti", n:12}, {id:"bookcls", n:10}]},
-  {need:4541, xp:1.6, scrap:1.6, drop:1.6, rew:[{id:"g_armor_7", n:1, g:3}, {id:"g_module_7", n:1, g:3}]},
-  {need:6541, xp:1.8, scrap:1.8, drop:1.8, rew:[{id:"sph_ti", n:20}, {id:"scrap", n:200000}]},
-  {need:9541, xp:2.3, scrap:2.3, drop:2.3, rew:[{id:"g_sensor_9", n:1, g:3}, {id:"g_legs_9", n:1, g:3}, {id:"sph_ti", n:30}]}
+  {need:1, xp:0.05, scrap:0, drop:0, rew:[{id:"pot_hp", n:2}, {id:"pot_atk", n:2}, {id:"kit_s", n:5}]},
+  {need:6, xp:0.05, scrap:0.05, drop:0, rew:[{id:"pot_hp", n:4}, {id:"pot_atk", n:4}, {id:"kit_l", n:3}]},
+  {need:16, xp:0.1, scrap:0.1, drop:0, rew:[{id:"pot_hp", n:6}, {id:"pot_atk", n:6}, {id:"pot_xp", n:3}, {id:"sph_cu", n:2}, {id:"kit_l", n:5}]},
+  {need:41, xp:0.2, scrap:0.2, drop:0, rew:[{id:"pot_hp", n:8}, {id:"pot_atk", n:8}, {id:"pot_xp", n:4}, {id:"sph_cu", n:5}, {id:"cores", n:20}, {id:"bookcls", n:2}]},
+  {need:91, xp:0.35, scrap:0.35, drop:0.1, rew:[{id:"pot_hp", n:10}, {id:"pot_atk", n:10}, {id:"pot_xp", n:5}, {id:"sph_ti", n:1}, {id:"cores", n:40}]},
+  {need:191, xp:0.5, scrap:0.5, drop:0.2, rew:[{id:"pot_hp", n:12}, {id:"pot_atk", n:12}, {id:"pot_xp", n:6}, {id:"sph_ti", n:2}, {id:"bookcls", n:4}]},
+  {need:341, xp:0.6, scrap:0.6, drop:0.25, rew:[{id:"pot_hp", n:14}, {id:"pot_atk", n:14}, {id:"pot_xp", n:7}, {id:"sph_ti", n:3}, {id:"scrap", n:30000}]},
+  {need:541, xp:0.75, scrap:0.75, drop:0.3, rew:[{id:"pot_hp", n:16}, {id:"pot_atk", n:16}, {id:"pot_xp", n:8}, {id:"sph_ti", n:5}, {id:"bookcls", n:6}]},
+  {need:841, xp:0.9, scrap:0.9, drop:0.4, rew:[{id:"pot_hp", n:18}, {id:"pot_atk", n:18}, {id:"pot_xp", n:9}, {id:"wcls", t:3, n:1, g:3}]},
+  {need:1341, xp:1.0, scrap:1.0, drop:1.0, rew:[{id:"pot_hp", n:20}, {id:"pot_atk", n:20}, {id:"pot_xp", n:10}, {id:"sph_ti", n:8}, {id:"cores", n:150}]},
+  {need:2041, xp:1.2, scrap:1.2, drop:1.2, rew:[{id:"pot_hp", n:22}, {id:"pot_atk", n:22}, {id:"pot_xp", n:11}, {id:"g_core_7", n:1, g:3}]},
+  {need:3041, xp:1.4, scrap:1.4, drop:1.4, rew:[{id:"pot_hp", n:24}, {id:"pot_atk", n:24}, {id:"pot_xp", n:12}, {id:"sph_ti", n:12}, {id:"bookcls", n:10}]},
+  {need:4541, xp:1.6, scrap:1.6, drop:1.6, rew:[{id:"pot_hp", n:26}, {id:"pot_atk", n:26}, {id:"pot_xp", n:13}, {id:"g_armor_7", n:1, g:3}, {id:"g_module_7", n:1, g:3}]},
+  {need:6541, xp:1.8, scrap:1.8, drop:1.8, rew:[{id:"pot_hp", n:28}, {id:"pot_atk", n:28}, {id:"pot_xp", n:14}, {id:"sph_ti", n:20}, {id:"scrap", n:200000}]},
+  {need:9541, xp:2.3, scrap:2.3, drop:2.3, rew:[{id:"pot_hp", n:30}, {id:"pot_atk", n:30}, {id:"pot_xp", n:15}, {id:"g_sensor_9", n:1, g:3}, {id:"g_legs_9", n:1, g:3}, {id:"sph_ti", n:30}]}
 ];
 S.vipSpent = S.vipSpent || 0; S.vipClaimed = S.vipClaimed || [];
 // админ всегда на максимальном VIP (бонусы, награды, АВТО); остальным уровень считается по потраченным GRAM
@@ -8743,24 +8746,29 @@ const shOn = () => typeof NET !== "undefined" && NET.on && NET.mw >= 2 && NET.ws
 const _hitSH = hitEnemy;
 hitEnemy = function(e, dmg, kind){
   if(!e || e.dead || e.idx == null || !shOn()) return _hitSH(e, dmg, kind);
-  const before = e.hp;
+  const before = e.hp; e._raw = null;
   const r = _hitSH(e, dmg, kind);
-  const done = Math.round(before - e.hp);
+  const after = e._raw != null ? e._raw : e.hp; e._raw = null;          // _raw — прочность до «придержки» на 1 HP
+  const done = Math.round(before - after);
   if(done > 0){ const q = SH.q.get(e.idx); if(q) q[2] += done; else SH.q.set(e.idx, [e.idx, e.type, done]); }
   return r;
 };
+function shFlush(){
+  if(SH.q.size && shOn()){ NET.ws.send(JSON.stringify({t:"mhit", loc:locKey, h:[...SH.q.values()].slice(0, 60)})); SH.q.clear(); }
+}
 const _killSH = killEnemy;
 killEnemy = function(e){
   if(e._srv || e.idx == null || !shOn()){ e._srv = false; return _killSH(e); }
-  e.hp = 1;                                              // ждём решения сервера (кто нанёс больше урона)
+  e._raw = e.hp; e.hp = 1;                               // ждём решения сервера (кто нанёс больше урона)
   if(!e.pend) e.pend = now;
+  setTimeout(shFlush, 0);                                // смертельный удар уходит на сервер сразу, без ожидания пачки
 };
 function shHome(e){
   const k = NPCS[e.type];
   Object.assign(e, {x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:k.hp, max:k.hp, dead:false, chase:false, roomAggro:false, stun:0, flash:0, cd:1, pend:0, iid:0, owner:0, rx:null, ry:null});
 }
 setInterval(() => {
-  if(SH.q.size && shOn()){ NET.ws.send(JSON.stringify({t:"mhit", loc:locKey, h:[...SH.q.values()].slice(0, 60)})); SH.q.clear(); }
+  shFlush();
   if(shOn()){
     // моб погнался за мной — прошу сервер отдать его мне; свои мобы — шлю их позиции
     const claim = [], mine = [];
