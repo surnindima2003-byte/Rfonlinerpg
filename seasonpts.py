@@ -198,3 +198,129 @@ def setup(app, read_auth, push_to_player):
 
     app.router.add_post("/api/season/state", api_state)
     app.router.add_post("/api/season/event", api_event)
+
+
+# ===================== РЕЙТИНГ СЕЗОНА И ПРИЗЫ =====================
+# Топ-20 по очкам сезона. После конца сезона итоги фиксируются (таблица season_prizes),
+# админ подтверждает выплату, затем победитель забирает приз в GRAM кнопкой «Забрать».
+PRIZES_USDT = {1: 100, 2: 50, 3: 50, **{p: 10 for p in range(4, 11)}, **{p: 5 for p in range(11, 21)}}
+TOP_N = 20
+
+
+def prev_season(key):
+    y, m = map(int, key.split("-"))
+    y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return f"{y}-{m:02d}"
+
+
+async def _nicks(s, ids):
+    from models import GameSave
+    if not ids:
+        return {}
+    rows = (await s.execute(select(GameSave.tg_id, GameSave.nick, GameSave.name).where(GameSave.tg_id.in_(ids)))).all()
+    return {a: (b or c or "Пилот") for a, b, c in rows}
+
+
+async def top(s, key, limit=TOP_N):
+    """Лучшие по очкам: при равенстве выше тот, кто набрал раньше."""
+    rows = (await s.execute(select(SeasonPts.tg_id, SeasonPts.pts).where(SeasonPts.season == key, SeasonPts.pts > 0)
+                            .order_by(SeasonPts.pts.desc(), SeasonPts.updated.asc()).limit(limit))).all()
+    names = await _nicks(s, [r[0] for r in rows])
+    return [{"place": i + 1, "id": str(uid), "nick": names.get(uid, "Пилот"), "pts": pts, "usdt": PRIZES_USDT.get(i + 1, 0)}
+            for i, (uid, pts) in enumerate(rows)]
+
+
+async def finalize(key):
+    """Зафиксировать призёров прошедшего сезона (один раз)."""
+    from models import SeasonPrize
+    import gram
+    from config import GRAM_USD
+    if time.time() < season_end(key):
+        return False
+    await flush()                                          # последние очки из памяти — в базу
+    async with SessionLocal() as s:
+        if (await s.execute(select(SeasonPrize.tg_id).where(SeasonPrize.season == key).limit(1))).first():
+            return False
+        winners = await top(s, key)
+        now = int(time.time())
+        for w in winners:
+            s.add(SeasonPrize(season=key, tg_id=int(w["id"]), place=w["place"], pts=w["pts"], nick=w["nick"][:40],
+                              usdt=w["usdt"], nano=int(w["usdt"] / GRAM_USD * gram.NANO), status="wait", created=now))
+        if not winners:                                    # пустой сезон — отметка, чтобы не проверять снова
+            s.add(SeasonPrize(season=key, tg_id=0, place=0, status="none", created=now))
+        await s.commit()
+    log.warning("Сезон %s: итоги зафиксированы, призёров %s", key, len(winners))
+    return True
+
+
+def setup_rating(app, read_auth, push_to_player):
+    from models import SeasonPrize
+    import gram
+
+    async def api_top(request):
+        body, user = await read_auth(request)
+        key = season_key()
+        try:
+            await finalize(prev_season(key))
+        except Exception:
+            log.exception("сезон: итоги прошлого сезона")
+        await flush()
+        st = await _load(user["id"])
+        async with SessionLocal() as s:
+            rows = await top(s, key)
+            mine = next((r for r in rows if r["id"] == str(user["id"])), None)
+            if not mine and st["pts"] > 0:
+                higher = (await s.execute(select(SeasonPts.tg_id).where(SeasonPts.season == key, SeasonPts.pts > st["pts"]))).all()
+                mine = {"place": len(higher) + 1, "pts": st["pts"]}
+            prize = (await s.execute(select(SeasonPrize).where(SeasonPrize.tg_id == user["id"], SeasonPrize.status.in_(["wait", "approved"]))
+                                     .order_by(SeasonPrize.season.desc()))).scalars().first()
+            pending = None
+            if user.get("admin"):
+                ps = (await s.execute(select(SeasonPrize).where(SeasonPrize.status == "wait", SeasonPrize.tg_id != 0))).scalars().all()
+                if ps:
+                    pending = {"season": ps[0].season, "count": len(ps), "usdt": sum(p.usdt for p in ps), "gram": gram.g(sum(p.nano for p in ps))}
+        from config import GRAM_USD
+        return web.json_response({"ok": True, "season": key, "top": rows, "me": mine, "rate": GRAM_USD,
+                                  "prizes": {str(k): v for k, v in PRIZES_USDT.items()},
+                                  "prize": {"season": prize.season, "place": prize.place, "usdt": prize.usdt, "gram": gram.g(prize.nano),
+                                            "status": prize.status} if prize else None, "admin_pending": pending})
+
+    async def api_claim(request):
+        body, user = await read_auth(request)
+        uid = user["id"]
+        async with SessionLocal() as s:
+            p = (await s.execute(select(SeasonPrize).where(SeasonPrize.tg_id == uid, SeasonPrize.status == "approved")
+                                 .order_by(SeasonPrize.season.desc()))).scalars().first()
+            if not p:
+                return web.json_response({"ok": False, "error": "Нет наград к выдаче"})
+            p.status = "claimed"
+            ok = await gram.move(s, uid, p.nano, "season_prize", f"season_prize:{p.season}:{uid}", f"Приз сезона {p.season}: {p.place} место")
+            if not ok:
+                return web.json_response({"ok": False, "error": "Не удалось зачислить"})
+            try:
+                await s.commit()
+            except Exception:
+                log.exception("сезон: приз uid=%s уже выдан?", uid)
+                return web.json_response({"ok": False, "error": "Награда уже получена"})
+            bal = (await gram.wallet_of(s, uid)).balance
+        log.warning("Сезон %s: приз выдан uid=%s, %s место, %s USDT", p.season, uid, p.place, p.usdt)
+        return web.json_response({"ok": True, "gram": gram.g(p.nano), "balance": gram.g(bal)})
+
+    async def api_approve(request):
+        body, user = await read_auth(request)
+        if not user.get("admin"):
+            raise web.HTTPForbidden()
+        async with SessionLocal() as s:
+            ps = (await s.execute(select(SeasonPrize).where(SeasonPrize.status == "wait", SeasonPrize.tg_id != 0))).scalars().all()
+            for p in ps:
+                p.status = "approved"
+            await s.commit()
+        for p in ps:
+            await push_to_player(p.tg_id, {"t": "pinfo",
+                                           "text": f"🏆 Приз сезона {p.season} ({p.place} место) готов: забери во вкладке «Рейтинг» окна «Сезон»"})
+        log.warning("Сезон: админ %s подтвердил выплаты, призёров %s", user["username"], len(ps))
+        return web.json_response({"ok": True, "count": len(ps)})
+
+    app.router.add_post("/api/season/top", api_top)
+    app.router.add_post("/api/season/claim", api_claim)
+    app.router.add_post("/api/season/approve", api_approve)

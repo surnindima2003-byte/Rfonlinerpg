@@ -281,3 +281,18 @@ class SeasonPts(Base):
     pts: Mapped[int] = mapped_column(Integer, default=0, index=True)
     data: Mapped[str] = mapped_column(Text, default="{}")              # счётчики заданий дня, недели и постоянных
     updated: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class SeasonPrize(Base):
+    """Призы рейтинга сезона: фиксируются после конца сезона, выплачиваются в GRAM после подтверждения админа."""
+    __tablename__ = "season_prizes"
+
+    season: Mapped[str] = mapped_column(String(16), primary_key=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    place: Mapped[int] = mapped_column(Integer, default=0)
+    pts: Mapped[int] = mapped_column(Integer, default=0)
+    nick: Mapped[str] = mapped_column(String(40), default="")
+    usdt: Mapped[int] = mapped_column(Integer, default=0)
+    nano: Mapped[int] = mapped_column(BigInteger, default=0)          # сумма в GRAM (нано) по курсу на момент итогов
+    status: Mapped[str] = mapped_column(String(12), default="wait")   # wait → approved (админ) → claimed (игрок)
+    created: Mapped[int] = mapped_column(Integer, default=0)

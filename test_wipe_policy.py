@@ -8,7 +8,7 @@ ROOT = _HERE if (_HERE / "game.html").exists() else _HERE.parent     # тест 
 MODELS = (ROOT / "models.py").read_text(encoding="utf-8")
 WEB = (ROOT / "webserver.py").read_text(encoding="utf-8")
 
-MONEY = {"gram_wallets", "gram_tx", "gram_withdrawals", "referrals", "ref_earn", "star_payments"}
+MONEY = {"gram_wallets", "gram_tx", "gram_withdrawals", "referrals", "ref_earn", "star_payments", "season_prizes"}
 # игровые таблицы, которые вайп обнуляет; новая таблица должна попасть сюда или в KEEP_ON_WIPE
 GAME = {"players", "game_saves", "grants", "docs", "market_lots", "market_hist", "item_inst", "sphere_bal",
         "pvp_stats", "server_prog", "loot_day", "faction_lock", "season_pts"}

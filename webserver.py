@@ -54,7 +54,7 @@ log = logging.getLogger("web")
 # ---------- сброс базы ----------
 # Эти таблицы вайп НЕ трогает: деньги игроков (GRAM, звёзды, выводы, рефералы) и служебная статистика.
 # Всё остальное — игровой прогресс (сохранения, вещи, рейтинг, маркет) — обнуляется.
-KEEP_ON_WIPE = {"meta", "gram_wallets", "gram_tx", "gram_withdrawals", "referrals", "ref_earn", "star_payments",
+KEEP_ON_WIPE = {"meta", "gram_wallets", "gram_tx", "gram_withdrawals", "referrals", "ref_earn", "star_payments", "season_prizes",
                 "client_errors", "funnel_events", "first_seen"}
 
 
@@ -1581,6 +1581,7 @@ async def start_web(port: int):
     stats.setup(app)
     special_quests.setup(app, read_auth, push_to_player, grant_dict)
     seasonpts.setup(app, read_auth, push_to_player)
+    seasonpts.setup_rating(app, read_auth, push_to_player)
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)

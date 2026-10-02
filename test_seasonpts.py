@@ -7,12 +7,12 @@ import unittest
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-for name in ("aiohttp", "sqlalchemy", "db", "models", "metrics"):
+for name in ("aiohttp", "sqlalchemy", "db", "models", "metrics", "gram", "config"):
     try:
         __import__(name)
     except Exception:
         m = types.ModuleType(name); sys.modules[name] = m
-        m.web = None; m.select = None; m.SessionLocal = None; m.SeasonPts = None
+        m.web = None; m.select = None; m.SessionLocal = None; m.SeasonPts = m.GameSave = m.Meta = None; m.GRAM_USD = 1.55
         m.inc = m.gauge = m.observe = lambda *a, **k: None
 
 import seasonpts as sp  # noqa: E402
@@ -83,6 +83,16 @@ class SeasonPtsTest(unittest.TestCase):
         self.assertEqual(sp.season_key(datetime(2026, 11, 1, 18, 0, tzinfo=sp.MSK)), "2026-11")
         self.assertEqual(sp.season_end("2026-10"), int(datetime(2026, 11, 1, 18, tzinfo=sp.MSK).timestamp()))
         self.assertEqual(sp.season_end("2026-12"), int(datetime(2027, 1, 1, 18, tzinfo=sp.MSK).timestamp()))
+
+
+class PrizeTest(unittest.TestCase):
+    def test_prizes(self):
+        self.assertEqual([sp.PRIZES_USDT.get(r, 0) for r in (1, 2, 3, 4, 10, 11, 20, 21)], [100, 50, 50, 10, 10, 5, 5, 0])
+        self.assertEqual(sum(sp.PRIZES_USDT.values()), 320)
+
+    def test_prev_season(self):
+        self.assertEqual(sp.prev_season("2026-10"), "2026-09")
+        self.assertEqual(sp.prev_season("2027-01"), "2026-12")
 
 
 if __name__ == "__main__":
