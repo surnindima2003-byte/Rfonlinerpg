@@ -231,6 +231,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.up-new{font-style:normal;background:#3FA35A;color:#fff;border-radius:4px;padding:0 4px;font-size:9px;vertical-align:1px}
 .spt-head{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px}.spt-head>div{border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--panel-2)}
 .spt-head small{display:block;color:var(--muted);font-size:10px}.spt-head b{font:16px 'Russo One',sans-serif;color:#F2C14B}
 .spt-tabs{margin-bottom:8px}
@@ -1298,10 +1299,13 @@ const INV_MAX = 60, STORE_MAX = 200;
 
 // характеристики предмета с учётом грейда
 const ENCH_MAX = 15, ENCH_STEP = 0.08;
+// прибавка к характеристикам за каждый уровень заточки (в долях): +1…+3 безопасно и дают мало, дальше риск растёт — растёт и награда
+const ENCH_GAIN = [0.05, 0.05, 0.05, 0.08, 0.08, 0.08, 0.12, 0.12, 0.12, 0.16, 0.16, 0.16, 0.22, 0.22, 0.22];
+const enchBonus = e => { let b = 0; for(let i = 0; i < Math.min(ENCH_MAX, e || 0); i++) b += ENCH_GAIN[i]; return b; };
 // шанс перейти с +N на +N+1 (индекс — текущий уровень)
 const ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5];
 function gearStats(id, g, e){
-  const it = ITEMS[id], m = GRADES[g||0].mult*(1 + ENCH_STEP*(e || 0)), o = {};
+  const it = ITEMS[id], m = GRADES[g||0].mult*(1 + enchBonus(e)), o = {};
   if(it.atk) o.atk = Math.round(it.atk*m);
   if(it.def) o.def = Math.round(it.def*m);
   if(it.hp) o.hp = Math.round(it.hp*m);
@@ -1358,15 +1362,28 @@ const classParams = () => clsOf(S.cls) || NO_CLASS;
 // ===================== ПРОКАЧКА: УЛУЧШЕНИЯ И ПАССИВНЫЕ =====================
 // Очки навыка (ОН): +1 за каждый полученный уровень. Тратятся на улучшения, умения и пассивные.
 const UPGRADES = [
-  {id:"atk",   name:"Атака",          per:1,    unit:"",   base:40, desc:"+1 к атаке за уровень"},
-  {id:"def",   name:"Броня",          per:1,    unit:"",   base:40, desc:"+1 к броне за уровень"},
-  {id:"hp",    name:"Прочность",      per:10,   unit:"",   base:40, desc:"+10 к прочности за уровень"},
-  {id:"aspd",  name:"Скорость атаки", per:2,    unit:"%",  base:65, desc:"+2% к скорости атаки за уровень"},
-  {id:"crit",  name:"Шанс крита",     per:1,    unit:"%",  base:65, desc:"+1% к шансу крита за уровень"},
-  {id:"cpow",  name:"Сила крита",     per:5,    unit:"%",  base:50, desc:"+5% к урону крита за уровень"},
-  {id:"regen", name:"Регенерация",    per:0.1,  unit:"/с", base:40, desc:"+0,1 прочности в секунду за уровень"}
+  {id:"atk",   name:"Атака",          per:3,    unit:"",   base:40, max:300, desc:"+3 к атаке за уровень"},
+  {id:"def",   name:"Броня",          per:3,    unit:"",   base:40, max:300, desc:"+3 к броне за уровень"},
+  {id:"hp",    name:"Прочность",      per:30,   unit:"",   base:40, max:300, desc:"+30 к прочности за уровень"},
+  {id:"aspd",  name:"Скорость атаки", per:1,    unit:"%",  base:65, max:120, desc:"+0,01 к скорости атаки (+1%) за уровень, максимум 120"},
+  {id:"crit",  name:"Шанс крита",     per:0.3,  unit:"%",  base:65, max:100, desc:"+0,3% к шансу крита за уровень, максимум 100"},
+  {id:"cpow",  name:"Сила крита",     per:0.3,  unit:"%",  base:50, max:100, desc:"+0,3% к силе крита за уровень, максимум 100"},
+  {id:"regen", name:"Регенерация",    per:1,    unit:"/с", base:40, max:300, desc:"+1 прочности в секунду за уровень"},
+  {id:"cpup",  name:"CP",             per:200,  unit:"",   base:40, max:300, desc:"+200 к CP за уровень", fresh:true},
+  {id:"xpup",  name:"Бонус к опыту",  per:0.1,  unit:"%",  base:60, max:300, desc:"+0,1% к опыту за уровень", fresh:true},
+  {id:"dropup",name:"Бонус к дропу",  per:0.1,  unit:"%",  base:60, max:300, desc:"+0,1% к шансу дропа за уровень", fresh:true}
 ];
-const UP_MAX = 30, RESET_COST_CORES = 3;
+const UP_MAX = 300, RESET_COST_CORES = 3;
+const upMax = u => u.max || UP_MAX;
+setTimeout(() => {
+  if(typeof S === "undefined" || S.upV4) return;
+  let refund = 0;
+  for(const u of UPGRADES){ const lv = (S.up || {})[u.id] || 0; for(let l = 0; l < lv; l++) refund += upCostScrap(u, l); }
+  S.upV4 = true;
+  if(refund > 0){ S.scrap += refund; S.up = {}; S.ptsUp = 0; save();
+    toast("Улучшения пересчитаны под новый баланс: сброшены бесплатно, возвращено " + refund.toLocaleString("ru-RU") + " лома и все очки навыка"); }
+  else save();
+}, 2500);
 const upCostScrap = (u, lv) => Math.round(u.base*(1 + lv*0.25));
 
 // Пассивные: у каждого класса две свои, плюс общие для всех
@@ -1468,8 +1485,8 @@ setInterval(() => {
 function healCP(hp){ if(!(hp > 0)) return; const mx = stat().maxcp; S.cp = Math.min(mx, (S.cp ?? mx) + hp*10); }
 function stat(){
   const C = classParams(), U = S.up || {};
-  let atk = Math.round(S.attack*C.atk) + (U.atk || 0), def = Math.round(S.defense*C.def) + (U.def || 0);
-  let maxhp = Math.round(S.max_hp*C.hp) + 10*(U.hp || 0), spd = 0, crit = 3 + (U.crit || 0);
+  let atk = Math.round(S.attack*C.atk) + 3*(U.atk || 0), def = Math.round(S.defense*C.def) + 3*(U.def || 0);
+  let maxhp = Math.round(S.max_hp*C.hp) + 30*(U.hp || 0), spd = 0, crit = 3 + 0.3*(U.crit || 0);
   for(const e of Object.values(S.eq)){ if(!e) continue; const s = gearStats(e.id, e.g, e.e); atk += s.atk||0; def += s.def||0; maxhp += s.hp||0; spd += s.spd||0; crit += s.crit||0; }
   if(typeof codexBonus === "function"){ const cb = codexBonus(); atk += cb.atk; def += cb.def; maxhp += cb.hp; crit += cb.crit; }
   // комплект: 3 вещи одного поколения — +1,5% атаки за номер поколения, 6 вещей — ещё +2% прочности и +крит
@@ -1479,10 +1496,11 @@ function stat(){
   if(typeof potV === "function"){ maxhp = Math.round(maxhp*(1 + potV("hp"))); atk = Math.round(atk*(1 + potV("atk"))); }
   crit += 2*pasLv("eagle");
   spd += 0.02*pasLv("servo");
-  return {atk, def, maxhp, spd, crit, maxcp:maxhp*10,
-    critPow:2 + 0.05*(U.cpow || 0) + 0.04*pasLv("fury"),
-    rate:1 + 0.02*(U.aspd || 0) + 0.02*pasLv("swift"),
-    regen:0.1*(U.regen || 0) + 0.2*pasLv("selfrepair"),
+  return {atk, def, maxhp, spd, crit, maxcp:maxhp*10 + 200*(U.cpup || 0),
+    critPow:2 + 0.003*(U.cpow || 0) + 0.04*pasLv("fury"),
+    rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift"),
+    regen:1*(U.regen || 0) + 0.2*pasLv("selfrepair"),
+    xpUp:0.001*(U.xpup || 0), dropUp:0.001*(U.dropup || 0),
     dmgRed:Math.min(0.45, 0.03*pasLv("steelskin")),
     thorns:0.04*pasLv("retaliate"), steal:0.02*pasLv("hunger"), execute:0.06*pasLv("execute"),
     range:12*pasLv("longshot"), skillDmg:0.04*pasLv("overload"),
@@ -1783,7 +1801,7 @@ function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
   const tk = typeof ticketActive === "function" && ticketActive(), sroom = e.room && e.room.seasonal;
-  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (sroom ? 1.5 : 1));
+  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (sroom ? 1.5 : 1) * (1 + (stat().xpUp || 0)));
   if(typeof seasonAddXp === "function") seasonAddXp(3 + Math.floor((k.lvl || 1)/2));
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
@@ -4618,8 +4636,8 @@ function upgradesStatsView(){
   let h = pointsCard(`<section class="pcard"><div class="upstats">${cards.map(([n, v]) => `<div><b>${v}</b>${n}</div>`).join("")}</div></section>`);
   h += `<section class="pcard"><h3>Улучшения</h3><div class="uplist">`;
   for(const u of UPGRADES){
-    const lv = S.up[u.id] || 0, max = lv >= UP_MAX, cost = upCostScrap(u, lv), can = !max && ptsFree() >= 1 && S.scrap >= cost;
-    h += `<div class="uprow"><div class="tx"><b>${u.name}</b><small>Ур. ${lv}/${UP_MAX} · сейчас +${fmtN(u.per*lv)}${u.unit}</small><small class="muted">${u.desc}</small></div>
+    const lv = S.up[u.id] || 0, max = lv >= upMax(u), cost = upCostScrap(u, lv), can = !max && ptsFree() >= 1 && S.scrap >= cost;
+    h += `<div class="uprow"><div class="tx"><b>${u.name}</b><small>Ур. ${lv}/${upMax(u)} · сейчас +${fmtN(Math.round(u.per*lv*100)/100)}${u.unit}${u.fresh ? ' <i class="up-new">новое</i>' : ""}</small><small class="muted">${u.desc}</small></div>
       <button class="upbtn" type="button" data-up="${u.id}" ${can ? "" : "disabled"}>${max ? "Макс." : `<span>${cost} лома</span><span>+ 1 ОН</span>`}</button></div>`;
   }
   const back = S.ptsUp;
@@ -4729,7 +4747,7 @@ $("scrChar").addEventListener("click", e => {
   else if(d.sktab){ skTab = d.sktab; Sfx.play("ui"); }
   else if(d.up){
     const u = UPGRADES.find(x => x.id === d.up), lv = S.up[u.id] || 0, cost = upCostScrap(u, lv);
-    if(lv >= UP_MAX || ptsFree() < 1 || S.scrap < cost) return;
+    if(lv >= upMax(u) || ptsFree() < 1 || S.scrap < cost) return;
     S.scrap -= cost; S.up[u.id] = lv + 1; S.ptsUp++; Sfx.play("pick"); toast(u.name + ": ур. " + (lv + 1));
   }
   else if(d.sk){
@@ -6135,7 +6153,8 @@ function doEnchant(forced){
       Sfx.play("level"); if(Sfx.haptic) Sfx.haptic("heavy");
       if(x.e >= 7 && typeof chatAnnounce === "function") chatAnnounce(S.name + " заточил " + it.name + " до +" + x.e);
     } else if(enchSph === "sph_ti"){
-      enchResult = `<span style="color:var(--amber)">Неудача. Титановая сфера сохранила предмет</span>`; Sfx.play("hit");
+      if(!forced || forced === "fail") x.e = Math.max(0, e - 1);              // безопасная заточка: при неудаче −1 (не ниже +0)
+      enchResult = `<span style="color:var(--amber)">Неудача: предмет цел, заточка снизилась до +${x.e}</span>`; Sfx.play("hit");
     } else {
       const scrap = Math.max(5, Math.round(sellPrice(x)*0.5));
       if(enchRef.where === "inv") S.inv.splice(enchRef.i, 1); else S.eq[enchRef.slot] = null;
@@ -6149,7 +6168,7 @@ function doEnchant(forced){
     enchBusy = false; save();
     if(ok && typeof seasonAddXp === "function"){ seasonAddXp(5); toast("+5 очков сезона"); }
     body().innerHTML = `<div class="ench-run done ${ok ? "ok" : "fail"}"><div class="ench-mark">${ok ? "✓" : "✕"}</div>
-      <h3>${ok ? "+" + x.e + " Успех!" : "Неудача"}</h3><p>${ok ? it.name + " заточен до +" + x.e : "Титановая сфера сохранила предмет: он остался +" + e}</p>
+      <h3>${ok ? "+" + x.e + " Успех!" : "Неудача"}</h3><p>${ok ? it.name + " заточен до +" + x.e : "Титановая сфера сохранила предмет, но заточка снизилась: теперь +" + x.e + ". Было: остался +" + e}</p>
       <button class="btn pri wide" type="button" data-ench="cont">Продолжить</button></div>`;
   }, 1300);
 }
@@ -6255,7 +6274,7 @@ function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
   const vb0 = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
   // билет сезона: +60% к дропу; сезонная комната: ещё +50%
-  const vb = {...vb0, drop:vb0.drop + (typeof ticketActive === "function" && ticketActive() ? 0.6 : 0) + (e.room && e.room.seasonal ? 0.5 : 0)};
+  const vb = {...vb0, drop:vb0.drop + (typeof ticketActive === "function" && ticketActive() ? 0.6 : 0) + (e.room && e.room.seasonal ? 0.5 : 0) + (st.dropUp || 0)};
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   const srv = typeof regOnline === "function" && regOnline();
   if(srv) regKill(e);                                   // ценный лут решает сервер
@@ -8110,7 +8129,7 @@ doEnchant = async function(){
   if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
   REG.sph[enchSph] = r.sph;
   _doEnchantLocal(r.result === "ok" ? "ok" : "fail");
-  if(r.result === "ok") x.e = r.e;
+  x.e = r.e;                                                                   // сервер решает итог: +1 или −1 на титане
 };
 
 // ---- подсказка в карточке вещи: можно ли продать за GRAM ----

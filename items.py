@@ -307,7 +307,7 @@ async def api_items(request):
             if random.random() * 100 < ENCH_CHANCE[e0]:
                 vals, result = {"e": e0 + 1}, "ok"
             elif sid == "sph_ti":
-                vals, result = {}, "fail"
+                vals, result = ({"e": e0 - 1} if e0 > 0 else {}), "fail"          # безопасная заточка: при неудаче −1, не ниже +0
             else:
                 vals, result = {"status": "gone"}, "broken"
             if vals:
