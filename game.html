@@ -7600,6 +7600,220 @@ renderTargetFrame = function(){
     prevPvp2(d);
   };
 }
+// ===================== СПАВН: НОЧНАЯ КОЛОНИЯ =====================
+// Центральный ангар перестроен в ночной городок: круглая площадь из стальной брусчатки с реактором,
+// четыре улицы, мшистые сквера с энергосветлячками, фонари, дома с горящими окнами,
+// рынок торговца, склад и кузница. Статичная часть рисуется один раз в куски по 400 px.
+const TOWN = {W:1600, H:1600, cx:800, cy:800, R:300, chunks:new Map(), flies:[], sparks:[]};
+const TWN_NPC = [{kind:"trader", x:575, y:575}, {kind:"storage", x:1025, y:575}, {kind:"craft", x:575, y:1025}, {kind:"portal", x:1030, y:1030}];
+// дома: x, y, w, h, цвет крыши, окна
+const TWN_HOUSES = [
+  [90, 120, 220, 150, "#3A2E3E"], [360, 90, 180, 130, "#2E3A48"], [1060, 90, 190, 130, "#3A2E3E"], [1300, 130, 210, 150, "#2E3A48"],
+  [90, 1330, 210, 160, "#2E3A48"], [1290, 1320, 220, 170, "#3A2E3E"], [1080, 1380, 170, 120, "#2E3A48"], [360, 1390, 170, 110, "#3A2E3E"],
+  [90, 360, 150, 140, "#2E3A48"], [1360, 380, 150, 130, "#3A2E3E"], [90, 1090, 150, 140, "#3A2E3E"], [1360, 1080, 150, 140, "#2E3A48"]
+];
+const TWN_SHOPS = {trader:[400, 330, 230, 150], storage:[970, 330, 230, 150], craft:[400, 1120, 230, 150]};
+const TWN_TREES = [[250, 560], [170, 650], [300, 700], [660, 250], [560, 180], [1360, 640], [1260, 560], [1430, 720], [940, 230], [1050, 250],
+  [230, 960], [330, 880], [1300, 900], [1420, 980], [1250, 1250], [660, 1350], [950, 1350], [560, 1440]];
+const TWN_LAMPS = [];
+for(let k = 160; k <= 1440; k += 160){ if(Math.abs(k - 800) > 320){ TWN_LAMPS.push([720, k], [880, k], [k, 720], [k, 880]); } }
+for(let i = 0; i < 8; i++){ const a = i*Math.PI/4 + Math.PI/8; TWN_LAMPS.push([800 + Math.cos(a)*(TOWN.R + 22), 800 + Math.sin(a)*(TOWN.R + 22)]); }
+
+function twnStreet(x, y){ return (Math.abs(x - 800) < 80 || Math.abs(y - 800) < 80); }
+function twnPlaza(x, y){ return Math.hypot(x - 800, y - 800) < TOWN.R; }
+// ---- статичный слой: земля, улицы, площадь, дома, деревья (один раз на кусок) ----
+function twnChunk(ix, iy){
+  const key = ix + "," + iy; if(TOWN.chunks.has(key)) return TOWN.chunks.get(key);
+  const S0 = 400, c = document.createElement("canvas"); c.width = S0; c.height = S0;
+  const g = c.getContext("2d"), ox = ix*S0, oy = iy*S0, rnd = seeded(ix*7919 + iy*104729 + 11);
+  g.translate(-ox, -oy);
+  // мох и трава
+  g.fillStyle = "#14261C"; g.fillRect(ox, oy, S0, S0);
+  for(let i = 0; i < 900; i++){ const x = ox + rnd()*S0, y = oy + rnd()*S0; g.fillStyle = rnd() < .5 ? "#1A3324" : "#102017"; g.fillRect(x|0, y|0, 2 + (rnd()*3|0), 2); }
+  for(let i = 0; i < 70; i++){ const x = ox + rnd()*S0, y = oy + rnd()*S0; g.fillStyle = rnd() < .5 ? "#2E5A3A" : "#3B6E45";
+    g.fillRect(x|0, y|0, 2, 4); g.fillRect((x|0) - 2, (y|0) + 2, 2, 2); g.fillRect((x|0) + 2, (y|0) + 1, 2, 2); }
+  // улицы — стальные плиты
+  g.save(); g.beginPath(); g.rect(720, 0, 160, TOWN.H); g.rect(0, 720, TOWN.W, 160); g.clip();
+  g.fillStyle = "#1E252D"; g.fillRect(ox, oy, S0, S0);
+  for(let y = Math.floor(oy/20)*20; y < oy + S0; y += 20) for(let x = Math.floor(ox/32)*32 - ((y/20) % 2)*16; x < ox + S0; x += 32){
+    const sh = 26 + (((x*13 + y*7) % 9)); g.fillStyle = `rgb(${sh},${sh + 6},${sh + 14})`; g.fillRect(x + 1, y + 1, 30, 18);
+    g.fillStyle = "rgba(255,255,255,.04)"; g.fillRect(x + 1, y + 1, 30, 2); }
+  g.restore();
+  g.fillStyle = "#0B1015"; for(const v of [716, 880]){ g.fillRect(v, oy, 4, S0); g.fillRect(ox, v, S0, 4); }
+  // круглая площадь: кольца брусчатки
+  g.save(); g.beginPath(); g.arc(800, 800, TOWN.R, 0, Math.PI*2); g.clip();
+  g.fillStyle = "#181E25"; g.fillRect(ox, oy, S0, S0);
+  for(let r = 18; r < TOWN.R; r += 18){ const n = Math.max(6, Math.round(2*Math.PI*r/26));
+    for(let k = 0; k < n; k++){ const a0 = k/n*Math.PI*2 + (r % 36 ? .5/n*Math.PI*2 : 0), a1 = a0 + Math.PI*2/n*0.86;
+      const sh = 30 + ((k*7 + r) % 11); g.strokeStyle = `rgb(${sh},${sh + 5},${sh + 12})`; g.lineWidth = 14;
+      g.beginPath(); g.arc(800, 800, r, a0, a1); g.stroke(); } }
+  g.restore();
+  g.strokeStyle = "#B9862E"; g.lineWidth = 4; g.beginPath(); g.arc(800, 800, TOWN.R - 2, 0, Math.PI*2); g.stroke();
+  g.strokeStyle = "#0B1015"; g.lineWidth = 6; g.beginPath(); g.arc(800, 800, TOWN.R + 4, 0, Math.PI*2); g.stroke();
+  // дорожки к лавкам от площади
+  g.strokeStyle = "#20272F"; g.lineCap = "round"; g.lineWidth = 46;
+  for(const [k, [x, y, w, h]] of Object.entries(TWN_SHOPS)){ const n = TWN_NPC.find(q => q.kind === k); g.beginPath(); g.moveTo(n.x, n.y); g.lineTo(x + w/2, n.y < y ? y + 40 : y + h); g.stroke(); }
+  // дома
+  for(const [x, y, w, h, roof] of TWN_HOUSES) twnHouse(g, x, y, w, h, roof, rnd);
+  // здания лавок
+  twnShop(g, "trader"); twnShop(g, "storage"); twnShop(g, "craft");
+  // деревья (кроны тёмные, блики мха)
+  for(const [x, y] of TWN_TREES){ g.fillStyle = "rgba(0,0,0,.35)"; g.beginPath(); g.ellipse(x + 6, y + 30, 34, 12, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = "#3A2A1E"; g.fillRect(x - 4, y, 8, 30);
+    for(const [dx, dy, r, c] of [[0, -6, 30, "#16331F"], [-14, 4, 22, "#1C3F27"], [14, 2, 22, "#1C3F27"], [0, -14, 18, "#24502F"], [-6, -20, 8, "#2F6A3C"]]){ g.fillStyle = c; g.beginPath(); g.arc(x + dx, y + dy, r, 0, Math.PI*2); g.fill(); } }
+  TOWN.chunks.set(key, c); return c;
+}
+function twnHouse(g, x, y, w, h, roof, rnd){
+  g.fillStyle = "rgba(0,0,0,.4)"; g.fillRect(x + 8, y + 10, w, h);
+  g.fillStyle = "#2A2F36"; g.fillRect(x, y + h*0.38, w, h*0.62);                               // стена
+  g.fillStyle = "#353B44"; for(let yy = y + h*0.38 + 8; yy < y + h; yy += 12) g.fillRect(x, yy, w, 2);
+  g.fillStyle = roof; g.fillRect(x - 6, y, w + 12, h*0.42);                                    // крыша
+  g.fillStyle = "rgba(255,255,255,.06)"; for(let xx = x - 6; xx < x + w + 6; xx += 14) g.fillRect(xx, y, 2, h*0.42);
+  g.fillStyle = "#1A1E24"; g.fillRect(x - 6, y + h*0.4, w + 12, 5);
+  const nw = Math.max(2, Math.floor(w/48));
+  for(let i = 0; i < nw; i++){ const wx = x + 16 + i*(w - 32)/(nw - 1 || 1) - 7, wy = y + h*0.55;
+    const lit = rnd() < .75; g.fillStyle = lit ? "#F2C14B" : "#1B232C"; g.fillRect(wx, wy, 14, 16);
+    g.fillStyle = "#2A2F36"; g.fillRect(wx + 6, wy, 2, 16); g.fillRect(wx, wy + 7, 14, 2); }
+  g.fillStyle = "#4A3424"; g.fillRect(x + w/2 - 10, y + h - 26, 20, 26);                        // дверь
+  g.fillStyle = "#F2A93B"; g.fillRect(x + w/2 + 5, y + h - 14, 3, 3);
+}
+function twnShop(g, kind){
+  const [x, y, w, h] = TWN_SHOPS[kind];
+  g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(x + 10, y + 12, w, h);
+  g.fillStyle = "#262C34"; g.fillRect(x, y + 40, w, h - 40);
+  g.fillStyle = "#31384200"; 
+  if(kind === "trader"){                                                                   // рынок: полосатый навес и ящики
+    for(let i = 0; i < 8; i++){ g.fillStyle = i % 2 ? "#E8E2D4" : "#3F8A5A"; g.fillRect(x - 8 + i*(w + 16)/8, y + 22, (w + 16)/8 + 1, 34); }
+    g.fillStyle = "#1F5A3A"; for(let i = 0; i < 8; i++){ g.beginPath(); g.arc(x - 8 + (i + .5)*(w + 16)/8, y + 56, (w + 16)/16, 0, Math.PI); g.fill(); }
+    g.fillStyle = "#5A4230"; g.fillRect(x + 14, y + 92, w - 28, 22); g.fillStyle = "#6E5238"; g.fillRect(x + 14, y + 92, w - 28, 5);
+    for(let i = 0; i < 6; i++){ g.fillStyle = ["#E0694A", "#7BC98A", "#F2C14B", "#5FD4E8", "#B07CFF", "#E0694A"][i]; g.beginPath(); g.arc(x + 34 + i*30, y + 90, 7, 0, Math.PI*2); g.fill(); }
+    for(const [bx, by] of [[x - 30, y + 110], [x - 18, y + 132], [x + w + 6, y + 120]]){ g.fillStyle = "#6B5236"; g.fillRect(bx, by, 28, 24); g.strokeStyle = "rgba(0,0,0,.4)"; g.lineWidth = 2; g.strokeRect(bx + 3, by + 3, 22, 18); }
+  } else if(kind === "storage"){                                                           // склад: ворота ангара и контейнеры
+    g.fillStyle = "#3A4652"; g.fillRect(x - 6, y + 10, w + 12, 36); g.fillStyle = "#F2A93B"; g.fillRect(x - 6, y + 42, w + 12, 4);
+    g.fillStyle = "#1B232C"; g.fillRect(x + 40, y + 62, w - 80, h - 62);
+    g.fillStyle = "#2E3A46"; for(let yy = y + 66; yy < y + h; yy += 9) g.fillRect(x + 42, yy, w - 84, 5);
+    for(const [cx2, cy2, c] of [[x - 34, y + 70, "#7A3A2E"], [x - 34, y + 104, "#2E5A7A"], [x + w + 4, y + 86, "#7A6A2E"]]){ g.fillStyle = c; g.fillRect(cx2, cy2, 30, 30); g.fillStyle = "rgba(255,255,255,.12)"; for(let k = 3; k < 30; k += 6) g.fillRect(cx2 + k, cy2 + 2, 2, 26); }
+  } else {                                                                                  // кузница: каменная печь, наковальня, труба
+    g.fillStyle = "#3B3330"; g.fillRect(x - 6, y + 14, w + 12, 32); g.fillStyle = "#4C413C"; for(let xx = x - 6; xx < x + w + 6; xx += 18) g.fillRect(xx, y + 14, 16, 14);
+    g.fillStyle = "#2A2421"; g.fillRect(x + w - 50, y - 20, 30, 40);
+    g.fillStyle = "#4C413C"; g.fillRect(x + 20, y + 60, 80, 80); g.fillStyle = "#140C08"; g.fillRect(x + 34, y + 84, 52, 40);
+    g.fillStyle = "#56616D"; g.fillRect(x + 130, y + 112, 56, 12); g.fillRect(x + 146, y + 124, 24, 16); g.fillStyle = "#6E7A86"; g.fillRect(x + 126, y + 106, 64, 8);
+  }
+}
+// ---- живые детали: светлячки, огонь, пар, мигание окон, свет фонарей ----
+function twnInitFlies(){ if(TOWN.flies.length) return; const r = seeded(42);
+  for(let i = 0; i < 70; i++){ let x, y; do { x = 60 + r()*1480; y = 60 + r()*1480; } while(twnStreet(x, y) || twnPlaza(x, y));
+    TOWN.flies.push({x, y, p:r()*10, s:.5 + r()}); } }
+function drawLobby(cx, cy, t){
+  ctx.fillStyle = "#0A1210"; ctx.fillRect(cx, cy, vw, vh);
+  ctx.imageSmoothingEnabled = false;
+  for(let iy = Math.max(0, Math.floor(cy/400)); iy <= Math.min(3, Math.floor((cy + vh)/400)); iy++)
+    for(let ix = Math.max(0, Math.floor(cx/400)); ix <= Math.min(3, Math.floor((cx + vw)/400)); ix++) ctx.drawImage(twnChunk(ix, iy), ix*400, iy*400);
+  drawLobbyObjects(t);
+}
+function drawLobbyObjects(t){
+  // реактор-памятник в центре площади
+  const pulse = (Math.sin(t*2) + 1)/2;
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(806, 816, 70, 26, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#2A323C"; rr(740, 770, 120, 50, 10); ctx.fill(); ctx.fillStyle = "#B9862E"; ctx.fillRect(740, 790, 120, 4);
+  ctx.fillStyle = "#1B232C"; rr(770, 700, 60, 84, 8); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const gr = ctx.createRadialGradient(800, 730, 4, 800, 730, 90); gr.addColorStop(0, `rgba(95,212,232,${.45 + pulse*.25})`); gr.addColorStop(1, "rgba(95,212,232,0)");
+  ctx.fillStyle = gr; circle(800, 730, 90); ctx.fill();
+  ctx.strokeStyle = "rgba(95,212,232,.8)"; ctx.lineWidth = 2;
+  for(let i = 0; i < 3; i++){ ctx.beginPath(); ctx.ellipse(800, 730, 26, 9, t*.9 + i*Math.PI/3, 0, Math.PI*2); ctx.stroke(); }
+  ctx.fillStyle = "#E8FCFF"; circle(800, 730, 6 + pulse*2); ctx.fill();
+  ctx.restore();
+  // фонари (столб; свет — в оверлее)
+  for(const [x, y] of TWN_LAMPS){ ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x - 2, y + 2, 8, 6); ctx.fillStyle = "#2E3640"; ctx.fillRect(x - 2, y - 30, 4, 32);
+    ctx.fillStyle = "#3E4752"; ctx.fillRect(x - 6, y - 36, 12, 7); ctx.fillStyle = "#FFD27A"; ctx.fillRect(x - 4, y - 34, 8, 4); }
+  // кузнечный горн
+  const [fx, fy] = [TWN_SHOPS.craft[0] + 60, TWN_SHOPS.craft[1] + 104];
+  for(let i = 0; i < 6; i++){ const h = 10 + Math.sin(t*9 + i*1.7)*6 + i%2*4; ctx.fillStyle = i % 2 ? "#F2A93B" : "#E0463A"; ctx.fillRect(fx - 22 + i*8, fy + 18 - h, 7, h); }
+  if(Math.random() < .2) TOWN.sparks.push({x:fx + Math.random()*30 - 15, y:fy, vx:Math.random()*40 - 20, vy:-60 - Math.random()*60, life:.8});
+  if(Math.random() < .12) steam.push({x:TWN_SHOPS.craft[0] + TWN_SHOPS.craft[2] - 35, y:TWN_SHOPS.craft[1] - 22, vx:Math.random()*10 - 5, r:5, life:2.2, max:2.2});
+}
+function drawLobbyOverlay(t, dt){
+  for(const s of steam){ s.y -= 22*dt; s.x += s.vx*dt; s.r += 8*dt; s.life -= dt; }
+  steam = steam.filter(s => s.life > 0);
+  for(const s of steam){ ctx.fillStyle = `rgba(190,190,200,${.16*s.life/s.max})`; circle(s.x, s.y, s.r); ctx.fill(); }
+  for(const s of TOWN.sparks){ s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 60*dt; s.life -= dt; }
+  TOWN.sparks = TOWN.sparks.filter(s => s.life > 0);
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for(const s of TOWN.sparks){ ctx.fillStyle = `rgba(255,190,90,${s.life})`; ctx.fillRect(s.x, s.y, 2, 2); }
+  // тёплые пятна фонарей (с лёгким мерцанием)
+  const x0 = camX - 140, x1 = camX + vw + 140, y0 = camY - 140, y1 = camY + vh + 140;
+  for(const [x, y] of TWN_LAMPS){ if(x < x0 || x > x1 || y < y0 || y > y1) continue;
+    const f = .85 + Math.sin(t*7 + x)*.05 + (Math.random() < .01 ? -.3 : 0);
+    const g = ctx.createRadialGradient(x, y - 30, 0, x, y - 30, 110); g.addColorStop(0, `rgba(255,200,110,${.22*f})`); g.addColorStop(1, "rgba(255,200,110,0)");
+    ctx.fillStyle = g; ctx.fillRect(x - 110, y - 140, 220, 220); }
+  // свет от горна
+  const [fx, fy] = [TWN_SHOPS.craft[0] + 60, TWN_SHOPS.craft[1] + 104];
+  const gf = ctx.createRadialGradient(fx, fy, 0, fx, fy, 130); gf.addColorStop(0, `rgba(255,120,50,${.28 + Math.sin(t*10)*.05})`); gf.addColorStop(1, "rgba(255,120,50,0)");
+  ctx.fillStyle = gf; ctx.fillRect(fx - 130, fy - 130, 260, 260);
+  // энергосветлячки над травой
+  twnInitFlies();
+  for(const f of TOWN.flies){ const x = f.x + Math.sin(t*.7*f.s + f.p)*14, y = f.y + Math.cos(t*.5*f.s + f.p*2)*10;
+    if(x < x0 || x > x1 || y < y0 || y > y1) continue;
+    const a = .45 + Math.sin(t*3*f.s + f.p)*.4; ctx.fillStyle = `rgba(150,255,120,${a*.25})`; circle(x, y, 6); ctx.fill(); ctx.fillStyle = `rgba(200,255,170,${a})`; ctx.fillRect(x - 1, y - 1, 3, 3); }
+  ctx.restore();
+}
+// ---- жители-роботы: торговец, кладовщик, кузнец (с анимацией) ----
+function drawTownBot(x, y, t, role){
+  const C = {trader:["#5F8A6A", "#3F6A4A", "#FFD27A"], storage:["#5F7A9A", "#3F5A7A", "#5FD4E8"], craft:["#8A6A5A", "#6A4A3A", "#F2A93B"]}[role];
+  const bob = Math.sin(t*2.2)*1.5, blink = (t % 3.2) < .12;
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(0, 22, 18, 6, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#2A3038"; ctx.fillRect(-9, 6, 6, 16); ctx.fillRect(3, 6, 6, 16);                        // ноги
+  ctx.fillStyle = "#1B232C"; ctx.fillRect(-11, 20, 9, 4); ctx.fillRect(2, 20, 9, 4);
+  ctx.translate(0, bob);
+  ctx.fillStyle = C[1]; rr(-13, -12, 26, 22, 4); ctx.fill(); ctx.fillStyle = C[0]; rr(-11, -10, 22, 18, 3); ctx.fill();   // корпус
+  ctx.fillStyle = "#1B232C"; ctx.fillRect(-6, -4, 12, 6); ctx.fillStyle = C[2]; ctx.globalAlpha = .6 + Math.sin(t*4)*.3; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2); ctx.globalAlpha = 1;
+  ctx.fillStyle = C[1]; rr(-10, -30, 20, 17, 5); ctx.fill(); ctx.fillStyle = "#11171D"; rr(-7, -26, 14, 7, 2); ctx.fill();       // голова
+  if(!blink){ ctx.fillStyle = C[2]; ctx.fillRect(-5, -24, 3, 3); ctx.fillRect(2, -24, 3, 3); }
+  ctx.strokeStyle = "#56616D"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(Math.sin(t*1.7)*3, -38); ctx.stroke();  // антенна
+  ctx.fillStyle = C[2]; circle(Math.sin(t*1.7)*3, -39, 2); ctx.fill();
+  // руки по роли
+  if(role === "craft"){                                                     // кузнец бьёт молотом по наковальне
+    const ph = (t*1.6) % 1, a = ph < .7 ? -1.6 + ph/.7*1.2 : -.4 - (ph - .7)/.3*1.6;
+    ctx.save(); ctx.translate(12, -6); ctx.rotate(a + 1.6); ctx.fillStyle = C[1]; ctx.fillRect(0, -2, 14, 4); ctx.fillStyle = "#56616D"; ctx.fillRect(12, -1, 3, 10); ctx.fillStyle = "#8A96A3"; ctx.fillRect(9, 8, 9, 6); ctx.restore();
+    if(ph > .97 && Math.random() < .9) for(let i = 0; i < 4; i++) TOWN.sparks.push({x:x + 22, y:y + 6, vx:Math.random()*80 - 40, vy:-40 - Math.random()*50, life:.5});
+    ctx.fillStyle = C[1]; ctx.fillRect(-17, -8, 5, 12);
+  } else if(role === "trader"){                                             // торговец машет рукой
+    const w = Math.sin(t*5)*.5; ctx.save(); ctx.translate(-13, -8); ctx.rotate(-2.4 + w); ctx.fillStyle = C[1]; ctx.fillRect(0, -2, 13, 4); ctx.restore();
+    ctx.fillStyle = C[1]; ctx.fillRect(12, -8, 5, 12); ctx.fillStyle = "#1B232C"; rr(13, 0, 10, 12, 2); ctx.fill(); ctx.fillStyle = "#7BC98A"; ctx.fillRect(15, 3, 6, 2);
+  } else {                                                                  // кладовщик сканирует планшетом
+    ctx.fillStyle = C[1]; ctx.fillRect(-17, -8, 5, 12); ctx.fillRect(12, -8, 5, 12);
+    ctx.fillStyle = "#1B232C"; rr(10, -2, 12, 14, 2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(95,212,232,${.25 + Math.sin(t*3)*.15})`;
+    ctx.beginPath(); ctx.moveTo(22, 4); ctx.lineTo(44, -6 + Math.sin(t*2)*8); ctx.lineTo(44, 14 + Math.sin(t*2)*8); ctx.fill(); ctx.restore();
+  }
+  ctx.restore();
+}
+{
+  const _drawNpcT = drawNpc;
+  drawNpc = function(n, t){
+    if(locKey === "lobby" && (n.kind === "trader" || n.kind === "storage" || n.kind === "craft")){
+      drawTownBot(n.x, n.y, t, n.kind);
+      label({trader:"Торговец", storage:"Хранилище", craft:"Кузнец"}[n.kind], n.x, n.y - 50, LOBBY_PADS[n.kind] || "#F2A93B");
+      return;
+    }
+    return _drawNpcT(n, t);
+  };
+  const _buildLocT = buildLoc;
+  buildLoc = function(key){
+    if(key !== "lobby") return _buildLocT(key);
+    locKey = key; rocks = []; enemies = []; npcs = []; bolts = []; beams = []; drops = []; texts = [];
+    W = TOWN.W; H = TOWN.H;
+    // стены домов, лавок и стволы деревьев — препятствия
+    for(const [x, y, w, h] of TWN_HOUSES) rocks.push({rx:x - 6, ry:y, rw:w + 12, rh:h, deco:true});
+    for(const [x, y, w, h] of Object.values(TWN_SHOPS)) rocks.push({rx:x, ry:y + 20, rw:w, rh:h - 30, deco:true});
+    for(const [x, y] of TWN_TREES) rocks.push({x, y:y + 14, r:14, deco:true});
+    rocks.push({x:800, y:780, r:52, deco:true});
+    npcs = TWN_NPC.map(n => ({...n}));
+    return {x:800, y:930};
+  };
+}
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
