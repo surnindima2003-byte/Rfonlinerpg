@@ -25,7 +25,11 @@ NANO = 1_000_000_000
 API = "https://testnet.toncenter.com/api/v2" if TON_NETWORK != "mainnet" else "https://toncenter.com/api/v2"
 ADDR_RE = re.compile(r"^(EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$|^-?\d:[0-9a-fA-F]{64}$")
 # цены магазина задаёт только сервер
-PACK_PRICES = {"season": 10.5, "books": 5, "spheres": 1, "cores": 2, "legend": 20}
+# цены паков магазина (как в game.html → PACKS). «Паки» и «Допы» до конца сезона со скидкой 30%, «Усиление» — по полной цене
+SHOP_SALE = 0.7
+_BASE = {"p_start": 1, "p_base": 5, "p_std": 20, "p_elite": 100, "p_legend": 180, "p_epic": 600, "p_cores": 10,
+         "d_start": 30, "d_base": 65, "d_adv": 220, "d_sup": 370, "d_top": 550, "d_admin": 700}
+PACK_PRICES = {"season": 10.5, "u1": 25, "u2": 40, "u3": 80, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
 
 
 def g(nano):
@@ -253,6 +257,8 @@ async def api_gram(request):
             notes = await pay_referrals(s, uid, nano)
             import items
             minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
+            import saveguard
+            saveguard.note_purchase(uid)                                   # большой прирост в следующем сохранении — это покупка
             await s.commit()
             import vip
             vip.forget(uid)                                                # новый VIP действует на дроп сразу

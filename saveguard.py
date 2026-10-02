@@ -40,6 +40,7 @@ SPH_PRICE_MIN = 150          # самая дешёвая сфера у торг�
 SPH_BASE = 40                # сферы «из ниоткуда» за одно сохранение: награда VIP (до 30), задания дня, выпадение
 ENCH_SLACK = 3
 
+_purchases = {}              # tg_id -> время последней покупки в магазине GRAM
 recent = deque(maxlen=200)   # последние подозрительные сохранения (видны в /metrics)
 
 
@@ -146,6 +147,11 @@ def jumps(old, new, dt, granted):
     return out
 
 
+def note_purchase(uid):
+    """Покупка пака: в ближайшем сохранении прирост лома, вещей и заточки законный."""
+    _purchases[uid] = time.time()
+
+
 def check(uid, nick, old_data, new_data, dt, granted):
     """Возвращает (данные для записи или None — не записывать, список замечаний)."""
     if MODE == "off":
@@ -153,8 +159,11 @@ def check(uid, nick, old_data, new_data, dt, granted):
     S = new_data.get("S") if isinstance(new_data.get("S"), dict) else {}
     oldS = old_data.get("S") if isinstance(old_data, dict) and isinstance(old_data.get("S"), dict) else None
     notes = [("структура", b) for b in structure(S)]
-    if oldS is not None:
+    bought = _purchases.get(uid, 0) >= time.time() - dt - 5
+    if oldS is not None and not bought:
         notes += [("скачок", j) for j in jumps(oldS, S, dt, granted)]
+    if bought and oldS is not None:
+        _purchases.pop(uid, None)
     if not notes:
         return new_data, []
     metrics.inc("saveguard.flagged")

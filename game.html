@@ -231,6 +231,12 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.shop-tabs{margin-bottom:8px}
+.sale-bar{display:flex;align-items:center;gap:6px;border:1px solid rgba(224,70,58,.45);background:rgba(120,24,24,.25);border-radius:10px;padding:7px 10px;font-size:12px;margin:6px 0 8px}
+.sale-bar b{margin-left:auto;font-family:'Russo One',sans-serif}
+.sale-tag{background:#E0463A;color:#fff;border-radius:5px;padding:0 5px;font:10px/16px 'Russo One',sans-serif;font-style:normal}
+.shopcard .pk-top b{color:var(--c)}.shopcard .pk-top em s{color:var(--muted)}
+.rew .rew-txt{font-size:18px;color:#B07CFF;display:block;text-align:center}
 #skKit.kauto::after{content:"A";position:absolute;right:-3px;top:-3px;width:16px;height:16px;border-radius:50%;background:#3FA35A;color:#fff;font:10px/16px 'Russo One',sans-serif;text-align:center}
 .bag-h{display:flex;align-items:baseline;gap:6px}.bag-h small{font-weight:400;color:var(--muted);font-size:11px;text-transform:none}.bag-h span{margin-left:auto;font-size:12px;color:var(--muted)}
 .item-pop .detail{margin:0}
@@ -1372,7 +1378,7 @@ for(const p of PASSIVES)
   ITEMS["bp_" + p.id] = {name:"Книга: " + p.name, type:"book", pas:p.id, cls:p.cls, sell:0, price:0, nosell:true, desc:"Книга пассивного умения «" + p.name + "» · " + (p.cls ? "класс " + CLASSES[p.cls].name : "общая")};
 const BOOK_IDS = Object.keys(ITEMS).filter(k => ITEMS[k].type === "book");
 
-const ptsTotal = () => Math.max(0, S.level - 1);
+const ptsTotal = () => Math.max(0, S.level - 1) + (S.ptsBonus || 0);   // + очки навыка из паков магазина
 const ptsFree = () => ptsTotal() - S.ptsUp - S.ptsSk;
 function pasLv(id){ const p = PASSIVES.find(x => x.id === id); if(!p || (p.cls && p.cls !== S.cls)) return 0; return S.pas[id] || 0; }
 const skillLv = id => Math.max(1, S.skl[id] || 1);
@@ -6555,24 +6561,83 @@ function openVip(){
 }
 
 // ===================== МАГАЗИН GRAM =====================
+// Три вкладки как в Liberty: «Паки», «Допы» (снаряжение) и «Усиление». До конца сезона «Паки» и «Допы» со скидкой 30%.
+const SHOP_SALE = 0.7;
+const SP = (id, name, base, color, rew, tab) => ({id, name, base, color, rew, tab: tab || "packs"});
+const POTS = n => [{id:"pot_hp", n}, {id:"pot_atk", n}, {id:"pot_xp", n}];
 const PACKS = [
-  {id:"season", name:"Сезонный билет", price:10.5, once:"season", rew:[], desc:"Открывает премиум-награды текущего сезона"},
-  {id:"books", name:"Книги и оружие", price:5, rew:[{id:"bookcls", n:4}, {id:"wcls", t:2, n:1, g:2}], desc:"4 книги твоего класса и синее Стальное оружие твоего класса"},
-  {id:"spheres", name:"Сферы и лом", price:1, rew:[{id:"scrap", n:5000}, {id:"sph_cu", n:3}, {id:"kit_l", n:5}], desc:"Запас на заточку и ремонт"},
-  {id:"cores", name:"Энергоядра", price:2, rew:[{id:"cores", n:30}, {id:"sph_ti", n:1}], desc:"30 ядер и титановая сфера"},
-  {id:"legend", name:"Легендарный ящик", price:20, rew:[{id:"wcls", t:3, n:1, g:3}], desc:"Золотое Титановое оружие твоего класса"}
+  {id:"season", name:"Сезонный билет", base:10.5, price:10.5, once:"season", tab:"packs", color:"#F2C14B", rew:[], desc:"Открывает премиум-награды текущего сезона"},
+  SP("p_start", "Стартовый", 1, "#C8D0D8", [{id:"scrap", n:10000}, ...POTS(2), {id:"kit_s", n:2}, {id:"kit_l", n:2}]),
+  SP("p_base", "Базовый", 5, "#7BD58A", [{id:"scrap", n:25000}, ...POTS(10), {id:"kit_l", n:10}, {id:"gset", t:2, g:1, e:0}, {id:"wcls", t:2, n:1, g:1}, {id:"bookcls", n:1}]),
+  SP("p_std", "Стандарт", 20, "#7BD58A", [{id:"scrap", n:70000}, ...POTS(20), {id:"kit_l", n:20}, {id:"gset", t:4, g:1, e:5}, {id:"wcls", t:4, n:1, g:1, e:5}, {id:"pts", n:1}, {id:"cores", n:50}, {id:"bookcls", n:5}]),
+  SP("p_elite", "Элитный", 100, "#5FA8F2", [{id:"scrap", n:500000}, ...POTS(50), {id:"kit_l", n:50}, {id:"gset", t:6, g:2, e:3}, {id:"wcls", t:6, n:1, g:2, e:3}, {id:"pts", n:5}, {id:"cores", n:400}, {id:"bookcls", n:16}, {id:"sph_ti", n:5}]),
+  SP("p_legend", "Легендарный", 180, "#E0463A", [{id:"scrap", n:1000000}, ...POTS(100), {id:"kit_l", n:100}, {id:"gset", t:8, g:2, e:8}, {id:"wcls", t:8, n:1, g:2, e:8}, {id:"pts", n:10}, {id:"cores", n:1000}, {id:"bookcls", n:48}, {id:"sph_ti", n:15}]),
+  SP("p_epic", "Эпический", 600, "#B07CFF", [{id:"scrap", n:3000000}, ...POTS(200), {id:"kit_l", n:200}, {id:"gset", t:10, g:3, e:8}, {id:"wcls", t:10, n:1, g:3, e:8}, {id:"pts", n:20}, {id:"cores", n:2000}, {id:"bookcls", n:120}, {id:"sph_ti", n:30}, {id:"sph_cu", n:100}]),
+  SP("p_cores", "700 ядер", 10, "#7BD58A", [{id:"cores", n:700}]),
+  SP("d_start", "Стартовый", 30, "#C8D0D8", [{id:"gset", t:3, g:2, e:3}, {id:"wcls", t:3, n:1, g:2, e:3}], "dops"),
+  SP("d_base", "Базовый", 65, "#7BD58A", [{id:"gset", t:5, g:2, e:5}, {id:"wcls", t:5, n:1, g:2, e:5}], "dops"),
+  SP("d_adv", "Продвинутый", 220, "#5FA8F2", [{id:"gset", t:7, g:3, e:5}, {id:"wcls", t:7, n:1, g:3, e:5}], "dops"),
+  SP("d_sup", "Превосходный", 370, "#F2C14B", [{id:"gset", t:8, g:3, e:7}, {id:"wcls", t:8, n:1, g:3, e:7}], "dops"),
+  SP("d_top", "Топовый", 550, "#E0463A", [{id:"gset", t:9, g:3, e:9}, {id:"wcls", t:9, n:1, g:3, e:9}], "dops"),
+  SP("d_admin", "Админский", 700, "#B07CFF", [{id:"gset", t:10, g:3, e:10}, {id:"wcls", t:10, n:1, g:3, e:10}], "dops"),
+  SP("u1", "Набор I", 25, "#7BD58A", [{id:"sph_ti", n:10}, {id:"sph_cu", n:50}, {id:"pot_xp", n:10}], "boost"),
+  SP("u2", "Набор II", 40, "#7BD58A", [{id:"sph_ti", n:20}, {id:"sph_cu", n:100}, {id:"pot_xp", n:20}], "boost"),
+  SP("u3", "Набор III", 80, "#7BD58A", [{id:"sph_ti", n:45}, {id:"sph_cu", n:200}, {id:"pot_xp", n:40}], "boost")
 ];
+// цена со скидкой (сервер считает так же — см. gram.py)
+for(const pk of PACKS) if(pk.price == null) pk.price = pk.tab === "boost" ? pk.base : Math.round(pk.base*SHOP_SALE*100)/100;
+const saleEnd = () => { const e = new Date(); e.setMonth(e.getMonth() + 1, 1); e.setHours(0, 0, 0, 0); return e.getTime(); };
+// набор брони тира t: шлем, корпус, ходовая, модуль, реактор
+const gsetIds = t => ["head", "armor", "legs", "module", "core"].map(sl => GEAR_IDS.find(id => ITEMS[id].slot === sl && ITEMS[id].tier === t)).filter(Boolean);
+function addGear(id, g, e){
+  const x = {id, n:1, g:g || 0}; if(e) x.e = e;
+  if(S.inv.length < INV_MAX) S.inv.push(x); else if(S.store.length < STORE_MAX) S.store.push(x); else return false;
+  return true;
+}
+function giveShop(list){
+  const rest = [];
+  for(const r of list){
+    if(r.id === "gset") for(const id of gsetIds(r.t)) addGear(id, r.g, r.e);
+    else if(r.id === "wcls" && r.e) addGear(weaponId(S.cls, r.t), r.g, r.e);
+    else if(r.id === "pts") S.ptsBonus = (S.ptsBonus || 0) + r.n;
+    else rest.push(r);
+  }
+  giveReward(rest);
+}
+function shopCells(list){
+  return `<div class="rews">${list.map(r => {
+    if(r.id === "gset") return gsetIds(r.t).map(id => `<div class="rew" title="${ITEMS[id].name}">${icon(id, r.g)}<b>${r.e ? "+" + r.e : "×1"}</b></div>`).join("");
+    if(r.id === "pts") return `<div class="rew" title="Очки навыка"><span class="rew-txt">☆</span><b>+${r.n} ОН</b></div>`;
+    if(r.id === "wcls") return `<div class="rew" title="Оружие класса">${icon(rwId(r), r.g)}<b>${r.e ? "+" + r.e : "×1"}</b></div>`;
+    if(r.id === "bookcls") return `<div class="rew" title="Книги">${icon("bk_" + (clsOf(S.cls) ? clsOf(S.cls).skills[0].id : "shock"))}<b>${r.n} кн.</b></div>`;
+    const n = r.n >= 1000 ? (r.n >= 1e6 ? r.n/1e6 + "M" : r.n/1000 + "k") : "×" + r.n;
+    return `<div class="rew" title="${rewName(r.id)}">${rewIcon(r.id, r.g)}<b>${n}</b></div>`;
+  }).join("")}</div>`;
+}
 S.bought = S.bought || {};
+let shopTab = "packs", shopTimer = null;
 function openShop(){
-  openSheet("Магазин GRAM", "Паки за GRAM · покупки повышают VIP", () => {
-    const bal = gramBal();
-    body().innerHTML = `<div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
-      ${PACKS.map(pk => { const done = pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")], low = bal < pk.price;
-        return `<section class="packcard"><div class="pk-top"><div><b>${pk.name}</b><em>${gramF(pk.price)} GRAM</em></div>
-          <button class="act ${done || low ? "alt" : ""}" type="button" data-pack="${pk.id}" ${done || low ? "disabled" : ""}>${done ? "Куплено" : low ? "Мало" : "Купить"}</button></div>
-          <small>${pk.desc}</small>${pk.rew.length ? rewCells(pk.rew) : `<div class="rews"><div class="rew wide">🎫<b>Сезонный билет</b></div></div>`}</section>`; }).join("")}
-      ${G.on ? netBadge() : `<p class="hint">Демо-режим кошелька: GRAM здесь игровые, реальные деньги не списываются.</p>`}`;
-  });
+  openSheet("Магазин GRAM", "Покупки повышают VIP", renderShop);
+  clearInterval(shopTimer);
+  shopTimer = setInterval(() => { const el = body().querySelector("#saleCd"); if(!el){ clearInterval(shopTimer); return; } el.textContent = saleLeft(); }, 1000);
+}
+function saleLeft(){
+  const ms = Math.max(0, saleEnd() - Date.now()), d = Math.floor(ms/864e5), h = Math.floor(ms%864e5/36e5), m = Math.floor(ms%36e5/6e4), sc = Math.floor(ms%6e4/1e3);
+  return (d ? d + " д " : "") + [h, m, sc].map(v => String(v).padStart(2, "0")).join(":");
+}
+function renderShop(){
+  const bal = gramBal();
+  const tabs = [["packs", "Паки"], ["dops", "Допы"], ["boost", "Усиление"]];
+  const list = PACKS.filter(pk => pk.tab === shopTab);
+  body().innerHTML = `<div class="seg shop-tabs">${tabs.map(([k, n]) => `<button type="button" data-shtab="${k}" aria-pressed="${shopTab === k}">${n}</button>`).join("")}</div>
+    <div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
+    ${shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
+    ${list.map(pk => { const done = pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")], low = bal < pk.price;
+      return `<section class="packcard shopcard" style="--c:${pk.color}"><div class="pk-top"><div><b>${pk.name}</b>
+        <em>${pk.base !== pk.price ? `<s>${gramF(pk.base)}</s> ` : ""}${gramF(pk.price)} GRAM${pk.base !== pk.price ? ` <span class="sale-tag">−30%</span>` : ""}</em></div>
+        <button class="act ${done || low ? "alt" : ""}" type="button" data-pack="${pk.id}" ${done || low ? "disabled" : ""}>${done ? "Куплено" : low ? "Мало" : "Купить"}</button></div>
+        ${pk.desc ? `<small>${pk.desc}</small>` : ""}${pk.rew.length ? shopCells(pk.rew) : `<div class="rews"><div class="rew wide">🎫<b>Сезонный билет</b></div></div>`}</section>`; }).join("")}
+    ${G.on ? netBadge() : `<p class="hint">Демо-режим кошелька: GRAM здесь игровые, реальные деньги не списываются.</p>`}`;
 }
 
 // ===================== СЕЗОН =====================
@@ -6918,7 +6983,7 @@ async function mkCancel(id){
 function finishPack(pk, before){
   if(pk.once) S.bought[pk.once + (pk.once === "season" ? seasonId() : "")] = true;
   const minted = pk._minted || []; pk._minted = null;
-  giveReward(pk.rew.filter(r => !minted.some(m => m.id === r.id)));      // вещи с сервера выдаются ниже, с номерами
+  giveShop(pk.rew.filter(r => !minted.some(m => m.id === r.id)));        // вещи с сервера выдаются ниже, с номерами
   for(const m of minted){
     if(m.uid) addItem(S.inv, m.id, 1, INV_MAX, m.g, m.e, m.uid) || addItem(S.store, m.id, 1, STORE_MAX, m.g, m.e, m.uid);
     else { addItem(S.inv, m.id, m.n, INV_MAX) || addItem(S.store, m.id, m.n, STORE_MAX); if(m.reg && typeof regAddSph === "function") regAddSph(m.id, m.n); }
@@ -6948,6 +7013,7 @@ $("shBody").addEventListener("click", e => {
     Wl.gram = +((Wl.gram || 0) - pk.price).toFixed(4); saveW(); S.vipSpent = +(S.vipSpent + pk.price).toFixed(4);
     finishPack(pk, before);
   }
+  else if(d.shtab){ shopTab = d.shtab; renderShop(); }
   else if(d.shop === "topup"){ if(G.on) depositSheet(); else { closeSheet(); showTab("profile"); } }
   else if(d.shop === "open") openShop();
   else if(d.ss){ const [key, lv] = d.ss.split(":"), s = seasonState(), i = +lv; if(!s[key].includes(i) && Math.floor(s.xp/SEASON_XP) >= i){ s[key].push(i); giveReward(seasonReward(i, key === "prem")); toast("Награда сезона получена"); Sfx.play("pick"); openSeason(); } }
