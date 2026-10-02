@@ -231,6 +231,14 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.spt-head{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px}.spt-head>div{border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--panel-2)}
+.spt-head small{display:block;color:var(--muted);font-size:10px}.spt-head b{font:16px 'Russo One',sans-serif;color:#F2C14B}
+.spt-tabs{margin-bottom:8px}
+.spt-sec{display:flex;align-items:baseline;gap:8px;margin:12px 2px 6px}.spt-sec small{color:var(--muted);font-size:11px}
+.spt-task{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px;background:var(--panel-2)}
+.spt-task.done{border-color:#3FA35A}.spt-task.soon{opacity:.5}
+.spt-row{display:flex;justify-content:space-between;gap:8px;font-size:13px}.spt-row em{font:13px 'Russo One',sans-serif;font-style:normal;color:#F2C14B;white-space:nowrap}
+.spt-task small{color:var(--muted);font-size:11px}.spt-pr{display:flex;align-items:center;gap:8px;margin-top:5px}.spt-pr .vbar{flex:1;margin:0}
 .shop-tabs{margin-bottom:8px}
 .sale-bar{display:flex;align-items:center;gap:6px;border:1px solid rgba(224,70,58,.45);background:rgba(120,24,24,.25);border-radius:10px;padding:7px 10px;font-size:12px;margin:6px 0 8px}
 .sale-bar b{margin-left:auto;font-family:'Russo One',sans-serif}
@@ -1434,6 +1442,7 @@ function usePot(id){
   const it = ITEMS[id]; if(!it || it.type !== "pot" || !have(id)) return false;
   if(potLeft(it.pot) > 0){ toast("Зелье уже действует"); return false; }
   removeItem(S.inv, id, 1); S.pots = S.pots || {}; S.pots[it.pot] = Date.now() + it.dur*1000;
+  if(it.pot === "atk" && typeof NET !== "undefined" && NET.api) NET.api("/api/season/event", {kind:"pot_atk"}).catch(() => {});   // задание сезона
   toast("🧪 " + it.name + ": " + it.desc); Sfx.play("pick"); save(); return true;
 }
 // «Авто»: как только действие закончилось — пьём следующее
@@ -7013,6 +7022,7 @@ $("shBody").addEventListener("click", e => {
     Wl.gram = +((Wl.gram || 0) - pk.price).toFixed(4); saveW(); S.vipSpent = +(S.vipSpent + pk.price).toFixed(4);
     finishPack(pk, before);
   }
+  else if(d.spt){ SPT.tab = d.spt; renderSeason(); }
   else if(d.shtab){ shopTab = d.shtab; renderShop(); }
   else if(d.shop === "topup"){ if(G.on) depositSheet(); else { closeSheet(); showTab("profile"); } }
   else if(d.shop === "open") openShop();
@@ -7812,6 +7822,48 @@ function drawTownBot(x, y, t, role){
     rocks.push({x:800, y:780, r:52, deco:true});
     npcs = TWN_NPC.map(n => ({...n}));
     return {x:800, y:930};
+  };
+}
+// ===================== СЕЗОН: ЗАДАНИЯ И ОЧКИ СЕЗОНА =====================
+// Очки сезона считает сервер; здесь — вкладка «Задания» в окне сезона и таймер до конца сезона.
+const SPT = {st:null, tab:"tasks", t:null};
+let seasonPassRender = null;
+{ const os = openSheet; openSheet = (t, sub, fn) => { seasonPassRender = fn; }; try{ openSeason(); } finally { openSheet = os; } }
+function sptEnd(){ if(SPT.st) return SPT.st.ends;
+  const n = new Date(Date.now() + 3*3600e3), y = n.getUTCFullYear(), m = n.getUTCMonth();
+  let end = Date.UTC(y, m, 1, 15); if(Date.now() >= end) end = Date.UTC(m === 11 ? y + 1 : y, (m + 1) % 12, 1, 15); return end; }
+function sptLeft(){ const ms = Math.max(0, sptEnd() - Date.now()), d = Math.floor(ms/864e5), h = Math.floor(ms%864e5/36e5), mi = Math.floor(ms%36e5/6e4), s = Math.floor(ms%6e4/1e3);
+  return `${d} д ${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
+async function sptLoad(){ if(typeof NET === "undefined" || !NET.api) return; try{ const r = await NET.api("/api/season/state", {}); if(r && r.ok){ SPT.st = r; if(sheetRender === renderSeason) renderSeason(); } }catch(e){} }
+const sptNum = v => v >= 1000 ? Math.floor(v).toLocaleString("ru-RU") : (Math.round(v*100)/100).toLocaleString("ru-RU");
+function renderSeason(){
+  const head = `<div class="spt-head"><div><small>Очки сезона</small><b>${SPT.st ? SPT.st.pts.toLocaleString("ru-RU") : "—"}</b></div>
+      <div><small>До конца сезона · 1-е число, 18:00 МСК</small><b id="sptCd">${sptLeft()}</b></div></div>
+    <div class="seg spt-tabs">${[["tasks", "Задания"], ["pass", "Награды"]].map(([k, n]) => `<button type="button" data-spt="${k}" aria-pressed="${SPT.tab === k}">${n}</button>`).join("")}</div>`;
+  if(SPT.tab === "pass" && seasonPassRender){ seasonPassRender(); body().insertAdjacentHTML("afterbegin", head); return; }
+  if(!SPT.st){ body().innerHTML = head + `<p class="hint">${NET && NET.on ? "Загружаем задания…" : "Задания сезона работают в Telegram — очки начисляет сервер"}</p>`; sptLoad(); return; }
+  const sec = {perm:["📈 Постоянно", ""], day:["☀️ Ежедневные", "сброс в 00:00 МСК"], week:["📅 Еженедельные", "сброс в понедельник"]};
+  let h = head + `<p class="hint">Очки начисляются сами, как только задание выполнено — кнопка не нужна.</p>`;
+  for(const sc of ["perm", "day", "week"]){
+    h += `<div class="spt-sec"><b>${sec[sc][0]}</b><small>${sec[sc][1]}</small></div>`;
+    for(const t of SPT.st.tasks.filter(x => x.scope === sc)){
+      const pr = Math.min(1, t.prog/t.need);
+      h += `<section class="spt-task ${t.done ? "done" : ""} ${t.soon ? "soon" : ""}"><div class="spt-row"><span>${t.title}</span><em>+${t.pts}</em></div>
+        ${sc === "perm" ? `<small>Куплено: ${sptNum(t.prog)} GRAM</small>` : t.soon ? `<small>Событие скоро откроется</small>`
+          : `<div class="spt-pr"><div class="vbar"><i style="width:${pr*100}%"></i></div><small>${t.done ? "✓ Выполнено" : sptNum(t.prog) + " / " + sptNum(t.need)}</small></div>`}</section>`;
+    }
+  }
+  body().innerHTML = h;
+}
+openSeason = function(){
+  openSheet("Сезон", "Задания, очки и награды сезона", renderSeason); sptLoad();
+  clearInterval(SPT.t); SPT.t = setInterval(() => { const el = body().querySelector("#sptCd"); if(!el){ clearInterval(SPT.t); return; } el.textContent = sptLeft(); }, 1000);
+};
+{
+  const prevSpt = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "spts"){ if(SPT.st) SPT.st.pts = d.pts; toast("🏆 " + (d.text || ("+" + d.gain + " очков сезона"))); if(sheetRender === renderSeason) sptLoad(); return; }
+    prevSpt(d);
   };
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================

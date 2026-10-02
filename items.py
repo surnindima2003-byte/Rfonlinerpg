@@ -398,6 +398,10 @@ async def process_kills(s, uid, me, kills):
             _boss_t[uid], mult = time.time(), BOSS_LOOT
         await pvp.mob_killed(uid, me)
         cap = await progress.add_kill(s, uid, lv, boss)
+        import seasonpts
+        ctr = seasonpts.kill_counter(loc)
+        if ctr:
+            await seasonpts.add(uid, ctr, 1)                # задания сезона: убийства на этажах и в полях
         before = await count_loot_kill(s, uid, 10 if boss else 1)
         lf = loot_factor(before)
         bonus = chipwar.loot_mult(me.get("fac"))

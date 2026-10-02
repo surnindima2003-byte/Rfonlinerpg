@@ -270,3 +270,14 @@ class FactionLock(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     fac: Mapped[str] = mapped_column(String(8))
     ts: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class SeasonPts(Base):
+    """Очки сезона игрока: начисляет только сервер (от них зависят призы рейтинга)."""
+    __tablename__ = "season_pts"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    season: Mapped[str] = mapped_column(String(16), primary_key=True)    # «2026-10» — сезон длится месяц
+    pts: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    data: Mapped[str] = mapped_column(Text, default="{}")              # счётчики заданий дня, недели и постоянных
+    updated: Mapped[int] = mapped_column(Integer, default=0)

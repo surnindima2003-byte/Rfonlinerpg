@@ -34,6 +34,7 @@ import stats
 import special_quests
 import saveguard
 import mobworld
+import seasonpts
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -659,6 +660,9 @@ async def api_market(request):
             await s.commit()
             funnel.mark(uid, "market")
             funnel.mark(lot.seller_id, "market")
+            gram_amt = lot.price / gram.NANO                              # задания сезона: покупки и продажи на маркете
+            await seasonpts.add(uid, "mbuy", gram_amt)
+            await seasonpts.add(lot.seller_id, "msell", gram_amt)
     if op == "buy":
         await push_to_player(lot.seller_id, {"t": "gram", "text": f"Маркет: лот продан, +{gram.g(payout)} GRAM", "refresh": True})
         return web.json_response({"ok": True, "item": item})
@@ -1131,6 +1135,7 @@ async def handle_chat(d, info):
     chat_seq[0] += 1
     m = {"id": f"{uid}-{int(now * 1000)}", "seq": chat_seq[0], "ch": ch, "text": text, "nick": info["nick"], "fac": info["fac"],
          "lvl": info["lvl"], "uid": str(uid), "admin": info["admin"], "mod": bool(info.get("mod")) and not info["admin"], "ts": int(now * 1000)}
+    await seasonpts.add(uid, "chat", 1)                        # задание сезона: сообщения в чат
     if ch == "world":
         chat_history.append(m)
         hub.to_all({"t": "chat", "m": m})
@@ -1575,6 +1580,7 @@ async def start_web(port: int):
     pvp.setup(app)
     stats.setup(app)
     special_quests.setup(app, read_auth, push_to_player, grant_dict)
+    seasonpts.setup(app, read_auth, push_to_player)
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)
@@ -1584,6 +1590,7 @@ async def start_web(port: int):
     STATE["runner"] = runner
     STATE["tasks"]["world"] = asyncio.create_task(world_loop())
     STATE["tasks"]["cleanup"] = asyncio.create_task(cleanup_loop())
+    STATE["tasks"]["season"] = asyncio.create_task(seasonpts.flush_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await load_mutes()
     await gram.migrate_market_to_gram()
@@ -1618,5 +1625,9 @@ async def stop_web(drain_s=2.0):
     await asyncio.gather(*STATE["tasks"].values(), return_exceptions=True)
     if STATE["runner"]:
         await STATE["runner"].cleanup()
+    try:
+        await seasonpts.flush()                                      # очки сезона не теряются при перезапуске
+    except Exception:
+        log.exception("сезон: сохранение при остановке")
     db_dispose()
     log.warning("Сервер остановлен")
