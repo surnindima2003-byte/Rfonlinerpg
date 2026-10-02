@@ -12,7 +12,7 @@ for name in ("aiohttp", "sqlalchemy", "db", "models", "metrics", "gram", "config
         __import__(name)
     except Exception:
         m = types.ModuleType(name); sys.modules[name] = m
-        m.web = None; m.select = None; m.SessionLocal = None; m.SeasonPts = m.GameSave = m.Meta = None; m.GRAM_USD = 1.55
+        m.web = None; m.select = None; m.SessionLocal = None; m.SeasonPts = m.GameSave = m.Meta = m.GramTx = None; m.GRAM_USD = 1.55
         m.inc = m.gauge = m.observe = lambda *a, **k: None
 
 import seasonpts as sp  # noqa: E402

@@ -29,7 +29,7 @@ ADDR_RE = re.compile(r"^(EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$|^-?\d:[0-9a-fA-F]{64}$")
 SHOP_SALE = 0.7
 _BASE = {"p_start": 1, "p_base": 5, "p_std": 20, "p_elite": 100, "p_legend": 180, "p_epic": 600, "p_cores": 10,
          "d_start": 30, "d_base": 65, "d_adv": 220, "d_sup": 370, "d_top": 550, "d_admin": 700}
-PACK_PRICES = {"season": 10.5, "u1": 25, "u2": 40, "u3": 80, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
+PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots": 1, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
 
 
 def g(nano):
@@ -248,6 +248,10 @@ async def api_gram(request):
             if price is None:
                 return web.json_response({"ok": False, "error": "Нет такого пака"})
             nano = int(round(price * NANO))
+            if pack == "season":
+                import seasonpts
+                if await seasonpts.has_ticket(uid):
+                    return web.json_response({"ok": False, "error": "Билет этого сезона уже куплен"})
             if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
             await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
@@ -261,7 +265,10 @@ async def api_gram(request):
             saveguard.note_purchase(uid)                                   # большой прирост в следующем сохранении — это покупка
             await s.commit()
             import vip
-            vip.forget(uid)                                                # новый VIP действует на дроп сразу
+            vip.forget(uid)
+            if pack == "season":
+                import seasonpts
+                seasonpts.forget_ticket(uid)                                # билет сразу даёт +60% к дропу                                                # новый VIP действует на дроп сразу
             for who, bonus in notes:
                 await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "items": minted})

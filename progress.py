@@ -10,7 +10,7 @@ from sqlalchemy import select
 from models import ServerProg, GameSave
 
 LEVEL_CAP = 50
-XP_SLACK = 8               # VIP 15 даёт +230% опыта, плюс гильдия и пати
+XP_SLACK = 12              # VIP 15 даёт +230% опыта, плюс гильдия и пати
 _cap = {}                       # tg_id -> допустимый уровень (кэш для живого мира)
 
 

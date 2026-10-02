@@ -1780,7 +1780,8 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
 function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
-  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)));
+  const tk = typeof ticketActive === "function" && ticketActive(), sroom = e.room && e.room.seasonal;
+  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (sroom ? 1.5 : 1));
   if(typeof seasonAddXp === "function") seasonAddXp(3 + Math.floor((k.lvl || 1)/2));
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
@@ -1906,6 +1907,7 @@ function update(dt){
     if(dist < 110 && !d.stuck){ d.x += (p.x-d.x)*dt*6; d.y += (p.y-d.y)*dt*6; }
     if(dist > 130) d.stuck = false;
     if(dist < 24 && !d.stuck){
+      if(d.kind === "cores" && typeof ticketActive === "function" && ticketActive() && !d.x2){ d.amt *= 2; d.x2 = true; }   // билет сезона: ×2 ядер
       if(d.kind === "scrap" || d.kind === "cores"){ Sfx.play("pick"); S[d.kind] += d.amt; addText(p.x, p.y-40, "+" + d.amt + (d.kind === "scrap" ? " лома" : " ядро"), d.kind === "scrap" ? "#C9D1D8" : "#5FD4E8"); d.got = true; }
       else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); addText(p.x, p.y-40, ITEMS[d.kind].name, d.g !== undefined ? gradeColor(d.g) : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
       else { d.stuck = true; if(fullWarnT <= 0){ toast("Сумка заполнена. Освободи место на складе или продай"); fullWarnT = 4; } }
@@ -6246,7 +6248,9 @@ function mobDrops(type, loc){
 }
 function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
-  const vb = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
+  const vb0 = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
+  // билет сезона: +60% к дропу; сезонная комната: ещё +50%
+  const vb = {...vb0, drop:vb0.drop + (typeof ticketActive === "function" && ticketActive() ? 0.6 : 0) + (e.room && e.room.seasonal ? 0.5 : 0)};
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   const srv = typeof regOnline === "function" && regOnline();
   if(srv) regKill(e);                                   // ценный лут решает сервер
@@ -6283,7 +6287,7 @@ function dgLayout(key){
         const bc = corrY + side*(d + big.h/2);
         for(const sx of [-1, 1]){
           const x0 = sx < 0 ? cx - 20 - big.w : cx + 20;
-          const rb = {x:x0, y:bc - big.h/2, w:big.w, h:big.h, room:true, lv, n:12, cx:x0 + big.w/2, cy:bc, kind:"big"};
+          const rb = {x:x0, y:bc - big.h/2, w:big.w, h:big.h, room:true, lv, n:12, cx:x0 + big.w/2, cy:bc, kind:"big", seasonal:c === DG.cycles - 1};
           dgRects.push(rb); dgRooms.push(rb);
           // дверной проём: широкий проход между коридором и комнатой, чтобы робот свободно проходил
           dgRects.push({x:sx < 0 ? cx - 80 : cx - 38, y:bc - 45, w:118, h:90, corr:true, door:true});
@@ -6589,7 +6593,7 @@ const SHOP_SALE = 0.7;
 const SP = (id, name, base, color, rew, tab) => ({id, name, base, color, rew, tab: tab || "packs"});
 const POTS = n => [{id:"pot_hp", n}, {id:"pot_atk", n}, {id:"pot_xp", n}];
 const PACKS = [
-  {id:"season", name:"Сезонный билет", base:10.5, price:10.5, once:"season", tab:"packs", color:"#F2C14B", rew:[], desc:"Открывает премиум-награды текущего сезона"},
+  {id:"season", name:"Билет сезона", base:15, price:15, once:"season", tab:"packs", color:"#F2C14B", rew:[], desc:"×2 опыт · +60% к дропу · ×2 ядер · сезонные комнаты · премиум-награды сезона"},
   SP("p_start", "Стартовый", 1, "#C8D0D8", [{id:"scrap", n:10000}, ...POTS(2), {id:"kit_s", n:2}, {id:"kit_l", n:2}]),
   SP("p_base", "Базовый", 5, "#7BD58A", [{id:"scrap", n:25000}, ...POTS(10), {id:"kit_l", n:10}, {id:"gset", t:2, g:1, e:0}, {id:"wcls", t:2, n:1, g:1}, {id:"bookcls", n:1}]),
   SP("p_std", "Стандарт", 20, "#7BD58A", [{id:"scrap", n:70000}, ...POTS(20), {id:"kit_l", n:20}, {id:"gset", t:4, g:1, e:5}, {id:"wcls", t:4, n:1, g:1, e:5}, {id:"pts", n:1}, {id:"cores", n:50}, {id:"bookcls", n:5}]),
@@ -6603,6 +6607,8 @@ const PACKS = [
   SP("d_sup", "Превосходный", 370, "#F2C14B", [{id:"gset", t:8, g:3, e:7}, {id:"wcls", t:8, n:1, g:3, e:7}], "dops"),
   SP("d_top", "Топовый", 550, "#E0463A", [{id:"gset", t:9, g:3, e:9}, {id:"wcls", t:9, n:1, g:3, e:9}], "dops"),
   SP("d_admin", "Админский", 700, "#B07CFF", [{id:"gset", t:10, g:3, e:10}, {id:"wcls", t:10, n:1, g:3, e:10}], "dops"),
+  SP("x_books", "Книги и оружие", 5, "#5FA8F2", [{id:"bookcls", n:10}, {id:"wcls", t:5, n:1, g:2}], "boost"),
+  SP("x_pots", "Зелья и лом", 1, "#F2C14B", [...POTS(10), {id:"kit_l", n:10}, {id:"scrap", n:20000}], "boost"),
   SP("u1", "Набор I", 25, "#7BD58A", [{id:"sph_ti", n:10}, {id:"sph_cu", n:50}, {id:"pot_xp", n:10}], "boost"),
   SP("u2", "Набор II", 40, "#7BD58A", [{id:"sph_ti", n:20}, {id:"sph_cu", n:100}, {id:"pot_xp", n:20}], "boost"),
   SP("u3", "Набор III", 80, "#7BD58A", [{id:"sph_ti", n:45}, {id:"sph_cu", n:200}, {id:"pot_xp", n:40}], "boost")
@@ -7012,6 +7018,7 @@ function finishPack(pk, before){
     else { addItem(S.inv, m.id, m.n, INV_MAX) || addItem(S.store, m.id, m.n, STORE_MAX); if(m.reg && typeof regAddSph === "function") regAddSph(m.id, m.n); }
   }
   save(); toast("Куплено: " + pk.name); Sfx.play("level");
+  if(pk.id === "season" && typeof sptLoad === "function") sptLoad();
   if(vipLevel() > before) toast("Новый уровень VIP: " + vipLevel());
   openShop();
 }
@@ -7843,6 +7850,7 @@ function drawTownBot(x, y, t, role){
 // ===================== СЕЗОН: ЗАДАНИЯ И ОЧКИ СЕЗОНА =====================
 // Очки сезона считает сервер; здесь — вкладка «Задания» в окне сезона и таймер до конца сезона.
 const SPT = {st:null, tab:"tasks", t:null};
+const ticketActive = () => !!((SPT.st && SPT.st.ticket) || (S.bought && S.bought["season" + seasonId()]));
 let seasonPassRender = null;
 { const os = openSheet; openSheet = (t, sub, fn) => { seasonPassRender = fn; }; try{ openSeason(); } finally { openSheet = os; } }
 function sptEnd(){ if(SPT.st) return SPT.st.ends;
@@ -7923,6 +7931,35 @@ async function sptClaim(){
 async function sptApprove(){
   try{ const r = await NET.api("/api/season/approve", {}); toast(r && r.ok ? "Выплаты подтверждены: " + r.count + " призёров" : "Не удалось подтвердить"); }catch(e){ toast("Нет связи с сервером"); }
   SPT.top = null; sptTopLoad();
+}
+// ---- сезонные комнаты: дальние большие комнаты крыльев подземелья, вход только с билетом сезона ----
+{
+  const _gg = guardGate;
+  let sroomWarn = 0;
+  guardGate = function(){
+    _gg();
+    if(!(LOCS[locKey] && LOCS[locKey].dungeon) || ticketActive()){ p.sgx = p.x; p.sgy = p.y; return; }
+    const r = dgRooms.find(r => r.seasonal && p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h);
+    if(r){
+      if(p.sgx != null){ p.x = p.sgx; p.y = p.sgy; }
+      if(now > sroomWarn){ sroomWarn = now + 4; toast("★ Сезонная комната: вход с билетом сезона (Меню → Магазин)"); }
+    } else { p.sgx = p.x; p.sgy = p.y; }
+  };
+  const _dd = drawDungeon;
+  drawDungeon = function(cx, cy, t){
+    _dd(cx, cy, t);
+    const open = ticketActive();
+    for(const r of dgRooms){
+      if(!r.seasonal || r.x > cx + vw || r.x + r.w < cx || r.y > cy + vh || r.y + r.h < cy) continue;
+      ctx.save();
+      ctx.fillStyle = open ? "rgba(242,193,75,.06)" : "rgba(242,193,75,.12)"; ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = `rgba(242,193,75,${.55 + Math.sin(t*2)*.2})`; ctx.lineWidth = 3; ctx.setLineDash([14, 8]); ctx.lineDashOffset = -t*20;
+      ctx.strokeRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8); ctx.setLineDash([]);
+      ctx.font = "12px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#F2C14B";
+      ctx.fillText(open ? "★ Сезонная комната · ×1,5 опыта, +50% дропа" : "★ Сезонная комната · нужен билет сезона", r.x + r.w/2, r.y + 22);
+      ctx.restore();
+    }
+  };
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.

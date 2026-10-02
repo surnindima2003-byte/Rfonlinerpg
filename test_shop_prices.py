@@ -15,7 +15,7 @@ class ShopPricesTest(unittest.TestCase):
         for pid, base, tab in re.findall(r'SP\("(\w+)", "[^"]+", ([\d.]+), "[^"]+", \[.*?\](?:, "(\w+)")?\)', blk):
             b = float(base)
             client[pid] = b if tab == "boost" else round(b * sale, 2)
-        client["season"] = 10.5
+        client["season"] = 15
         src = (ROOT / "gram.py").read_text(encoding="utf-8")
         ns = {}
         exec(src[src.index("SHOP_SALE ="):src.index("}}", src.index("PACK_PRICES = {")) + 2], ns)

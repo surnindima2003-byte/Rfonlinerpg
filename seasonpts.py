@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 import metrics
 from db import SessionLocal
-from models import SeasonPts
+from models import GramTx, SeasonPts
 
 log = logging.getLogger("season")
 MSK = timezone(timedelta(hours=3))
@@ -168,6 +168,34 @@ async def flush_loop():
             _st.pop(uid, None)
 
 
+# ---------- билет сезона ----------
+_ticket = {}                                    # uid -> (сезон, есть билет, когда проверяли)
+
+
+def season_start(key):
+    y, m = map(int, key.split("-"))
+    y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return season_end(f"{y}-{m:02d}")
+
+
+async def has_ticket(uid):
+    """Куплен ли билет текущего сезона (по журналу покупок GRAM; кэш на минуту)."""
+    key = season_key()
+    hit = _ticket.get(uid)
+    if hit and hit[0] == key and time.time() - hit[2] < 60:
+        return hit[1]
+    async with SessionLocal() as s:
+        row = (await s.execute(select(GramTx.id).where(GramTx.tg_id == uid, GramTx.kind == "shop",
+                                                       GramTx.ref.like(f"shop:{uid}:season:%"),
+                                                       GramTx.ts >= season_start(key)).limit(1))).first()
+    _ticket[uid] = (key, bool(row), time.time())
+    return bool(row)
+
+
+def forget_ticket(uid):
+    _ticket.pop(uid, None)
+
+
 def state_view(st):
     tasks = []
     for tid, scope, title, need, pts, ctr in TASKS:
@@ -186,7 +214,9 @@ def setup(app, read_auth, push_to_player):
 
     async def api_state(request):
         body, user = await read_auth(request)
-        return web.json_response(state_view(await _load(user["id"])))
+        v = state_view(await _load(user["id"]))
+        v["ticket"] = await has_ticket(user["id"])
+        return web.json_response(v)
 
     async def api_event(request):
         body, user = await read_auth(request)
