@@ -1198,6 +1198,13 @@ async def handle_pvp(d, info):
     hit = {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": crit, "skill": skill}
     if d.get("hid"):
         hit["hid"] = str(d.get("hid"))[:24]
+    # баланс 4 сезона: замедление (Страж/Жнец), оглушение (Жнец), снятие защиты (ЭМИ, Залп)
+    if d.get("sl") and info.get("cls") in ("guard", "reaper") and not skill:
+        hit["sl"] = 1
+    if d.get("st") and info.get("cls") == "reaper" and not skill:
+        hit["st"] = 1
+    if d.get("br") and skill and info.get("cls") in ("techno", "sniper"):
+        hit["br"] = 1
     hub.to_uid(to, hit)
     broadcast_pvp_fx(info, tgt, dmg, crit, skill)
     metrics.inc("pvp.hit")

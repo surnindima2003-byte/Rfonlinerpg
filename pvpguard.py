@@ -94,7 +94,10 @@ def on_report(info):
         st["hp"] += grow
         if rep_hp - st["hp"] > 1:
             metrics.inc("pvpguard.hp_clamped")
-    st["cp"] = min(st["cp"], rep_cp)            # CP в бою не восстанавливаются
+    # CP в бою растут только от лечения: в 10 раз больше прироста прочности (баланс 4 сезона)
+    healed = max(0.0, st["hp"] - st.get("hp_prev", st["hp"]))
+    st["cp"] = min(rep_cp, st["cp"] + healed * 10) if rep_cp > st["cp"] else rep_cp
+    st["hp_prev"] = st["hp"]
     st["hp"] = min(st["hp"], mhp)
     info["hp"], info["cp"] = int(st["hp"]), int(st["cp"])
 
