@@ -76,6 +76,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .h2-res{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px}
 .h2-res span{display:flex;align-items:center;gap:5px;background:#131A22;border:1px solid #2A3846;border-radius:8px;padding:2px 6px;font-size:12px;min-width:0}
 .h2-res i{font-style:normal;font-size:12px;flex:none}
+.gram-ic{width:15px;height:15px;display:block}
 .h2-res b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .r-scrap i,.r-scrap b{color:#F2C14B}.r-cores i{color:#E0694A}.r-cores b{color:#7BD58A}.r-gram i{color:#5FC8F2}.r-gram b{color:#BFE8FF}
 .cell,.slot .ic,.li .ic,.cslot{position:relative}
@@ -700,7 +701,7 @@ button.li{width:100%;font:inherit;color:inherit}
 .wsplit b{color:var(--text)}
 
 /* название локации под мини-картой: одна строка, не залезает под «Меню» */
-.loc-name{white-space:nowrap !important;overflow:hidden;text-overflow:ellipsis;width:118px !important;right:4px !important;font-size:10.5px !important;line-height:1.2 !important}
+.loc-name{white-space:normal !important;overflow:hidden;width:96px !important;right:8px !important;font-size:10.5px !important;line-height:1.2 !important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center}
 
 /* ---- реестр вещей и тестовый сервер ---- */
 .regb{display:block;font-size:11px;color:var(--muted);margin-top:3px}
@@ -1036,7 +1037,7 @@ textarea.field{min-height:70px;resize:vertical}
           <div class="bar hp"><i id="hHpBar"></i><span id="hHp">50 / 50</span></div>
           <div class="bar xp"><i id="hXpBar"></i><span id="hXpTxt"></span></div>
         </div>
-        <div class="h2-res"><span class="r-scrap" title="Лом"><i>⚙</i><b id="hScrap">0</b></span><span class="r-cores" title="Энергоядра"><i>◉</i><b id="hCores">0</b></span><span class="r-gram" title="GRAM"><i>◆</i><b id="hGram">0</b></span></div>
+        <div class="h2-res"><span class="r-scrap" title="Лом"><i>⚙</i><b id="hScrap">0</b></span><span class="r-cores" title="Энергоядра"><i>◉</i><b id="hCores">0</b></span><span class="r-gram" title="GRAM"><i><svg class="gram-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5h9.6a3 3 0 0 1 2.5 1.3l2.6 3.9a2 2 0 0 1-.2 2.5l-8.2 9.2a2 2 0 0 1-3 0l-8.2-9.2a2 2 0 0 1-.2-2.5l2.6-3.9a3 3 0 0 1 2.5-1.3z" fill="#2F9CF0"/><path d="M14.4 6.2l.9 2.9 2.9.9-2.9.9-.9 2.9-.9-2.9-2.9-.9 2.9-.9z" fill="#fff"/></svg></i><b id="hGram">0</b></span></div>
       </div>
     </div>
     <div class="side">
