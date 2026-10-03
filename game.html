@@ -1271,8 +1271,9 @@ const ITEMS = {
 // Прокачки нет: руны отличаются видом. Бонус работает, пока вещь надета.
 // src "craft" — собирается в Мастерской (такие же руны бывают и в паках); src "gram" — только из паков магазина GRAM.
 // b: atk/def/hp/spd/rate/xp/scrap — доли (0.04 = +4%), crit — пункты крита, cpow — к силе крита, regen — прочность в секунду.
-// За GRAM на маркете продаются только руны, учтённые сервером (из паков и купленные на маркете). Вставленная руна
-// становится привязанной: вынуть можно, продать за GRAM — нет. Паки рун дублируются в gram.py и items.py (rn_*).
+// За GRAM на маркете продаются руны, учтённые сервером (Мастерская, паки, маркет). Учёт не теряется при вставке:
+// сервер переносит руну в «гнездо» (s:<id>) и обратно при выемке, так что вынутую руну снова можно продать.
+// x.rg — флаги учтённых рун в гнёздах вещи (параллельно x.r). Паки рун дублируются в gram.py и items.py (rn_*).
 const RUNES = {
   r_atk:    {name:"Руна ярости",    src:"craft", lvl:10, col:"#E0694A", gl:"blade",  b:{atk:0.04},           need:{scrap:8000, cores:30, chip:4}},
   r_def:    {name:"Руна брони",     src:"craft", lvl:10, col:"#A7B0B8", gl:"shield", b:{def:0.05},           need:{scrap:8000, cores:30, plate:6}},
@@ -1300,8 +1301,12 @@ function runeTotals(){
 // вещь ушла (продана, вложена, разрушена) — руны из неё возвращаются в сумку или на склад
 function runesBack(x){
   if(!x || !x.r) return;
-  for(const id of x.r) if(id && RUNES[id]){ if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)) toast("Нет места: руна «" + RUNES[id].name + "» потеряна"); }
-  delete x.r;
+  x.r.forEach((id, k) => {
+    if(!id || !RUNES[id]) return;
+    if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)){ toast("Нет места: руна «" + RUNES[id].name + "» потеряна"); return; }
+    if(x.rg && x.rg[k]) runeUnsocketReg(id);          // учтённая руна снова продаётся за GRAM
+  });
+  delete x.r; delete x.rg;
 }
 // ===================== СНАРЯЖЕНИЕ: 10 поколений × 9 видов = 90 вещей, каждая в 4 грейдах =====================
 // Новое поколение каждые 5 уровней. Оружие своё у каждого класса.
@@ -7083,7 +7088,7 @@ function renderShop(){
   const list = PACKS.filter(pk => pk.tab === shopTab);
   body().innerHTML = `<div class="seg shop-tabs">${tabs.map(([k, n]) => `<button type="button" data-shtab="${k}" aria-pressed="${shopTab === k}">${n}</button>`).join("")}</div>
     <div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
-    ${shopTab === "artifacts" ? `<p class="hint">Артефакт даёт постоянный бонус к характеристикам, надет может быть один. Покупка учтена сервером: артефакт можно перепродать на маркете</p>` : shopTab === "runes" ? `<p class="hint">Руны из паков учтены сервером: их можно продать на маркете за GRAM, пока они не вставлены в вещь</p>` : shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
+    ${shopTab === "artifacts" ? `<p class="hint">Артефакт даёт постоянный бонус к характеристикам, надет может быть один. Покупка учтена сервером: артефакт можно перепродать на маркете</p>` : shopTab === "runes" ? `<p class="hint">Руны из паков и Мастерской учтены сервером: их можно продать на маркете за GRAM. Вынутую из вещи руну тоже можно продать</p>` : shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
     ${list.map(pk => { const done = (pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")]) || (pk.drone && droneOwned(pk.drone)), low = bal < pk.price;
       return `<section class="packcard shopcard" style="--c:${pk.color}"><div class="pk-top"><div><b>${pk.name}</b>
         <em>${pk.base !== pk.price ? `<s>${gramF(pk.base)}</s> ` : ""}${gramF(pk.price)} GRAM${pk.base !== pk.price ? ` <span class="sale-tag">−30%</span>` : ""}</em></div>
@@ -10370,13 +10375,20 @@ function runeRow(ref){
   }
   return h;
 }
+// учёт руны возвращается из гнезда; при неудаче руна просто останется непродаваемой
+function runeUnsocketReg(id){
+  if(typeof REG === "undefined" || !REG.on) return;
+  regApi("unsocket", {id}).then(r => { if(r && r.ok){ regAddSph(id, 1); save(); } }).catch(() => {});
+}
 function runeSocketClick(v){
   const [ref, k] = v.split("|"), x = runeItem(ref); if(!x) return;
   const id = (x.r || [])[+k];
   if(id){
-    // вынуть: руна возвращается в сумку (уже привязанной)
+    // вынуть: руна возвращается в сумку; учтённая снова продаётся на маркете
     if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)){ toast("Нет места для руны"); return; }
-    x.r[+k] = null; if(!x.r.some(Boolean)) delete x.r;
+    if(x.rg && x.rg[+k]) runeUnsocketReg(id);
+    x.r[+k] = null; if(x.rg) x.rg[+k] = 0;
+    if(!x.r.some(Boolean)){ delete x.r; delete x.rg; }
     toast("Руна «" + RUNES[id].name + "» вынута"); Sfx.play("ui"); RS.ref = null; save(); return;
   }
   RS.ref = RS.ref === ref && RS.k === +k ? null : ref; RS.k = +k; Sfx.play("ui");
@@ -10387,8 +10399,13 @@ function runeInsert(id){
   x.r = x.r || []; while(x.r.length < RUNE_SLOTS) x.r.push(null);
   if(x.r.includes(id)){ toast("Такая руна уже стоит в этой вещи"); return; }
   let k = RS.k; if(x.r[k]) k = x.r.indexOf(null); if(k < 0) return;
+  // какую руну ставим: если есть неучтённая — её, а учтённые остаются продаваемыми; иначе учтённую — сервер
+  // переносит её учёт в гнездо и вернёт при выемке
+  const total = count(S.inv, id) + count(S.store, id), regFree = typeof REG !== "undefined" && REG.on ? (REG.sph[id] || 0) : 0;
+  const useReg = regFree > 0 && regFree >= total;
   removeItem(S.inv, id, 1); x.r[k] = id;
-  if(typeof regClampSph === "function") regClampSph();      // вставленная руна больше не продаётся за GRAM
+  x.rg = x.rg || []; while(x.rg.length < RUNE_SLOTS) x.rg.push(0); x.rg[k] = useReg ? 1 : 0;
+  if(useReg){ REG.sph[id] = regFree - 1; regApi("socket", {id}).then(r => { if(!r || !r.ok){ x.rg[k] = 0; save(); } }).catch(() => {}); }
   toast("Вставлена: " + R.name + " (" + runeText(R) + ")"); Sfx.play("pick"); RS.ref = null; save();
 }
 // раздел рун в Мастерской
@@ -10403,7 +10420,7 @@ function runeCraftHtml(){
     h += `<div class="li"><div class="ic">${runeIcon(id)}</div><div class="tx"><span style="color:${R.col}">${R.name}${have(id) ? " · есть " + have(id) : ""}</span><small>${runeText(R)} · с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-rcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + R.lvl}</button></div>`;
   }
-  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM. Собранные руны и дроны можно продать на маркете</p>`;
+  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM. Собранные руны можно продать на маркете — и сразу, и после того как вынешь их из вещи</p>`;
 }
 // ===================== ДРОНЫ-КОМПАНЬОНЫ: ПОЛЁТ, СБОР ЛУТА, ОТРИСОВКА, ОКНА =====================
 function droneGive(id, announce, given){

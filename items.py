@@ -122,6 +122,7 @@ DRONES = ("d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phan
 # артефакты (как в game.html → ARTS): надевается один, продаются на маркете
 ARTIFACTS = ("a_reactor", "a_lens", "a_servo", "a_plate", "a_crown", "a_eye", "a_heart", "a_relic")
 REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS      # всё, что учитывается штуками (без номера)
+SOCKET_PREFIX = "s:"            # учёт рун, вставленных в вещи (строка «s:r_fortune» влезает в 12 символов столбца)
 
 # Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
 # Зеркало game.html → RUNES/DRONES (src "craft"); совпадение проверяет test_craft_contract.py.
@@ -399,6 +400,21 @@ async def api_items(request):
             await s.commit()
             metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "rune"))
             return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0)})
+
+        if op in ("socket", "unsocket"):
+            # руна вставлена в вещь или вынута: её учёт переходит в «гнездо» (s:<id>) и обратно.
+            # Продаваемых рун от этого не становится больше, чем сервер выдал, — меняется только, где лежит учёт.
+            rid = str(body.get("id", ""))
+            if rid not in RUNES:
+                return web.json_response({"ok": False, "error": "Это не руна"})
+            src, dst = (rid, SOCKET_PREFIX + rid) if op == "socket" else (SOCKET_PREFIX + rid, rid)
+            ok, _ = await take_spheres(s, uid, src, 1)
+            if not ok:
+                await s.rollback()
+                return web.json_response({"ok": False, "error": "Нет учтённой руны"})
+            await add_spheres(s, uid, dst, 1)
+            await s.commit()
+            return web.json_response({"ok": True})
 
         if op == "kill":
             # старый путь (HTTP) — для закэшированных клиентов; новые шлют убийства через WebSocket

@@ -40,6 +40,13 @@ class CraftContract(unittest.TestCase):
         for did in items.DRONES + items.ARTIFACTS:
             self.assertIn(f"{did}:", GAME)
 
+    def test_ids_fit_balance_column(self):
+        # таблица балансов хранит id в String(12): и сами вещи, и руны в гнёздах («s:<id>»)
+        for rid in items.REG_IDS:
+            self.assertLessEqual(len(rid), 12, rid)
+        for rid in items.RUNES:
+            self.assertLessEqual(len(items.SOCKET_PREFIX + rid), 12, rid)
+
     def test_artifact_packs_minted_by_server(self):
         for pid in ("ar_crown", "ar_eye", "ar_heart", "ar_relic"):
             self.assertIn(pid, items.PACK_ITEMS)
