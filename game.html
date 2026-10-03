@@ -231,6 +231,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.h2-tk{font-size:12px;filter:drop-shadow(0 0 4px rgba(242,193,75,.8))}.h2-tk[hidden]{display:none}
 .up-new{font-style:normal;background:#3FA35A;color:#fff;border-radius:4px;padding:0 4px;font-size:9px;vertical-align:1px}
 .spt-head{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px}.spt-head>div{border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--panel-2)}
 .spt-head small{display:block;color:var(--muted);font-size:10px}.spt-head b{font:16px 'Russo One',sans-serif;color:#F2C14B}
@@ -246,6 +247,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .spt-li{display:grid;grid-template-columns:28px 1fr auto 64px;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;background:var(--panel-2)}
 .spt-li span{color:var(--muted);font-family:'Russo One',sans-serif}.spt-li b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spt-li em{font-style:normal}.spt-li i{font-style:normal;color:#F2C14B;text-align:right}
 .spt-li.me{border-color:#5FD4E8}
+.spt-hist{border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-bottom:6px;display:flex;flex-direction:column;gap:2px;font-size:12px;background:var(--panel-2)}.spt-hist b{font-size:12px;color:var(--muted)}
 .spt-me{margin:8px 0;padding:8px 10px;border:1px solid #5FD4E8;border-radius:10px;font-size:13px}
 .spt-prize{border:1px solid #B9862E;background:rgba(242,193,75,.1);border-radius:10px;padding:9px 10px;margin:6px 0;display:flex;flex-direction:column;gap:5px}
 .spt-prize small{color:var(--muted);font-size:11px}.spt-prize.adm{border-color:#E0463A;background:rgba(224,70,58,.08)}
@@ -1059,7 +1061,7 @@ textarea.field{min-height:70px;resize:vertical}
       <div class="hud-card hud2">
         <div class="h2-top">
           <div class="h2-av"><div class="h2-img" id="hAv"></div><b class="h2-lv" id="hLvl">1</b><i class="h2-cls" id="hClsIc"></i></div>
-          <div class="h2-id"><span class="nm" id="hName" data-notr>Пилот</span><div class="h2-sub"><span id="hCls">Пилот</span><span class="h2-bm" id="hBM">БМ 0</span></div></div>
+          <div class="h2-id"><span class="nm" id="hName" data-notr>Пилот</span><div class="h2-sub"><span id="hCls">Пилот</span><span class="h2-bm" id="hBM">БМ 0</span><span class="h2-tk" id="hTk" hidden title="Билет сезона">🎫</span></div></div>
         </div>
         <div class="h2-bars">
           <div class="bar cp" title="CP: очки боя, работают только против игроков"><i id="hCpBar"></i><span id="hCpTxt"></span></div>
@@ -1275,7 +1277,7 @@ for(const [fam, F] of Object.entries(GEAR_FAM)) for(const T of TIERS){
 for(const T of TIERS){
   const b = ITEMS["g_blades_" + T.n], h = ITEMS["g_hammer_" + T.n];
   if(b) ITEMS["g_phaseblades_" + T.n] = {...b, name:T.adj[2] + " фазовые клинки", cls:"ghost", atk:Math.round(b.atk*1.1), crit:(b.crit || 0) + 1};
-  if(h) ITEMS["g_glaive_" + T.n] = {...h, name:T.adj[1] + " глефа", cls:"glyph", hp:Math.round((h.def || 1)*6)};
+  if(h) ITEMS["g_glaive_" + T.n] = {...h, name:T.adj[1] + " глефа", cls:"glyph", hp:Math.round((h.def || 1)*3)};
 }
 CLASS_WPN.ghost = "phaseblades"; CLASS_WPN.glyph = "glaive";
 const GEAR_IDS = Object.keys(ITEMS).filter(k => ITEMS[k].type === "gear" );
@@ -1360,12 +1362,12 @@ const CLASSES = {
     {id:"field", lore:"Генератор поднимает силовой купол вокруг корпуса.", name:"Силовое поле", desc:"+50% брони и +30% атаки на 4 сек", cd:18, type:"buff", buff:"def", v:0.5, dur:4},
     {id:"blink", lore:"Квантовый перенос мгновенно перемещает робота вперёд.", name:"Телепорт", desc:"Мгновенный перенос на 360 вперёд", cd:12, type:"dash", dist:360, instant:true}]},
   // ===== новые классы (вторая профессия, 4 сезон) =====
-  ghost:{name:"Призрак", role:"Ближний бой · криты", color:"#FF5FA2", hp:0.85, atk:1.2, def:0.8, speed:195, rate:1.45, range:80, melee:true, skills:[
+  ghost:{name:"Призрак", role:"Ближний бой · криты", color:"#FF5FA2", hp:1.0, atk:1.2, def:0.8, speed:195, rate:1.45, range:80, melee:true, skills:[
     {id:"phase", lore:"Корпус на миг уходит в фазу и проходит сквозь врага, оставляя за собой разрез.", name:"Фазовый разрез", desc:"Проход сквозь цель с ×2,2 урона и выход за её спиной; по целям ниже 50% прочности — гарантированный крит", cd:9, type:"phase", mult:2.2, dist:300, pvpAs:"leap"},
     {id:"echo", lore:"Голографический двойник замирает на месте и повторяет каждый твой взмах клинком.", name:"Эхо-двойник", desc:"На 6 сек на месте остаётся двойник и повторяет твои обычные удары с 50% урона", cd:22, type:"echo", v:0.5, dur:6},
     {id:"siren", lore:"Визг глушилки срывает прицелы и выкручивает броню вокруг на минимум.", name:"Сирена помех", desc:"Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30%", cd:14, type:"siren", radius:130, mult:0.6, pvpAs:"aoe"},
     {id:"nulltrace", lore:"Сигнатура обнуляется: сенсоры врагов видят пустое место.", name:"Нулевой след", desc:"Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит", cd:20, type:"stealth", dur:4}]},
-  glyph:{name:"Глифоносец", role:"Ближний бой · контроль", color:"#FFB347", hp:1.2, atk:1.0, def:1.3, speed:160, rate:1.1, range:95, melee:true, skills:[
+  glyph:{name:"Глифоносец", role:"Ближний бой · контроль", color:"#FFB347", hp:1.05, atk:0.95, def:1.1, speed:160, rate:1.1, range:95, melee:true, skills:[
     {id:"gravity", lore:"Глиф искривляет поле, стягивает металл к центру и схлопывается.", name:"Глиф притяжения", desc:"Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×1,6 урона", cd:14, type:"gravity", radius:150, mult:1.6, pvpAs:"aoe"},
     {id:"chain", lore:"Разряд прыгает от глифа к глифу и с каждой целью набирает силу.", name:"Цепь глифов", desc:"Разряд по 5 целям подряд, каждый следующий прыжок +15% урона", cd:10, type:"chain", n:5, mult:1.2, pvpAs:"strike"},
     {id:"seal", lore:"Зеркальная печать возвращает удары тем, кто их нанёс.", name:"Печать отражения", desc:"5 сек: −40% входящего урона, 40% урона возвращается атакующему", cd:20, type:"buff", buff:"reflect", v:0.4, dur:5},
@@ -3998,7 +4000,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     const eq = {}; for(const k in S.eq) if(S.eq[k]) eq[k] = S.eq[k].g;
     const msg = {t:"pos", loc:locKey, x:Math.round(p.x), y:Math.round(p.y), ang:+p.ang.toFixed(2), aim:+p.aim.toFixed(2), moving:p.moving, dead:p.dead,
       nick:S.name, fac:S.faction, lvl:S.level, eq, wpn:S.eq.weapon ? S.eq.weapon.id : "", cls:S.cls || "",
-      hp:Math.ceil(S.hp), mhp:stat().maxhp, cp:Math.ceil(S.cp ?? stat().maxcp), mcp:stat().maxcp, bm:combatPower(), df:stat().def,
+      hp:Math.ceil(S.hp), mhp:stat().maxhp, cp:Math.ceil(S.cp ?? stat().maxcp), mcp:stat().maxcp, bm:combatPower(), df:stat().def, sth:p && p.stealthT > now ? 1 : 0,
       gt:gCur ? gCur.tag : "", gn:gCur ? gCur.name : "", gi:gCur && gCur.emblem ? gCur.emblem.icon : "", gc:gCur && gCur.emblem ? gCur.emblem.color : ""};
     const js = JSON.stringify(msg);
     // удары по мобам и убийства едут в этом же сообщении: так сервер всегда видит удары раньше убийства
@@ -4075,7 +4077,9 @@ function drawOthers(t, dt){
     if(o.rx < cx0 - 90 || o.rx > cx0 + vw + 90 || o.ry < cy0 - 40 || o.ry > cy0 + vh + 160) continue;
     const F = FACTIONS[o.fac] || FACTIONS.aegis;
     if(o.flashT > 0) o.flashT -= dt || 0.016;
+    if(o.sth){ ctx.save(); ctx.globalAlpha = 0.3; }
     drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.moving, t:t + (o.id % 7), ps:1.5, flash:o.flashT > 0 ? o.flashT : 0});
+    if(o.sth) ctx.restore();
     const name = String(o.nick || "Пилот").slice(0, 16);
     const mate = typeof inParty === "function" && inParty(o.id);
     const bars = typeof unitBars === "function" && unitBars();
@@ -6771,7 +6775,8 @@ function renderShop(){
 
 // ===================== СЕЗОН =====================
 const SEASON_LV = 30, SEASON_XP = 150;
-const seasonId = () => { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1); };
+// сезон меняется 1-го числа в 18:00 МСК (как на сервере); id — «ГГГГ-М» (формат прежних сохранений)
+const seasonId = () => { const m = new Date(Date.now() + 3*3600e3 - 18*3600e3); return m.getUTCFullYear() + "-" + (m.getUTCMonth() + 1); };
 function seasonState(){ if(!S.season || S.season.id !== seasonId()) S.season = {id:seasonId(), xp:0, free:[], prem:[]}; return S.season; }
 function seasonAddXp(n){ const s = seasonState(), before = Math.floor(s.xp/SEASON_XP); s.xp = Math.min(SEASON_LV*SEASON_XP, s.xp + n); if(Math.floor(s.xp/SEASON_XP) > before) toast("Уровень сезона: " + Math.floor(s.xp/SEASON_XP)); }
 function seasonReward(lv, prem){
@@ -6780,8 +6785,8 @@ function seasonReward(lv, prem){
 }
 function openSeason(){
   openSheet("Сезон", "Опыт сезона дают любые победы над врагами", () => {
-    const s = seasonState(), lv = Math.floor(s.xp/SEASON_XP), prem = !!S.bought["season" + s.id];
-    const end = new Date(); end.setMonth(end.getMonth() + 1, 1); end.setHours(0, 0, 0, 0); const days = Math.ceil((end - Date.now())/86400000);
+    const s = seasonState(), lv = Math.floor(s.xp/SEASON_XP), prem = !!S.bought["season" + s.id] || (typeof ticketActive === "function" && ticketActive());
+    const days = Math.ceil(((typeof sptEnd === "function" ? sptEnd() : Date.now()) - Date.now())/86400000);
     let h = `<div class="ss-head"><div><small>Уровень сезона</small><b>${lv} / ${SEASON_LV}</b></div><div><small>До конца</small><b>${days} дн.</b></div></div>
       <div class="vbar"><i style="width:${lv >= SEASON_LV ? 100 : (s.xp % SEASON_XP)/SEASON_XP*100}%"></i></div><p class="hint" style="margin:4px 0 10px">${lv >= SEASON_LV ? "Максимальный уровень сезона" : (s.xp % SEASON_XP) + " / " + SEASON_XP + " опыта сезона до следующего уровня"}</p>
       ${prem ? `<div class="ss-prem on">🎫 Сезонный билет активен</div>` : `<button class="btn wide ss-prem" type="button" data-shop="open">🎫 Купить сезонный билет · 10,5 GRAM</button>`}
@@ -8014,6 +8019,10 @@ function sptRatingHtml(){
   if(top.length <= 3) h += `<p class="hint">Пока в рейтинге ${top.length} пилот(ов) — выполняй задания сезона</p>`;
   h += `</div>`;
   if(R.me) h += `<div class="spt-me">Твоё место: <b>${R.me.place}</b> · ${R.me.pts.toLocaleString("ru-RU")} очков</div>`;
+  if(R.history && R.history.length){
+    h += `<div class="spt-sec"><b>Прошлые сезоны</b></div>`;
+    for(const hs of R.history) h += `<div class="spt-hist"><b>Сезон ${esc(hs.season)}</b>${hs.top.map(w => `<span>${["🥇", "🥈", "🥉"][w.place - 1]} ${esc(w.nick)} · ${w.pts.toLocaleString("ru-RU")}</span>`).join("")}</div>`;
+  }
   h += `<p class="hint">После конца сезона призы забираются в GRAM кнопкой «Забрать» здесь же.</p>`;
   return h;
 }
@@ -8318,6 +8327,32 @@ function drawAmbient(t, dt){
 {
   const _layerAmb = drawPvpLayer;
   drawPvpLayer = function(t, dt){ _layerAmb(t, dt); drawAmbient(t, dt || .016); };
+}
+// ===================== ДОРАБОТКИ ЭТАПОВ =====================
+// значок билета сезона в плашке игрока
+setInterval(() => { const el = $("hTk"); if(el && typeof ticketActive === "function"){ const on = ticketActive(); if(el.hidden === on) el.hidden = !on; } }, 1000);
+// АВТО применяет и боевые умения класса: по откату, если цель рядом (по одному умению за раз, без баффов-рывков в пустоту)
+{
+  const AUTO_SK = ["strike", "aoe", "volley", "burst", "leap", "phase", "siren", "gravity", "chain"];
+  let autoSkT = 0;
+  setInterval(() => {
+    if(typeof auto === "undefined" || !auto || !p || p.dead || paused || !p.target || locKey === "lobby") return;
+    if(performance.now() < autoSkT) return;
+    const C = clsOf(S.cls); if(!C) return;
+    const t = p.target, d = Math.hypot(t.x - p.x, t.y - p.y);
+    for(let i = 0; i < 4; i++){
+      const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+      if(CB.cd[i] > 0 || !AUTO_SK.includes(s.type)) continue;
+      const reach = s.type === "aoe" || s.type === "siren" ? s.radius + 20 : s.type === "leap" || s.type === "phase" ? (s.dist || 300) : s.type === "gravity" ? 260 : classParams().range + stat().range + 60;
+      if(d > reach) continue;
+      useSkill(i); autoSkT = performance.now() + 700; break;
+    }
+  }, 250);
+}
+// невидимость Призрака видят и другие игроки: признак уходит в pos (sth), чужой Призрак в тени рисуется полупрозрачным
+{
+  const _sendPos = typeof sendPos === "function" ? sendPos : null;
+  setInterval(() => { if(typeof NET !== "undefined") NET.stealth = p && p.stealthT > now ? 1 : 0; }, 200);
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.

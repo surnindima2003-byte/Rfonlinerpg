@@ -280,7 +280,23 @@ async def finalize(key):
             s.add(SeasonPrize(season=key, tg_id=0, place=0, status="none", created=now))
         await s.commit()
     log.warning("Сезон %s: итоги зафиксированы, призёров %s", key, len(winners))
+    asyncio.create_task(_notify_winners(key, winners))
     return True
+
+
+async def _notify_winners(key, winners):
+    """Победителям — сообщение от бота в Telegram."""
+    import gram
+    bot = gram.BOT.get("bot")
+    if not bot:
+        return
+    for w in winners:
+        try:
+            await bot.send_message(int(w["id"]), f"🏆 Сезон {key} завершён! Ты занял {w['place']} место ({w['pts']} очков сезона). "
+                                                 f"Приз: {w['usdt']} USDT в GRAM. После подтверждения админом забери его в игре: Меню → Сезон → Рейтинг.")
+        except Exception as e:
+            log.info("сезон: не удалось уведомить %s: %s", w["id"], e)
+        await asyncio.sleep(0.05)
 
 
 def setup_rating(app, read_auth, push_to_player):
@@ -309,8 +325,14 @@ def setup_rating(app, read_auth, push_to_player):
                 ps = (await s.execute(select(SeasonPrize).where(SeasonPrize.status == "wait", SeasonPrize.tg_id != 0))).scalars().all()
                 if ps:
                     pending = {"season": ps[0].season, "count": len(ps), "usdt": sum(p.usdt for p in ps), "gram": gram.g(sum(p.nano for p in ps))}
+            hist = (await s.execute(select(SeasonPrize).where(SeasonPrize.place.between(1, 3), SeasonPrize.tg_id != 0)
+                                    .order_by(SeasonPrize.season.desc(), SeasonPrize.place).limit(9))).scalars().all()
+        history = {}
+        for h in hist:
+            history.setdefault(h.season, []).append({"place": h.place, "nick": h.nick, "pts": h.pts, "usdt": h.usdt})
         from config import GRAM_USD
         return web.json_response({"ok": True, "season": key, "top": rows, "me": mine, "rate": GRAM_USD,
+                                  "history": [{"season": k, "top": v} for k, v in history.items()],
                                   "prizes": {str(k): v for k, v in PRIZES_USDT.items()},
                                   "prize": {"season": prize.season, "place": prize.place, "usdt": prize.usdt, "gram": gram.g(prize.nano),
                                             "status": prize.status} if prize else None, "admin_pending": pending})

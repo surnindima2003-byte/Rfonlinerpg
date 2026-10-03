@@ -921,6 +921,7 @@ def clean_pos(d, info):
         info["mcp"] = max(1, min(1000000, int(d.get("mcp", 1))))
         info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
         info["df"] = int(d["df"]) if isinstance(d.get("df"), (int, float)) else None
+        info["sth"] = 1 if d.get("sth") and info.get("cls") == "ghost" else 0          # Призрак в тени (видят и другие)
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
@@ -934,7 +935,7 @@ def clean_pos(d, info):
 
 
 PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
-               "hp", "mhp", "cp", "mcp", "bm", "admin")
+               "hp", "mhp", "cp", "mcp", "bm", "admin", "sth")
 
 
 def public(info):
