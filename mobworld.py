@@ -29,7 +29,7 @@ import time
 import metrics
 import mobguard
 
-ARENA = {"arena_fear", "lobby"}      # на арене волны свои у каждого, в ангаре мобов нет
+ARENA = {"arena_fear", "lobby", "tower"}      # на арене волны свои у каждого, в ангаре мобов нет
 RESPAWN, RESPAWN_BOSS = 10, 300
 REGEN_AFTER = 12                     # без ударов столько секунд — моб полностью восстанавливается
 OWNER_STALE = 2.0                    # владелец не присылал позицию столько секунд — моб свободен

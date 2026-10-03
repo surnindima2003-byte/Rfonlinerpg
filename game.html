@@ -1832,8 +1832,8 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
 function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
-  const tk = typeof ticketActive === "function" && ticketActive(), sroom = e.room && e.room.seasonal;
-  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (sroom ? 1.5 : 1) * (1 + (stat().xpUp || 0)));
+  const tk = typeof ticketActive === "function" && ticketActive(), sroom = (e.room && e.room.seasonal) || locKey === "tower";
+  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (locKey === "tower" ? 4 : sroom ? 1.5 : 1) * (1 + (stat().xpUp || 0)));
   if(typeof seasonAddXp === "function") seasonAddXp(3 + Math.floor((k.lvl || 1)/2));
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
@@ -8487,6 +8487,147 @@ function openWorldBoss(){ openSheet("Мировой босс", "Владыка �
     if(d.t === "wbrm"){ WB.loot.delete(String(d.id)); return; }
     if(d.t === "wbgot"){ WB.loot.delete(String(d.id)); wbGive(d); return; }
     prevWB(d);
+  };
+}
+// ===================== КРОВАВАЯ БАШНЯ =====================
+// Каждый день 20:30 МСК: запись 5 минут, затем общий старт. Своя дорога: 60 монстров 5 ур. → барьер →
+// 60 монстров 10 ур. → барьер → общий босс «Багровый Страж» (прочность общая, без дропа).
+// Побеждает нанёсший боссу больше урона. Смерть в коридоре — выбывание. Опыт с монстров башни ×4.
+LOCS.tower = {name:"Кровавая башня", min:10, arena:true, npcs:[], count:0, ground:"#1A0E10", ground2:"#24121A", rock:"#3A1A22"};
+setTimeout(() => {      // таблицы оформления объявлены ниже по файлу — дополняем их после загрузки
+  try{ TILE_PAL.tower = TILE_PAL.arena_fear || TILE_PAL.sector1; }catch(e){}
+  try{ DECAL_KINDS.tower = DECAL_KINDS.arena_fear || DECAL_KINDS.dungeon; }catch(e){}
+  try{ AMB.tower = {tint:"rgba(255,30,30,.10)", kind:"ember", n:44, c:["#FF5A4A", "#B8261C"]}; }catch(e){}
+}, 0);
+const TW = {st:null, run:false, seg:[[300, 1300], [1500, 2500]], bar:[1400, 2600], boss:{x:3020, y:450}, hitT:0, out:false};
+const twCleared = k => !enemies.some(e => !e.dead && e.twSeg === k);
+{
+  const _bl = buildLoc;
+  buildLoc = function(key){
+    if(key !== "tower") return _bl(key);
+    locKey = key; rocks = []; enemies = []; npcs = []; bolts = []; beams = []; drops = []; texts = [];
+    W = 3400; H = 900;
+    rocks.push({rx:0, ry:0, rw:W, rh:330, deco:true}, {rx:0, ry:570, rw:2620, rh:330, deco:true});   // стены коридора
+    rocks.push({rx:2620, ry:570, rw:0, rh:0, deco:true});
+    const put = (type, k, x0, x1) => { for(let i = 0; i < 60; i++){ const x = x0 + (i % 20)*(x1 - x0)/20 + 12, y = 370 + Math.floor(i/20)*70 + (i % 2)*16;
+      const m = NPCS[type]; enemies.push({type, x, y, hx:x, hy:y, tx:x, ty:y, ang:Math.PI, hp:m.hp, max:m.hp, dead:false, chase:false, stun:0, flash:0, cd:1, wanderT:99, twSeg:k, respawn:Infinity}); } };
+    put("dg5", 0, TW.seg[0][0], TW.seg[0][1]); put("dg10", 1, TW.seg[1][0], TW.seg[1][1]);
+    for(const e of enemies) e.noRespawn = true;
+    npcs = [{kind:"back", x:70, y:450}];                       // выход в ангар (= сдаться)
+    return {x:140, y:450};
+  };
+  // мобы башни не возрождаются; опыт ×4
+  const _kill = killEnemy;
+  killEnemy = function(e){ const r = _kill(e); if(locKey === "tower"){ e.respawn = Infinity; } return r; };
+  // на всякий случай: в башне мёртвые мобы не возвращаются, даже если чужая логика назначила таймер
+  setInterval(() => { if(locKey === "tower") for(const e of enemies) if(e.dead) e.respawn = Infinity; }, 500);
+  // барьеры: не пройти, пока линия не зачищена; арена босса — шире
+  const _gg = guardGate;
+  guardGate = function(){
+    _gg();
+    if(locKey !== "tower") return;
+    p.y = Math.max(345, Math.min(p.x > 2620 ? 860 : 555, p.y));
+    for(let k = 0; k < 2; k++) if(!twCleared(k) && p.x > TW.bar[k] - 18){ p.x = TW.bar[k] - 18; if(now > (TW.warn || 0)){ TW.warn = now + 3; toast("Барьер: сначала убей всех монстров этой линии"); } }
+  };
+}
+// удары по боссу
+function twHit(mult){
+  if(locKey !== "tower" || !TW.run || !p || p.dead || p.x < 2620) return false;
+  const st = stat(), B = TW.boss, d = Math.hypot(p.x - B.x, p.y - B.y);
+  if(d > classParams().range + st.range + 130) return false;
+  const crit = Math.random()*100 < st.crit, dmg = Math.round(st.atk*(1 + buffV("atk"))*(mult || 1)*(crit ? st.critPow : 1));
+  if(NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify({t:"twhit", dmg}));
+  p.aim = p.ang = Math.atan2(B.y - 40 - p.y, B.x - p.x); p.atkT = 0.25;
+  if(classParams().melee) CB.fx.push({type:"slash", x:B.x - 20, y:B.y - 50, a:p.aim, life:.2, max:.2, c:classParams().color || "#fff"});
+  else beams.push({x1:p.x, y1:p.y - 26, x2:B.x, y2:B.y - 60, life:0.12});
+  addText(B.x + Math.random()*60 - 30, B.y - 120, (crit ? "КРИТ " : "") + dmg, crit ? "#F2C14B" : "#FF8A6A"); Sfx.play(crit ? "crit" : "shot");
+  return true;
+}
+setInterval(() => {
+  if(locKey !== "tower" || !TW.run || !p || p.dead || paused || !(firing || auto) || performance.now() < TW.hitT) return;
+  if(twHit(1)) TW.hitT = performance.now() + 1000/classParams().rate/(stat().rate || 1);
+}, 100);
+{
+  const _useTW = useSkill;
+  useSkill = function(i){
+    if(locKey === "tower" && TW.run && p && p.x > 2620){ const C = clsOf(S.cls); if(C && !(CB.cd[i] > 0)){ const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+      if(s.mult && twHit(s.mult*(1 + stat().skillDmg))){ CB.cd[i] = s.cd*(1 - stat().cdr); return; } } }
+    return _useTW(i);
+  };
+  // смерть в башне — выбывание
+  const _hurtTW = hurtPlayer;
+  hurtPlayer = function(dmg, src){
+    const was = p && !p.dead; const r = _hurtTW(dmg, src);
+    if(locKey === "tower" && was && p.dead && TW.run){ TW.run = false; TW.out = true; if(NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify({t:"twdead"})); toast("🩸 Ты выбыл из Кровавой башни"); }
+    return r;
+  };
+}
+// отрисовка: стены коридора, барьеры, босс
+{
+  const _layerTW = drawPvpLayer;
+  drawPvpLayer = function(t, dt){
+    _layerTW(t, dt);
+    if(locKey !== "tower") return;
+    ctx.save();
+    ctx.fillStyle = "#12080A"; ctx.fillRect(0, 0, 3400, 330); ctx.fillRect(0, 570, 2620, 330);
+    ctx.fillStyle = "#3A1418"; ctx.fillRect(0, 322, 3400, 8); ctx.fillRect(0, 570, 2620, 8);
+    for(let x = 40; x < 3400; x += 160){ ctx.fillStyle = `rgba(255,60,40,${.35 + Math.sin(t*3 + x)*.15})`; ctx.fillRect(x, 318, 10, 6); if(x < 2620) ctx.fillRect(x, 572, 10, 6); }
+    for(let k = 0; k < 2; k++){ const x = TW.bar[k], open = twCleared(k);
+      ctx.fillStyle = open ? "rgba(123,201,138,.18)" : `rgba(255,50,40,${.35 + Math.sin(t*6)*.15})`; ctx.fillRect(x - 6, 330, 12, 240);
+      ctx.font = "12px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = open ? "#7BC98A" : "#FF6A5A";
+      ctx.fillText(open ? "проход открыт" : "барьер: " + enemies.filter(e => !e.dead && e.twSeg === k).length + " осталось", x, 316); }
+    const B = TW.boss, live = TW.st && TW.st.hp > 0 && (TW.run || TW.st.phase === "run");
+    if(live){ const pulse = (Math.sin(t*3) + 1)/2;
+      ctx.globalCompositeOperation = "lighter"; const g = ctx.createRadialGradient(B.x, B.y - 40, 10, B.x, B.y - 40, 200);
+      g.addColorStop(0, `rgba(255,30,30,${.4 + pulse*.15})`); g.addColorStop(1, "rgba(255,30,30,0)"); ctx.fillStyle = g; ctx.fillRect(B.x - 200, B.y - 240, 400, 400);
+      ctx.globalCompositeOperation = "source-over";
+      drawMech(ctx, B.x, B.y, {cls:"reaper", fac:"core", eq:{head:3, armor:3, weapon:3, legs:3, module:3, core:3}, aim:Math.atan2(p.y - B.y, p.x - B.x), t, ps:4.4, atk:(t % 1.8) < .3 ? 1 : 0});
+      label("⚠ БОСС · " + (TW.st.name || "Багровый Страж"), B.x, B.y - 205, "#FF6A5A"); }
+    ctx.restore();
+  };
+}
+// полоса прочности босса башни — в той же плашке, что у мирового босса
+setInterval(() => {
+  if(locKey !== "tower" || !TW.st || typeof wbBar === "undefined") return;
+  wbBar.hidden = !(TW.st.max > 0); const k = TW.st.max ? TW.st.hp/TW.st.max : 0;
+  wbBar.querySelector("b").textContent = TW.st.name || "Багровый Страж";
+  wbBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
+  wbBar.querySelector("span").textContent = TW.st.hp.toLocaleString("ru-RU") + " / " + TW.st.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%";
+}, 250);
+// ---- окно «Кровавая башня» ----
+function renderTW(){
+  const T = TW.st || {phase:"idle", reg:0, next:Date.now()}, ph = T.phase, left = Math.max(0, (ph === "reg" ? T.until : T.next) - Date.now());
+  const mm = Math.floor(left/6e4), ss = Math.floor(left%6e4/1e3), hh = Math.floor(left/36e5);
+  const big = ph === "reg" ? `${mm}:${String(ss).padStart(2, "0")}` : ph === "run" ? "Идёт забег" : `${hh}ч ${Math.floor(left%36e5/6e4)}м`;
+  const sub = ph === "reg" ? (T.me ? "Вы в очереди" : "Ждём игроков") : ph === "run" ? "Босс: " + (T.hp || 0).toLocaleString("ru-RU") : "До открытия · 20:30 МСК";
+  body().innerHTML = `<div class="wb-top"><b>${big}</b><small>${sub}</small><em>Записалось: ${T.reg || 0} · Попыток сегодня: ${T.used ? 0 : 1}/1</em>
+      ${ph === "reg" ? (T.me ? `<button class="act alt" type="button" data-twjoin="leave">Отменить запись</button>` : `<button class="act tw-join" type="button" data-twjoin="join" ${T.used ? "disabled" : ""}>Записаться</button>`) : ""}</div>
+    <p class="hint"><b>Правила:</b><br>• Открыта каждый день в 20:30 по Москве, всего на 5 минут<br>• Регистрация 5 минут после открытия, затем один общий старт — бегут все, кто записался<br>• Одна попытка в день, тратится при старте забега<br>• У каждого своя дорога: 60 монстров 5 уровня, затем 60 монстров 10 уровня, вплотную друг к другу<br>• Все дороги ведут к одному общему боссу — без дропа<br>• Побеждает тот, кто нанёс боссу больше всего урона — не обязательно добивший<br>• Смерть в коридоре — выбывание из забега<br>• В конце каждой линии монстров — барьер: не пройти, пока не убиты все<br>• Только с 10 уровня</p>
+    <div class="spt-sec"><b>Награды:</b></div>
+    <div class="wb-drop"><span>⭐ Опыт с монстров в Башне</span><b>×4</b></div>
+    <div class="wb-drop"><span>◉ Ядра — всем, кто ударил босса</span><b>+10</b></div>
+    <div class="wb-drop"><span>👑 Ядра — победителю</span><b>+30</b></div>
+    ${window.NET_ADMIN && (ph === "idle" || ph === "done") ? `<button class="act alt" type="button" data-twjoin="admin" style="margin-top:8px">Админ: открыть запись на 40 сек</button>` : ""}`;
+}
+function twLoad(){ if(typeof NET !== "undefined" && NET.api) NET.api("/api/tower/state", {}).then(r => { if(r && r.ok){ TW.st = r; if(sheetRender === renderTW) renderTW(); } }).catch(() => {}); }
+function openTower(){ openSheet("Кровавая башня", "Забег через коридоры монстров", renderTW); twLoad();
+  clearInterval(TW.tm); TW.tm = setInterval(() => { if(sheetRender !== renderTW){ clearInterval(TW.tm); return; } renderTW(); }, 1000); }
+{
+  const _evTW = openEvents;
+  openEvents = function(){ _evTW(); body().insertAdjacentHTML("afterbegin", `<button class="wb-card tw-card" type="button" data-twopen="1"><b>🩸 Кровавая башня</b><small>Забег через коридоры монстров · ежедневно в 20:30 МСК</small></button>`); };
+  document.getElementById("shBody").addEventListener("click", e => {
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.dataset.twopen) openTower();
+    else if(b.dataset.twjoin){ const k = b.dataset.twjoin; b.disabled = true;
+      NET.api("/api/tower/join", k === "leave" ? {leave:1} : k === "admin" ? {admin_open:1} : {}).then(r => { if(r && r.ok){ TW.st = r; toast(k === "join" ? "Ты записан в Кровавую башню" : k === "leave" ? "Запись отменена" : "Запись открыта"); } else toast((r && r.error) || "Не удалось"); renderTW(); }).catch(() => toast("Нет связи с сервером")); }
+  });
+  const prevTW = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "tw"){ TW.st = {...(TW.st || {}), ...d}; if(sheetRender === renderTW) renderTW(); return; }
+    if(d.t === "twstart"){ TW.run = true; TW.out = false; TW.st = {...(TW.st || {}), phase:"run", hp:d.max, max:d.max}; closeSheet(); toast("🩸 Кровавая башня: старт! Прорвись через монстров к боссу"); travel("tower"); return; }
+    if(d.t === "twend"){ TW.run = false; const txt = d.win ? "👑 Ты победил в Кровавой башне! +40 ядер" : d.killed ? "Босс башни повержен. Победитель: " + (d.winner || "—") + " · +10 ядер, если бил босса" : "Забег окончен: босс устоял";
+      toast(txt); if(TW.st){ TW.st.phase = "done"; TW.st.hp = 0; } setTimeout(() => { if(locKey === "tower") travel("lobby"); }, 5000); return; }
+    prevTW(d);
   };
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================

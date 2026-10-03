@@ -36,13 +36,14 @@ import saveguard
 import mobworld
 import seasonpts
 import worldboss
+import tower
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
 GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear"}
-SAFE_LOCS = {"lobby", "arena_fear"}          # здесь PvP нет никогда
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower"}
+SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -1322,7 +1323,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
 async def ws_handler(request):
@@ -1431,6 +1432,10 @@ async def ws_handler(request):
                 mobworld.on_hits(info, d, hub)
             elif t == "wbhit":
                 await worldboss.on_hit(info, d, hub, seasonpts)
+            elif t == "twhit":
+                await tower.on_hit(info, d, hub, push_to_player)
+            elif t == "twdead":
+                tower.on_dead(info)
             elif t == "wbpick":
                 worldboss.on_pick(info, d, hub)
             elif t == "mpos":
@@ -1529,6 +1534,8 @@ async def world_loop():
                     await send_party(pid)
             mobworld.tick(hub)                              # общие мобы: прочность, смерть, возрождение
             worldboss.tick(hub)                             # мировой босс: расписание, удары по площади
+            if tick % 5 == 0:
+                await tower.tick(hub, seasonpts, push_to_player)   # Кровавая башня: запись, старт, итоги
             world_tick(keepalive=tick % WORLD_HZ == 0,      # раз в секунду шлём даже без изменений
                        full_tick=tick % (WORLD_HZ * 10) == 0)   # дельта-клиентам — полный снимок раз в 10 с
         except Exception:
@@ -1607,6 +1614,7 @@ async def start_web(port: int):
             hub.to_all({"t": "pinfo", "text": f"⚠ Мировой босс «{worldboss.NAME}» появился в Центральном ангаре!"})
         return web.json_response({"ok": True, **worldboss.view()})
     app.router.add_post("/api/wboss", api_wboss)
+    tower.setup(app, read_auth, online)
     seasonpts.setup_rating(app, read_auth, push_to_player)
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)

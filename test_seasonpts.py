@@ -74,9 +74,11 @@ class SeasonPtsTest(unittest.TestCase):
         self.run_(sp.add(1, "kill_f1", 1))
         self.assertEqual(sp._st[1]["pts"], 300)
 
-    def test_soon_tasks_never_pay(self):
-        self.run_(sp.add(1, "tower", 5))
-        self.assertEqual(sp._st[1]["pts"], 0)
+    def test_tower_and_boss_tasks_pay(self):
+        self.run_(sp.add(1, "tower", 3))                # события открыты: башня 3 раза — +200
+        self.assertEqual(sp._st[1]["pts"], 200)
+        self.run_(sp.add(1, "wboss", 3))                # мировой босс 3 удара — ещё +200
+        self.assertEqual(sp._st[1]["pts"], 400)
 
     def test_season_bounds_msk(self):
         self.assertEqual(sp.season_key(datetime(2026, 11, 1, 17, 59, tzinfo=sp.MSK)), "2026-10")
