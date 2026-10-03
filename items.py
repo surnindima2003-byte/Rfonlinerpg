@@ -116,7 +116,74 @@ SPHERES = ("sph_cu", "sph_ti")
 # руны (как в game.html → RUNES). Учтённые руны хранятся в той же таблице балансов, что и сферы,
 # и, как сферы, продаются на маркете за GRAM. Учёт идёт только через паки магазина и маркет.
 RUNES = ("r_atk", "r_def", "r_hp", "r_crit", "r_spd", "r_aspd", "r_cpow", "r_regen", "r_war", "r_bastion", "r_storm", "r_fortune")
-REG_IDS = SPHERES + RUNES       # всё, что учитывается штуками (без номера)
+# дроны-компаньоны (как в game.html → DRONES): тоже предметы, учтённые сервером
+DRONES = ("d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phantom", "d_sol")
+REG_IDS = SPHERES + RUNES + DRONES      # всё, что учитывается штуками (без номера)
+
+# Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
+# Зеркало game.html → RUNES/DRONES (src "craft"); совпадение проверяет test_craft_contract.py.
+CRAFT = {
+    "r_atk":   (10, {"scrap": 8000, "cores": 30, "chip": 4}),
+    "r_def":   (10, {"scrap": 8000, "cores": 30, "plate": 6}),
+    "r_hp":    (10, {"scrap": 8000, "cores": 30, "plate": 4, "wire": 4}),
+    "r_crit":  (15, {"scrap": 15000, "cores": 60, "chip": 8}),
+    "r_spd":   (15, {"scrap": 15000, "cores": 60, "wire": 10}),
+    "r_aspd":  (20, {"scrap": 25000, "cores": 100, "chip": 10, "wire": 6}),
+    "r_cpow":  (20, {"scrap": 25000, "cores": 100, "chip": 10, "plate": 6}),
+    "r_regen": (25, {"scrap": 40000, "cores": 150, "plate": 12, "wire": 12}),
+    "d_spark": (5,  {"scrap": 5000, "cores": 20, "wire": 10}),
+    "d_bolt":  (10, {"scrap": 15000, "cores": 50, "wire": 10, "plate": 10}),
+    "d_hawk":  (20, {"scrap": 40000, "cores": 150, "wire": 15, "chip": 15}),
+    "d_titan": (30, {"scrap": 120000, "cores": 400, "plate": 30, "chip": 20}),
+}
+INV_MAX_SRV = 60
+
+
+def _inv_count(S, item_id):
+    return sum(int(x.get("n", 1) or 0) for x in (S.get("inv") or []) if isinstance(x, dict) and x.get("id") == item_id)
+
+
+def _inv_take(S, item_id, n):
+    """Убрать n штук из сумки сохранения (с конца, как removeItem в игре)."""
+    inv = S.get("inv") or []
+    for i in range(len(inv) - 1, -1, -1):
+        x = inv[i]
+        if n <= 0:
+            break
+        if not isinstance(x, dict) or x.get("id") != item_id:
+            continue
+        take = min(n, int(x.get("n", 1) or 0))
+        x["n"] = int(x.get("n", 1) or 0) - take
+        n -= take
+        if x["n"] <= 0:
+            inv.pop(i)
+
+
+def craft_in_save(S, item_id, level):
+    """Проверить и провести крафт в данных сохранения. Возвращает текст ошибки или None (S изменён)."""
+    lvl, need = CRAFT[item_id]
+    if level < lvl:
+        return f"Нужен {lvl} уровень"
+    for k, n in need.items():
+        have = S.get(k, 0) if k in ("scrap", "cores") else _inv_count(S, k)
+        if not isinstance(have, (int, float)) or have < n:
+            return "Сервер не видит нужных ресурсов. Подожди пару секунд и попробуй ещё раз"
+    inv = S.setdefault("inv", [])
+    stack = next((x for x in inv if isinstance(x, dict) and x.get("id") == item_id), None)
+    if item_id in DRONES and (stack or any(isinstance(x, dict) and x.get("id") == item_id for x in S.get("store") or [])):
+        return "Этот дрон уже есть"
+    if not stack and len(inv) >= INV_MAX_SRV:
+        return "Освободи место в сумке"
+    for k, n in need.items():
+        if k in ("scrap", "cores"):
+            S[k] = S.get(k, 0) - n
+        else:
+            _inv_take(S, k, n)
+    if stack:
+        stack["n"] = int(stack.get("n", 1) or 0) + 1
+    else:
+        inv.append({"id": item_id, "n": 1})
+    return None
 BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1}
 DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40)}
@@ -291,6 +358,41 @@ async def api_items(request):
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
                                       "sph": {k: sph.get(k, 0) for k in REG_IDS}})
 
+        if op == "craft":
+            # руна или дрон собираются по последнему сохранению: ресурсы списываются там, вещь учитывается
+            item_id = str(body.get("id", ""))
+            if item_id not in CRAFT:
+                return web.json_response({"ok": False, "error": "Такое нельзя собрать"})
+            row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+            try:
+                data = json.loads(row.data) if row and row.data else None
+            except ValueError:
+                data = None
+            S = data.get("S") if isinstance(data, dict) else None
+            if not isinstance(S, dict):
+                return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
+            import progress
+            try:
+                level = int(S.get("level", 1))
+            except (TypeError, ValueError):
+                level = 1
+            if not user.get("admin"):
+                level = min(level, await progress.cap_of(s, uid))
+            err = craft_in_save(S, item_id, level)
+            if err:
+                return web.json_response({"ok": False, "error": err})
+            # пишем, только если сохранение не поменялось с момента чтения (параллельное сохранение с телефона)
+            now = int(time.time())
+            res = await s.execute(update(GameSave).where(GameSave.tg_id == uid, GameSave.updated == row.updated)
+                                  .values(data=json.dumps(data, ensure_ascii=False), updated=now).execution_options(synchronize_session=False))
+            if res.rowcount != 1:
+                await s.rollback()
+                return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
+            await add_spheres(s, uid, item_id, 1)
+            await s.commit()
+            metrics.inc("craft." + ("drone" if item_id in DRONES else "rune"))
+            return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0)})
+
         if op == "kill":
             # старый путь (HTTP) — для закэшированных клиентов; новые шлют убийства через WebSocket
             me = online(uid)
@@ -357,10 +459,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "рун"
+            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы с мобов и руны из магазина"
+    return None, "За GRAM можно продавать только снаряжение, сферы с мобов, руны и дронов"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -460,7 +562,10 @@ PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "sphe
               "rn_base": [("sph", "r_atk", 2), ("sph", "r_def", 2), ("sph", "r_hp", 2)],
               "rn_pro": [("sph", "r_crit", 2), ("sph", "r_cpow", 2), ("sph", "r_aspd", 2), ("sph", "r_spd", 2)],
               "rn_war": [("sph", "r_war", 2)], "rn_bastion": [("sph", "r_bastion", 2)],
-              "rn_storm": [("sph", "r_storm", 2)], "rn_fortune": [("sph", "r_fortune", 2)]}
+              "rn_storm": [("sph", "r_storm", 2)], "rn_fortune": [("sph", "r_fortune", 2)],
+              # дроны из магазина тоже учитываются сервером — их можно перепродать на маркете
+              "dr_nova": [("sph", "d_nova", 1)], "dr_aegis": [("sph", "d_aegis", 1)],
+              "dr_phantom": [("sph", "d_phantom", 1)], "dr_sol": [("sph", "d_sol", 1)]}
 
 
 async def mint_pack(s, owner, pack):

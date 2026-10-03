@@ -105,5 +105,16 @@ class SphereTest(unittest.TestCase):
         self.assertEqual(notes, [])
 
 
+class MaterialJumps(unittest.TestCase):
+    """Из материалов сервер собирает руны и дронов на продажу — их резкий прирост замечается."""
+    def test_honest_drop_passes(self):
+        old, new = save(inv=[{"id": "chip", "n": 5}]), save(inv=[{"id": "chip", "n": 30}])
+        self.assertEqual([j for j in saveguard.jumps(old["S"], new["S"], 10, {}) if "chip" in j], [])
+
+    def test_forged_materials_flagged(self):
+        old, new = save(inv=[{"id": "chip", "n": 5}]), save(inv=[{"id": "chip", "n": 5000}])
+        self.assertTrue(any("chip" in j for j in saveguard.jumps(old["S"], new["S"], 10, {})))
+
+
 if __name__ == "__main__":
     unittest.main()

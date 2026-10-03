@@ -39,6 +39,9 @@ SPHERES = ("sph_cu", "sph_ti")
 SPH_PRICE_MIN = 150          # самая дешёвая сфера у торговца (медная)
 SPH_BASE = 40                # сферы «из ниоткуда» за одно сохранение: награда VIP (до 30), задания дня, выпадение
 ENCH_SLACK = 3
+MATS = ("wire", "plate", "chip")    # материалы крафта: из них сервер собирает руны и дронов, которые продаются за GRAM
+MAT_BASE = 60                # разовые поступления материалов за одно сохранение
+MAT_PER_SEC = 1.0            # выпадение материалов в секунду с большим запасом
 
 _purchases = {}              # tg_id -> время последней покупки в магазине GRAM
 recent = deque(maxlen=200)   # последние подозрительные сохранения (видны в /metrics)
@@ -66,6 +69,16 @@ def spheres(S):
     for key in ("inv", "store"):
         for x in S.get(key) or []:
             if isinstance(x, dict) and x.get("id") in SPHERES and _num(x.get("n", 0)):
+                n += max(0, int(x.get("n", 0)))
+    return n
+
+
+def mats(S, mid):
+    """Сколько материала лежит в сумке и на складе."""
+    n = 0
+    for key in ("inv", "store"):
+        for x in S.get(key) or []:
+            if isinstance(x, dict) and x.get("id") == mid and _num(x.get("n", 0)):
                 n += max(0, int(x.get("n", 0)))
     return n
 
@@ -127,6 +140,11 @@ def jumps(old, new, dt, granted):
             limit = base + rate * dt + granted.get(k, 0)
             if b - a > limit:
                 out.append(f"{k} +{int(b - a)} за {int(dt)} с (предел {int(limit)})")
+    for mid in MATS:
+        limit = MAT_BASE + MAT_PER_SEC * dt
+        d = mats(new, mid) - mats(old, mid)
+        if d > limit:
+            out.append(f"{mid} +{d} за {int(dt)} с (предел {int(limit)})")
     d_e = max_ench(new) - max_ench(old)
     if d_e > ENCH_JUMP:
         out.append(f"заточка +{d_e} за {int(dt)} с")

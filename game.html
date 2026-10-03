@@ -1592,9 +1592,12 @@ const DRONES = {
 };
 const DRONE_IDS = Object.keys(DRONES);
 const DRONE_STAT = {atk:"атаки", hp:"прочности", def:"брони", crit:"крита", spd:"скорости", xp:"опыта", scrap:"лома"};
-function droneOn(){ const id = S.drone; return id && DRONES[id] && (S.drones || []).includes(id) ? DRONES[id] : null; }
+// дрон — предмет: лежит в сумке или на складе (так его можно продать на маркете), активный выбирается в Персонаже
+const droneOwned = id => !!DRONES[id] && count(S.inv, id) + count(S.store, id) > 0;
+function droneOn(){ if(S.drones) droneMigrate(); const id = S.drone; return id && DRONES[id] && droneOwned(id) ? DRONES[id] : null; }
 const droneBonus = () => { const d = droneOn(); return d ? d.b : {}; };
 const droneBonusText = D => Object.entries(D.b).map(([k, v]) => "+" + (k === "crit" ? v : Math.round(v*100)) + "% " + DRONE_STAT[k]).join(" · ");
+for(const id of DRONE_IDS){ const D = DRONES[id]; ITEMS[id] = {name:"Дрон «" + D.name + "»", type:"drone", sell:0, nosell:true, desc:droneBonusText(D) + " · сбор лута " + D.r}; }
 
 function stat(){
   const C = classParams(), U = S.up || {};
@@ -1644,6 +1647,12 @@ function combatPower(){
 // ---- инвентарь ----
 const count = (list, id) => list.filter(x => x.id === id && ITEMS[id].type !== "gear").reduce((a,x) => a + x.n, 0);
 const have = id => id === "scrap" ? S.scrap : id === "cores" ? S.cores : count(S.inv, id);
+// старые сохранения: дроны лежали списком S.drones — переносим их в сумку (или на склад)
+function droneMigrate(){
+  if(!Array.isArray(S.drones)) return;
+  for(const id of S.drones) if(DRONES[id] && !droneOwned(id)) addItem(S.inv, id, 1, INV_MAX) || addItem(S.store, id, 1, STORE_MAX);
+  delete S.drones;
+}
 function addItem(list, id, n, max, g, e, uid){
   const stackable = ITEMS[id].type !== "gear";
   if(stackable){
@@ -2959,22 +2968,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.stqcancel){ stQty = null; }
   else if(d.stmove !== undefined){ transferItem(+d.stmove, parseInt(($("stQtyNum") || {}).value) || 1); stQty = null; }
   else if(d.sortlist){ sortItems(d.sortlist === "inv" ? S.inv : S.store); stQty = null; bagSel = null; bagMove = null; toast("Предметы отсортированы"); }
-  else if(d.rcraft){
-    const R = RUNES[d.rcraft]; if(!R || R.src !== "craft") return;
-    if(S.level < R.lvl){ toast("Нужен " + R.lvl + " уровень"); return; }
-    if(!Object.entries(R.need).every(([k, n]) => have(k) >= n)){ toast("Не хватает материалов"); return; }
-    if(!addItem(S.inv, d.rcraft, 1, INV_MAX)){ toast("Освободи место в сумке"); return; }
-    for(const [k, n] of Object.entries(R.need)){ if(k === "scrap" || k === "cores") S[k] -= n; else removeItem(S.inv, k, n); }
-    toast("Собрано: " + R.name + ". Вставь её в вещь: Персонаж → вещь → гнездо"); Sfx.play("pick");
-  }
-  else if(d.dcraft){
-    const D = DRONES[d.dcraft]; if(!D || D.src !== "craft") return;
-    if((S.drones || []).includes(d.dcraft)){ toast("Этот дрон уже есть"); return; }
-    if(S.level < D.lvl){ toast("Нужен " + D.lvl + " уровень"); return; }
-    if(!Object.entries(D.need).every(([k, n]) => have(k) >= n)){ toast("Не хватает материалов"); return; }
-    for(const [k, n] of Object.entries(D.need)){ if(k === "scrap" || k === "cores") S[k] -= n; else removeItem(S.inv, k, n); }
-    droneGive(d.dcraft, true); Sfx.play("level");
-  }
+  else if(d.rcraft || d.dcraft){ craftSpecial(d.rcraft || d.dcraft, b); return; }
   else if(d.craft){
     const r = RECIPES.find(r => r.id === d.craft);
     const g = rollGrade(GRADE_ODDS.craft);
@@ -4119,6 +4113,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     try{ await api("/api/state/save", {epoch:serverEpoch, data}); }catch(e){ lastPushed = ""; }
   }
   setInterval(() => push(false), 10000);
+  NET.push = push;                                    // крафт на сервере: сначала отправляем свежее сохранение
   document.addEventListener("visibilitychange", () => { if(document.hidden) push(true); });
 
   // ---- выдачи от администратора ----
@@ -4244,7 +4239,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
 
   // ---- админ-панель ----
   let adm = {kind:"scrap", item:"g_rifle_10", grade:3};
-  const GEAR_OPTS = Object.keys(ITEMS).filter(k => !ITEMS[k].starter);
+  const GEAR_OPTS = Object.keys(ITEMS).filter(k => !ITEMS[k].starter && ITEMS[k].type !== "drone");
   function adminSheet(){
     openSheet("Админ-панель", "Права подтверждены сервером", () => {
       body().innerHTML = `
@@ -5041,7 +5036,7 @@ $("scrChar").addEventListener("click", e => {
   else if(d.rsock){ runeSocketClick(d.rsock); }
   else if(d.rins){ runeInsert(d.rins); }
   else if(d.rclose){ RS.ref = null; }
-  else if(d.dset){ if((S.drones || []).includes(d.dset)){ S.drone = d.dset; Sfx.play("pick"); toast("Дрон «" + DRONES[d.dset].name + "» в деле"); save(); } }
+  else if(d.dset){ if(droneOwned(d.dset)){ S.drone = d.dset; Sfx.play("pick"); toast("Дрон «" + DRONES[d.dset].name + "» в деле"); save(); } }
   else if(d.doff){ S.drone = ""; Sfx.play("ui"); toast("Дрон отправлен в ангар"); save(); }
   else if(d.dshop){ shopTab = "drones"; openShop(); return; }
   else if(d.dcraftgo){ toast("Подойди к Мастерской в ангаре"); return; }
@@ -6097,6 +6092,7 @@ function itemIconURL(id, g){
 function icon(id, g){
   if(!ITEMS[id]) return "";
   if(ITEMS[id].type === "rune") return runeIcon(id);
+  if(ITEMS[id].type === "drone") return droneIconFill(id);
   return `<svg viewBox="0 0 32 32" aria-hidden="true" style="overflow:visible"><image href="${itemIconURL(id, g)}" x="-4" y="-4" width="40" height="40" style="image-rendering:pixelated"/></svg>`;
 }
 
@@ -6987,9 +6983,9 @@ const PACKS = [
   SP("u1", "Набор I", 25, "#7BD58A", [{id:"sph_ti", n:10}, {id:"sph_cu", n:50}, {id:"pot_xp", n:10}], "boost"),
   SP("u2", "Набор II", 40, "#7BD58A", [{id:"sph_ti", n:20}, {id:"sph_cu", n:100}, {id:"pot_xp", n:20}], "boost"),
   SP("u3", "Набор III", 80, "#7BD58A", [{id:"sph_ti", n:45}, {id:"sph_cu", n:200}, {id:"pot_xp", n:40}], "boost"),
-  // дроны: по полной цене, покупаются один раз
+  // дроны: по полной цене; дрон из пака учитывается сервером и перепродаётся на маркете
   ...DRONE_IDS.filter(id => DRONES[id].src === "gram").map(id => { const D = DRONES[id];
-    return {id:"dr_" + id.slice(2), name:"Дрон «" + D.name + "»", base:D.price, price:D.price, tab:"drones", color:D.col, once:"dr_" + id.slice(2), drone:id,
+    return {id:"dr_" + id.slice(2), name:"Дрон «" + D.name + "»", base:D.price, price:D.price, tab:"drones", color:D.col, drone:id,
       rew:[{id:"drone", d:id}], desc:droneBonusText(D) + " · сбор лута " + D.r}; }),
   // руны: по полной цене, можно покупать сколько угодно; сервер учитывает их (items.py → PACK_ITEMS)
   SP("rn_base", "Руны: базовые", 8, "#7BC98A", [{id:"r_atk", n:2}, {id:"r_def", n:2}, {id:"r_hp", n:2}], "runes"),
@@ -7049,7 +7045,7 @@ function renderShop(){
   body().innerHTML = `<div class="seg shop-tabs">${tabs.map(([k, n]) => `<button type="button" data-shtab="${k}" aria-pressed="${shopTab === k}">${n}</button>`).join("")}</div>
     <div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
     ${shopTab === "runes" ? `<p class="hint">Руны из паков учтены сервером: их можно продать на маркете за GRAM, пока они не вставлены в вещь</p>` : shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
-    ${list.map(pk => { const done = (pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")]) || (pk.drone && (S.drones || []).includes(pk.drone)), low = bal < pk.price;
+    ${list.map(pk => { const done = (pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")]) || (pk.drone && droneOwned(pk.drone)), low = bal < pk.price;
       return `<section class="packcard shopcard" style="--c:${pk.color}"><div class="pk-top"><div><b>${pk.name}</b>
         <em>${pk.base !== pk.price ? `<s>${gramF(pk.base)}</s> ` : ""}${gramF(pk.price)} GRAM${pk.base !== pk.price ? ` <span class="sale-tag">−30%</span>` : ""}</em></div>
         <button class="act ${done || low ? "alt" : ""}" type="button" data-pack="${pk.id}" ${done || low ? "disabled" : ""}>${done ? "Куплено" : low ? "Мало" : "Купить"}</button></div>
@@ -7383,6 +7379,7 @@ async function mkBuy(id){
     else { Wl.gram = +(Wl.gram - lot.price).toFixed(4); saveW(); const L = mkLocal(); L.lots = L.lots.filter(l => l.id !== lot.id); L.hist.unshift({kind:"buy", item, price:lot.price, other:"@" + lot.seller, ts:Date.now()}); L.bought = +(L.bought + lot.price).toFixed(4); }
     addItem(S.inv, item.id, item.n || 1, INV_MAX, item.g, item.e, item.uid) || addItem(S.store, item.id, item.n || 1, STORE_MAX, item.g, item.e, item.uid);
     if(item.reg && typeof regAddSph === "function") regAddSph(item.id, item.n || 1);
+    if(DRONES[item.id] && !droneOn()) S.drone = item.id;
     save(); toast("Куплено: " + mkItemName(item)); Sfx.play("pick");
   }catch(e){ toast(e.message); }
   await mkLoad(); renderMarket();
@@ -7402,10 +7399,11 @@ async function mkCancel(id){
 function finishPack(pk, before){
   if(pk.once) S.bought[pk.once + (pk.once === "season" ? seasonId() : "")] = true;
   const minted = pk._minted || []; pk._minted = null;
-  giveShop(pk.rew.filter(r => !minted.some(m => m.id === r.id)));        // вещи с сервера выдаются ниже, с номерами
+  giveShop(pk.rew.filter(r => !minted.some(m => m.id === r.id || m.id === r.d)));        // вещи с сервера выдаются ниже, с номерами
   for(const m of minted){
     if(m.uid) addItem(S.inv, m.id, 1, INV_MAX, m.g, m.e, m.uid) || addItem(S.store, m.id, 1, STORE_MAX, m.g, m.e, m.uid);
     else { addItem(S.inv, m.id, m.n, INV_MAX) || addItem(S.store, m.id, m.n, STORE_MAX); if(m.reg && typeof regAddSph === "function") regAddSph(m.id, m.n); }
+    if(DRONES[m.id]) droneGive(m.id, true, true);
   }
   save(); toast("Куплено: " + pk.name); Sfx.play("level");
   if(pk.id === "season" && typeof sptLoad === "function") sptLoad();
@@ -9000,8 +8998,8 @@ function drawCrimsonWarden(x, y, t, atk){
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
 const REG = {on:false, sph:{sph_cu:0, sph_ti:0}, uids:new Set()};
-// учтённые сервером расходники: сферы и руны (их можно продать за GRAM). Сервер — items.py → REG_IDS
-const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS];
+// учтённые сервером расходники: сферы, руны и дроны (их можно продать за GRAM). Сервер — items.py → REG_IDS
+const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS, ...DRONE_IDS];
 const regOnline = () => typeof NET !== "undefined" && NET.on && NET.id && NET.ws && NET.ws.readyState === 1;
 const regApi = (op, body) => NET.api("/api/items/" + op, body || {});
 
@@ -9048,7 +9046,7 @@ function regAddSph(id, n){ REG.sph[id] = Math.max(0, (REG.sph[id] || 0) + n); }
 function regClampSph(){
   if(!REG.on) return;
   for(const id of REG_IDS){
-    const extra = (REG.sph[id] || 0) - have(id);
+    const extra = (REG.sph[id] || 0) - (count(S.inv, id) + count(S.store, id));
     if(extra > 0){ REG.sph[id] -= extra; regApi("gone", {sph:{[id]:extra}}); }
   }
 }
@@ -10198,6 +10196,49 @@ const Music = (() => {
   document.addEventListener("visibilitychange", () => { if(!ac) return; if(document.hidden) ac.suspend(); else if(S.settings.music) ac.resume(); });
   return {apply, start};
 })();
+// ===================== КРАФТ РУН И ДРОНОВ НА СЕРВЕРЕ =====================
+// В игре через бота руны и дроны собирает сервер: он проверяет лом, ядра и материалы в последнем сохранении,
+// списывает их там и учитывает собранную вещь — поэтому её можно продать на маркете за GRAM.
+// Без связи с сервером (превью) крафт идёт на телефоне, как раньше, и вещь получается привязанной.
+let craftBusy = false;
+function craftNeedOk(def){
+  if(S.level < def.lvl){ toast("Нужен " + def.lvl + " уровень"); return false; }
+  if(!Object.entries(def.need).every(([k, n]) => have(k) >= n)){ toast("Не хватает материалов"); return false; }
+  return true;
+}
+function craftApply(id, def){
+  for(const [k, n] of Object.entries(def.need)){ if(k === "scrap" || k === "cores") S[k] -= n; else removeItem(S.inv, k, n); }
+}
+async function craftSpecial(id, btn){
+  const R = RUNES[id], D = DRONES[id], def = R || D;
+  if(!def || def.src !== "craft" || craftBusy) return;
+  if(D && droneOwned(id)){ toast("Этот дрон уже есть"); return; }
+  if(!craftNeedOk(def)) return;
+  // руна ляжет в сумку стопкой: место нужно, только если таких ещё нет
+  if(!count(S.inv, id) && S.inv.length >= INV_MAX){ toast("Освободи место в сумке"); return; }
+  const online = typeof REG !== "undefined" && REG.on && regOnline();
+  if(!online){
+    craftApply(id, def); addItem(S.inv, id, 1, INV_MAX);
+    if(D) droneGive(id, true, true); else toast("Собрано: " + R.name + ". Вставь её в вещь: Персонаж → вещь → гнездо");
+    Sfx.play(D ? "level" : "pick"); save(); if(sheetRender) sheetRender(); return;
+  }
+  craftBusy = true; if(btn){ btn.disabled = true; btn.textContent = "…"; }
+  try{
+    if(NET.push) await NET.push(true);                // сервер должен видеть те же ресурсы, что и телефон
+    const r = await regApi("craft", {id});
+    if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
+    craftApply(id, def); addItem(S.inv, id, 1, INV_MAX); regAddSph(id, 1);
+    if(D) droneGive(id, true, true); else toast("Собрано: " + R.name + ". Можно вставить в вещь или продать на маркете");
+    Sfx.play(D ? "level" : "pick"); save();
+  }catch(e){ toast("Сервер не ответил, попробуй ещё раз"); }
+  finally{ craftBusy = false; if(sheetRender) sheetRender(); }
+}
+// иконка дрона в ячейке сумки
+function droneIconFill(id){
+  const key = id + "|fill"; if(droneIconCache.has(key)) return droneIconCache.get(key);
+  const html = `<img src="${droneSprite(id, 1, 4).toDataURL()}" alt="" style="width:88%;height:auto;margin:auto;display:block;image-rendering:pixelated">`;
+  droneIconCache.set(key, html); return html;
+}
 // ===================== РУНЫ: ИКОНКИ, ГНЁЗДА, КРАФТ =====================
 // иконка: шестигранный камень цвета руны с символом
 const RUNE_GLYPH = {
@@ -10268,13 +10309,12 @@ function runeCraftHtml(){
     h += `<div class="li"><div class="ic">${runeIcon(id)}</div><div class="tx"><span style="color:${R.col}">${R.name}${have(id) ? " · есть " + have(id) : ""}</span><small>${runeText(R)} · с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-rcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + R.lvl}</button></div>`;
   }
-  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM</p>`;
+  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM. Собранные руны и дроны можно продать на маркете</p>`;
 }
 // ===================== ДРОНЫ-КОМПАНЬОНЫ: ПОЛЁТ, СБОР ЛУТА, ОТРИСОВКА, ОКНА =====================
-function droneGive(id, announce){
+function droneGive(id, announce, given){
   const D = DRONES[id]; if(!D) return;
-  S.drones = S.drones || [];
-  if(!S.drones.includes(id)) S.drones.push(id);
+  if(!given && !addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)){ toast("Нет места для дрона: освободи сумку или склад"); return; }
   if(!droneOn()) S.drone = id;                      // первый дрон сразу вылетает
   if(announce) toast("Новый дрон: «" + D.name + "»" + (S.drone === id ? " — уже летает рядом" : ". Выпусти его во вкладке Персонаж → Дрон"));
   save();
@@ -10386,17 +10426,17 @@ function drawOtherDrone(o, t, dt){
 
 // ---- вкладка «Дрон» в Персонаже ----
 function droneCard(id){
-  const D = DRONES[id], own = (S.drones || []).includes(id), on = S.drone === id && own, gc = GRADES[D.g].color;
+  const D = DRONES[id], own = droneOwned(id), on = S.drone === id && own, gc = GRADES[D.g].color;
   const how = D.src === "craft" ? `Мастерская · с ${D.lvl} ур.` : `Магазин GRAM · ${gramF(D.price)} GRAM`;
   const btn = on ? `<button class="act alt" type="button" data-doff="1">Убрать</button>`
     : own ? `<button class="act" type="button" data-dset="${id}">Выпустить</button>`
     : D.src === "gram" ? `<button class="act alt" type="button" data-dshop="1">В магазин</button>`
     : `<button class="act alt" type="button" data-dcraftgo="1">Собрать</button>`;
   return `<div class="li" style="${on ? "border-color:" + gc : ""}"><div class="ic" style="border-color:${gc};${own ? "" : "opacity:.45"}">${droneIcon(id, 34)}</div>
-    <div class="tx"><span style="color:${gc}">${D.name}${on ? " · летает" : own ? "" : " 🔒"}</span><small>${droneBonusText(D)} · сбор лута ${D.r}</small><small>${own ? "Есть в ангаре" : how}</small></div>${btn}</div>`;
+    <div class="tx"><span style="color:${gc}">${D.name}${on ? " · летает" : own ? "" : " 🔒"}</span><small>${droneBonusText(D)} · сбор лута ${D.r}</small><small>${own ? "Есть · лежит в сумке или на складе" : how}</small></div>${btn}</div>`;
 }
 function dronesView(){
-  const D = droneOn(), own = (S.drones || []).length;
+  const D = droneOn(), own = DRONE_IDS.filter(droneOwned).length;
   let h = `<section class="pcard"><div class="cdetail"><div class="ic" style="width:64px;height:56px;display:flex;align-items:center;justify-content:center;border-color:${D ? GRADES[D.g].color : "var(--line)"}">${D ? droneIcon(S.drone, 52) : `<i class="empty-ic"></i>`}</div>
     <div class="tx"><span>${D ? "Дрон «" + D.name + "»" : "Дрон не выбран"}</span><small>${D ? droneBonusText(D) + " · подбирает лут в радиусе " + D.r : "Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут"}</small><small>Дронов в ангаре: ${own} из ${DRONE_IDS.length}</small></div></div></section>`;
   h += `<section class="pcard"><h3 class="bag-h">Собираются в Мастерской</h3><div class="list">${DRONE_IDS.filter(id => DRONES[id].src === "craft").map(droneCard).join("")}</div></section>`;
@@ -10408,7 +10448,7 @@ function droneCraftHtml(){
   let h = `<h3 class="bag-h">Дроны</h3><div class="list">`;
   for(const id of DRONE_IDS){
     const D = DRONES[id]; if(D.src !== "craft") continue;
-    const own = (S.drones || []).includes(id), lvlOk = S.level >= D.lvl, gc = GRADES[D.g].color;
+    const own = droneOwned(id), lvlOk = S.level >= D.lvl, gc = GRADES[D.g].color;
     const parts = Object.entries(D.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = !own && lvlOk && Object.entries(D.need).every(([k, n]) => have(k) >= n);
