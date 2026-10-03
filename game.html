@@ -7155,6 +7155,8 @@ $("shBody").addEventListener("click", e => {
   else if(d.shop === "topup"){ if(G.on) depositSheet(); else { closeSheet(); showTab("profile"); } }
   else if(d.shop === "open") openShop();
   else if(d.ss){ const [key, lv] = d.ss.split(":"), s = seasonState(), i = +lv; if(!s[key].includes(i) && Math.floor(s.xp/SEASON_XP) >= i){ s[key].push(i); giveReward(seasonReward(i, key === "prem")); toast("Награда сезона получена"); Sfx.play("pick"); openSeason(); } }
+  else if(d.ev === "boss" && typeof openWorldBoss === "function") openWorldBoss();
+  else if(d.ev === "tower" && typeof openTower === "function") openTower();
   else if(d.ev) openEvent(d.ev);
   else if(d.evback) openEvents();
   else if(d.evgo){ closeSheet(); showTab("game"); travel("arena_fear"); }
@@ -8461,7 +8463,7 @@ function renderWB(){
 function openWorldBoss(){ openSheet("Мировой босс", "Владыка Ржавчины", renderWB); if(typeof NET !== "undefined" && NET.api) NET.api("/api/wboss", {}).then(r => { if(r && r.ok){ WB.st = r; if(sheetRender === renderWB) renderWB(); } }).catch(() => {}); }
 {
   const _evWB = openEvents;
-  openEvents = function(){ _evWB(); body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-wbopen="1"><b>👑 Мировой босс</b><small>${WB.st && WB.st.active ? "Сейчас в ангаре — бей!" : "Пн, ср, пт, вс · 20:00 МСК"}</small></button>`); };
+  openEvents = function(){ _evWB(); if(WB.st && WB.st.active) body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-wbopen="1"><b>👑 Мировой босс сейчас в ангаре</b><small>Нажми, чтобы присоединиться</small></button>`); };
   document.getElementById("shBody").addEventListener("click", e => {
     const b = e.target.closest("button"); if(!b) return;
     if(b.dataset.wbopen){ openWorldBoss(); }
@@ -8603,7 +8605,7 @@ function openTower(){ openSheet("Кровавая башня", "Забег че�
   clearInterval(TW.tm); TW.tm = setInterval(() => { if(sheetRender !== renderTW){ clearInterval(TW.tm); return; } renderTW(); }, 1000); }
 {
   const _evTW = openEvents;
-  openEvents = function(){ _evTW(); body().insertAdjacentHTML("afterbegin", `<button class="wb-card tw-card" type="button" data-twopen="1"><b>🩸 Кровавая башня</b><small>Забег через коридоры монстров · ежедневно в 20:30 МСК</small></button>`); };
+  openEvents = function(){ _evTW(); if(TW.st && TW.st.phase === "reg") body().insertAdjacentHTML("afterbegin", `<button class="wb-card tw-card" type="button" data-twopen="1"><b>🩸 Кровавая башня: идёт запись!</b><small>Нажми, чтобы записаться</small></button>`); };
   document.getElementById("shBody").addEventListener("click", e => {
     const b = e.target.closest("button"); if(!b) return;
     if(b.dataset.twopen) openTower();
