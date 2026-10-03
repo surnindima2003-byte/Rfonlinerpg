@@ -231,6 +231,17 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .qs-ok{margin-top:8px;color:#7BC98A;font-size:13px;font-weight:600}
 .qs-card.sp.done{opacity:.75}
 .upseg{margin:8px 12px 0}
+.wb-bar{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--hb, 120px) + 8px);width:min(300px,70vw);z-index:6;text-align:center;pointer-events:none}
+.wb-bar[hidden]{display:none}.wb-bar b{font:12px 'Russo One',sans-serif;color:#FF8A7A;text-shadow:0 1px 2px #000}
+.wb-hp{position:relative;height:16px;border-radius:8px;background:rgba(40,10,10,.85);border:1px solid #7A2A22;overflow:hidden;margin-top:2px}
+.wb-hp i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#B8261C,#FF5A3A)}.wb-hp span{position:relative;font:10px/16px 'Russo One',sans-serif;color:#fff;text-shadow:0 1px 2px #000}
+.wb-top{text-align:center;padding:10px 0 4px;display:flex;flex-direction:column;align-items:center;gap:4px}.wb-top b{font:30px 'Russo One',sans-serif;color:#F2C88A}
+.wb-top small{color:var(--muted)}.wb-top em{font-style:normal;color:#9FD06A;font-weight:600}.wb-top .wb-live{font-size:20px;color:#FF6A5A}
+.wb-drop{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-bottom:5px;background:var(--panel-2)}
+.wb-drop span{display:flex;align-items:center;gap:10px;font-size:13px}.wb-drop svg{width:26px;height:26px}.wb-drop b{font:14px 'Russo One',sans-serif;color:#F2C14B}
+.wb-gift{font-style:normal;font-size:20px;width:26px;text-align:center}
+.wb-card{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:1px solid #B9862E;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:linear-gradient(180deg,rgba(242,193,75,.18),var(--panel-2));color:var(--text)}
+.wb-card b{color:#F2C14B;font-size:14px}.wb-card small{color:var(--muted)}
 .h2-tk{font-size:12px;filter:drop-shadow(0 0 4px rgba(242,193,75,.8))}.h2-tk[hidden]{display:none}
 .up-new{font-style:normal;background:#3FA35A;color:#fff;border-radius:4px;padding:0 4px;font-size:9px;vertical-align:1px}
 .spt-head{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px}.spt-head>div{border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--panel-2)}
@@ -8353,6 +8364,130 @@ setInterval(() => { const el = $("hTk"); if(el && typeof ticketActive === "funct
 {
   const _sendPos = typeof sendPos === "function" ? sendPos : null;
   setInterval(() => { if(typeof NET !== "undefined") NET.stealth = p && p.stealthT > now ? 1 : 0; }, 200);
+}
+// ===================== МИРОВОЙ БОСС «ВЛАДЫКА РЖАВЧИНЫ» =====================
+// Пн, ср, пт, вс в 20:00 МСК в Центральном ангаре. Прочность общая (считает сервер), удары по площади
+// подсвечиваются красным кругом, после победы добыча падает на пол для всех.
+const WB = {st:null, aoe:[], loot:new Map(), hitT:0, lastPick:0};
+const wbOn = () => WB.st && WB.st.active && locKey === "lobby";
+const WB_DROP = [["cores", "Энергоядра", 10], ["pot_hp", "Зелье прочности", 5], ["pot_xp", "Зелье опыта", 5], ["pot_atk", "Зелье силы", 5],
+  ["kit_l", "Большой ремкомплект", 5], ["garmor", "Случайная зелёная броня", 1], ["gweapon", "Случайное зелёное оружие", 1],
+  ["gany", "Случайные предметы", 5], ["sph_ti", "Титановая сфера (безопасная)", 2], ["sph_cu", "Медная сфера (обычная)", 5]];
+function wbSend(o){ if(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify(o)); }
+// удары по боссу: обычные атаки (огонь/АВТО) и атакующие умения рядом с боссом
+function wbHit(mult){
+  if(!wbOn() || !p || p.dead) return false;
+  const st = stat(), d = Math.hypot(p.x - WB.st.x, p.y - WB.st.y);
+  if(d > classParams().range + st.range + 130) return false;
+  const crit = Math.random()*100 < st.crit, dmg = Math.round(st.atk*(1 + buffV("atk"))*(mult || 1)*(crit ? st.critPow : 1));
+  wbSend({t:"wbhit", dmg});
+  p.aim = p.ang = Math.atan2(WB.st.y - 40 - p.y, WB.st.x - p.x); p.atkT = 0.25;
+  if(classParams().melee) CB.fx.push({type:"slash", x:WB.st.x - 20, y:WB.st.y - 50, a:p.aim, life:.2, max:.2, c:classParams().color || "#fff"});
+  else beams.push({x1:p.x, y1:p.y - 26, x2:WB.st.x + Math.random()*40 - 20, y2:WB.st.y - 60 + Math.random()*30, life:0.12});
+  addText(WB.st.x + Math.random()*60 - 30, WB.st.y - 120, (crit ? "КРИТ " : "") + dmg, crit ? "#F2C14B" : "#FF8A6A");
+  Sfx.play(crit ? "crit" : "shot"); return true;
+}
+setInterval(() => {
+  if(!wbOn() || !p || p.dead || paused || !(firing || auto)) return;
+  if(performance.now() < WB.hitT) return;
+  if(wbHit(1)) WB.hitT = performance.now() + 1000/classParams().rate/(stat().rate || 1);
+}, 100);
+setInterval(() => {      // подбор и без нажатия «Огонь»: просто подъедь к предмету
+  if(locKey !== "lobby" || !WB.loot.size || !p || p.dead || performance.now() - WB.lastPick < 250) return;
+  for(const it of WB.loot.values()) if(Math.hypot(it.x - p.x, it.y - p.y) < 60){ WB.lastPick = performance.now(); wbSend({t:"wbpick", id:it.id}); break; }
+}, 150);
+{
+  const _useWB = useSkill;
+  useSkill = function(i){
+    if(wbOn()){ const C = clsOf(S.cls); if(C && !(CB.cd[i] > 0)){ const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+      if(s.mult && wbHit(s.mult*(1 + stat().skillDmg))){ CB.cd[i] = s.cd*(1 - stat().cdr); Sfx.play("crit"); return; } } }
+    return _useWB(i);
+  };
+}
+function wbGive(it){
+  const g = it.g || 0;
+  if(it.kind === "cores"){ S.cores += it.n; addText(p.x, p.y - 40, "+" + it.n + " ядро", "#E0694A"); }
+  else if(it.kind === "garmor" || it.kind === "gweapon" || it.kind === "gany"){
+    const pool = GEAR_IDS.filter(id => (it.kind === "gweapon" ? ITEMS[id].slot === "weapon" && (!ITEMS[id].cls || ITEMS[id].cls === S.cls) : it.kind === "garmor" ? ITEMS[id].slot !== "weapon" : true) && ITEMS[id].tier <= Math.max(2, Math.ceil((S.level || 1)/5)));
+    const id = pool[Math.floor(Math.random()*pool.length)];
+    if(id){ addItem(S.inv, id, 1, INV_MAX, it.kind === "gany" ? 0 : Math.max(1, g)) || addItem(S.store, id, 1, STORE_MAX, g); addText(p.x, p.y - 40, ITEMS[id].name, "#7BD58A"); }
+  } else { addItem(S.inv, it.kind, it.n, INV_MAX) || addItem(S.store, it.kind, it.n, STORE_MAX); addText(p.x, p.y - 40, "+" + ITEMS[it.kind].name, "#7BD58A"); }
+  Sfx.play("pick"); save();
+}
+// ---- отрисовка в ангаре ----
+{
+  const _ovWB = drawLobbyOverlay;
+  drawLobbyOverlay = function(t, dt){
+    _ovWB(t, dt);
+    // добыча на полу
+    for(const it of WB.loot.values()){ const bob = Math.sin(t*3 + +it.id)*2;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(242,193,75,.25)"; circle(it.x, it.y, 13); ctx.fill(); ctx.restore();
+      const ic = it.kind === "cores" ? "#E0694A" : it.kind.startsWith("g") ? "#7BD58A" : it.kind.startsWith("sph") ? "#8FD8F0" : "#F2C14B";
+      ctx.fillStyle = "#1B232C"; rr(it.x - 7, it.y - 9 + bob, 14, 14, 3); ctx.fill(); ctx.fillStyle = ic; rr(it.x - 5, it.y - 7 + bob, 10, 10, 2); ctx.fill(); }
+    // круги ударов босса
+    WB.aoe = WB.aoe.filter(a => now < a.at + 0.35);
+    for(const a of WB.aoe){ const k = Math.min(1, 1 - (a.at - now)/a.dur);
+      ctx.save(); ctx.fillStyle = `rgba(224,70,58,${now >= a.at ? .45 : .12 + k*.18})`; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r, a.r*.55, 0, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = "#FF4A3A"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r*k, a.r*.55*k, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+      if(!a.done && now >= a.at){ a.done = true; if(p && !p.dead && Math.hypot((p.x - a.x)/a.r, (p.y - a.y)/(a.r*.55)) < 1){ const st = stat(); p.inv = 0; hurtPlayer(Math.round(st.maxhp*0.18 + 40), "Владыка Ржавчины"); } } }
+    if(!wbOn()) return;
+    const B = WB.st, bx = B.x, by = B.y, pulse = (Math.sin(t*3) + 1)/2;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(bx, by - 40, 10, bx, by - 40, 190); g.addColorStop(0, `rgba(255,60,40,${.35 + pulse*.15})`); g.addColorStop(1, "rgba(255,60,40,0)");
+    ctx.fillStyle = g; ctx.fillRect(bx - 190, by - 230, 380, 380); ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(bx, by + 6, 80, 22, 0, 0, Math.PI*2); ctx.fill();
+    drawMech(ctx, bx, by, {cls:"guard", fac:"core", eq:{head:3, armor:3, weapon:3, legs:3, module:3, core:3}, aim:Math.atan2(p.y - by, p.x - bx), moving:false, t, ps:4.2, atk:(t % 2.2) < .3 ? 1 : 0});
+    ctx.save(); ctx.globalCompositeOperation = "source-atop"; ctx.restore();
+    const w = 150, k = Math.max(0, B.hp/B.max);
+    label("⚠ БОСС · " + B.name, bx, by - 200, "#FF6A5A");
+    ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(bx - w/2 - 2, by - 190, w + 4, 10); ctx.fillStyle = "#3A1414"; ctx.fillRect(bx - w/2, by - 188, w, 6);
+    ctx.fillStyle = "#E0463A"; ctx.fillRect(bx - w/2, by - 188, w*k, 6);
+  };
+}
+// полоса прочности босса вверху экрана
+const wbBar = document.createElement("div"); wbBar.className = "wb-bar"; wbBar.hidden = true;
+wbBar.innerHTML = `<b>Владыка Ржавчины</b><div class="wb-hp"><i></i><span></span></div>`;
+document.getElementById("scrGame").append(wbBar);
+setInterval(() => {
+  const on = wbOn(); if(wbBar.hidden === on) wbBar.hidden = !on; if(!on) return;
+  const B = WB.st, k = B.hp/B.max;
+  wbBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
+  wbBar.querySelector("span").textContent = B.hp.toLocaleString("ru-RU") + " / " + B.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%";
+}, 250);
+// ---- окно «Мировой босс» (в Событиях) ----
+const WB_DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+function wbNext(){ if(WB.st) return WB.st.next;
+  const n = Date.now(); for(let a = 0; a < 8; a++){ const d = new Date(n + a*864e5 + 3*3600e3); d.setUTCHours(17, 0, 0, 0);
+    const msk = new Date(d.getTime() + 3*3600e3).getUTCDay(); if([1, 3, 5, 0].includes(msk) && d.getTime() + 1800e3 > n) return d.getTime(); } return n; }
+function renderWB(){
+  const on = WB.st && WB.st.active, nx = wbNext(), left = Math.max(0, nx - Date.now()), dd = Math.floor(left/864e5), hh = Math.floor(left%864e5/36e5), mm = Math.floor(left%36e5/6e4);
+  const day = WB_DAYS[new Date(nx + 3*3600e3).getUTCDay()];
+  body().innerHTML = `<div class="wb-top">${on ? `<b class="wb-live">⚔ Босс в ангаре!</b><small>${WB.st.hp.toLocaleString("ru-RU")} / ${WB.st.max.toLocaleString("ru-RU")}</small>
+      <button class="act" type="button" data-wbgo="1">В ангар</button>` : `<b>${dd ? dd + "д " : ""}${hh}ч ${mm}м</b><small>До следующего босса</small><em>${day}, 20:00 МСК</em>`}</div>
+    <p class="hint"><b>Расписание:</b> понедельник, среда, пятница, воскресенье — в 20:00 по Москве.<br>Появляется в Центральном ангаре — драться может каждый, обычными ударами и умениями.<br>Босс бьёт по площади: красный круг под ногами — успей отойти.<br>Добыча падает на пол для всех: кто успел, тот забрал.</p>
+    <div class="spt-sec"><b>Полный дроп с одного убийства:</b></div>
+    ${WB_DROP.map(([id, n, c]) => `<div class="wb-drop"><span>${ITEMS[id] ? icon(id) : `<i class="wb-gift">🎁</i>`}${n}</span><b>×${c}</b></div>`).join("")}
+    ${window.NET_ADMIN && !on ? `<button class="act alt" type="button" data-wbstart="1" style="margin-top:8px">Админ: вызвать босса сейчас</button>` : ""}`;
+}
+function openWorldBoss(){ openSheet("Мировой босс", "Владыка Ржавчины", renderWB); if(typeof NET !== "undefined" && NET.api) NET.api("/api/wboss", {}).then(r => { if(r && r.ok){ WB.st = r; if(sheetRender === renderWB) renderWB(); } }).catch(() => {}); }
+{
+  const _evWB = openEvents;
+  openEvents = function(){ _evWB(); body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-wbopen="1"><b>👑 Мировой босс</b><small>${WB.st && WB.st.active ? "Сейчас в ангаре — бей!" : "Пн, ср, пт, вс · 20:00 МСК"}</small></button>`); };
+  document.getElementById("shBody").addEventListener("click", e => {
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.dataset.wbopen){ openWorldBoss(); }
+    else if(b.dataset.wbgo){ closeSheet(); if(locKey !== "lobby") travel("lobby"); }
+    else if(b.dataset.wbstart){ NET.api("/api/wboss", {start:1}).then(r => { if(r && r.ok){ WB.st = r; renderWB(); } }); }
+  });
+  const prevWB = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "wb"){ WB.st = d; if(sheetRender === renderWB) renderWB(); if(!d.active) WB.aoe = []; return; }
+    if(d.t === "wbaoe"){ WB.aoe.push({x:d.x, y:d.y, r:d.r, at:now + d.in, dur:d.in}); return; }
+    if(d.t === "wbloot"){ WB.loot = new Map((d.items || []).map(it => [it.id, it])); return; }
+    if(d.t === "wbrm"){ WB.loot.delete(String(d.id)); return; }
+    if(d.t === "wbgot"){ WB.loot.delete(String(d.id)); wbGive(d); return; }
+    prevWB(d);
+  };
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.

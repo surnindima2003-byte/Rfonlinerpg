@@ -35,6 +35,7 @@ import special_quests
 import saveguard
 import mobworld
 import seasonpts
+import worldboss
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -1321,7 +1322,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick"}
 
 
 async def ws_handler(request):
@@ -1403,6 +1404,10 @@ async def ws_handler(request):
                 if info["loc"] != old_loc:
                     hub.moved(conn, old_loc)
                     conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
+                    if info["loc"] == worldboss.LOC:
+                        conn.push(realtime.encode(worldboss.view()))
+                        if worldboss.st["loot"]:
+                            conn.push(realtime.encode({"t": "wbloot", "items": list(worldboss.st["loot"].values())}))
                 if info.pop("pos_fix", False) and time.time() - info.get("fix_t", 0) > 1:
                     info["fix_t"] = time.time()                      # вернуть телефон на последнюю честную точку
                     conn.push(realtime.encode({"t": "pos_fix", "x": info["x"], "y": info["y"]}))
@@ -1424,6 +1429,10 @@ async def ws_handler(request):
                     hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
             elif t == "mhit":
                 mobworld.on_hits(info, d, hub)
+            elif t == "wbhit":
+                await worldboss.on_hit(info, d, hub, seasonpts)
+            elif t == "wbpick":
+                worldboss.on_pick(info, d, hub)
             elif t == "mpos":
                 mobworld.on_pos(info, d)
             elif t == "mctl":
@@ -1519,6 +1528,7 @@ async def world_loop():
                 for pid in list(parties):
                     await send_party(pid)
             mobworld.tick(hub)                              # общие мобы: прочность, смерть, возрождение
+            worldboss.tick(hub)                             # мировой босс: расписание, удары по площади
             world_tick(keepalive=tick % WORLD_HZ == 0,      # раз в секунду шлём даже без изменений
                        full_tick=tick % (WORLD_HZ * 10) == 0)   # дельта-клиентам — полный снимок раз в 10 с
         except Exception:
@@ -1589,6 +1599,14 @@ async def start_web(port: int):
     stats.setup(app)
     special_quests.setup(app, read_auth, push_to_player, grant_dict)
     seasonpts.setup(app, read_auth, push_to_player)
+    async def api_wboss(request):
+        """Состояние мирового босса; админ может вызвать его вне расписания (?start=1) для проверки."""
+        body, user = await read_auth(request)
+        if body.get("start") and user["admin"] and not worldboss.st["active"]:
+            worldboss.start(manual=True)
+            hub.to_all({"t": "pinfo", "text": f"⚠ Мировой босс «{worldboss.NAME}» появился в Центральном ангаре!"})
+        return web.json_response({"ok": True, **worldboss.view()})
+    app.router.add_post("/api/wboss", api_wboss)
     seasonpts.setup_rating(app, read_auth, push_to_player)
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)
