@@ -7739,19 +7739,22 @@ renderTargetFrame = function(){
 // четыре улицы, мшистые сквера с энергосветлячками, фонари, дома с горящими окнами,
 // рынок торговца, склад и кузница. Статичная часть рисуется один раз в куски по 400 px.
 const TOWN = {W:1600, H:1600, cx:800, cy:800, R:300, chunks:new Map(), flies:[], sparks:[]};
-const TWN_NPC = [{kind:"trader", x:575, y:575}, {kind:"storage", x:1025, y:575}, {kind:"craft", x:575, y:1025}, {kind:"portal", x:1030, y:1030}];
+const TWN_NPC = [{kind:"storage", x:800, y:535}, {kind:"craft", x:1065, y:800}, {kind:"trader", x:535, y:800}, {kind:"portal", x:800, y:1075}];
 // дома: x, y, w, h, цвет крыши, окна
 const TWN_HOUSES = [
   [90, 120, 220, 150, "#3A2E3E"], [360, 90, 180, 130, "#2E3A48"], [1060, 90, 190, 130, "#3A2E3E"], [1300, 130, 210, 150, "#2E3A48"],
   [90, 1330, 210, 160, "#2E3A48"], [1290, 1320, 220, 170, "#3A2E3E"], [1080, 1380, 170, 120, "#2E3A48"], [360, 1390, 170, 110, "#3A2E3E"],
   [90, 360, 150, 140, "#2E3A48"], [1360, 380, 150, 130, "#3A2E3E"], [90, 1090, 150, 140, "#3A2E3E"], [1360, 1080, 150, 140, "#2E3A48"]
 ];
-const TWN_SHOPS = {trader:[400, 330, 230, 150], storage:[970, 330, 230, 150], craft:[400, 1120, 230, 150]};
-const TWN_TREES = [[250, 560], [170, 650], [300, 700], [660, 250], [560, 180], [1360, 640], [1260, 560], [1430, 720], [940, 230], [1050, 250],
-  [230, 960], [330, 880], [1300, 900], [1420, 980], [1250, 1250], [660, 1350], [950, 1350], [560, 1440]];
+const TWN_SHOPS = {storage:[685, 330, 230, 150], craft:[1130, 725, 230, 150], trader:[240, 725, 230, 150]};
+const TWN_TREES = [[250, 560], [170, 640], [320, 630], [620, 250], [560, 180], [1360, 640], [1260, 560], [1470, 650], [990, 230], [1050, 280],
+  [230, 960], [330, 980], [1300, 980], [1420, 980], [1250, 1250], [660, 1350], [950, 1350], [560, 1440]];
 const TWN_LAMPS = [];
 for(let k = 160; k <= 1440; k += 160){ if(Math.abs(k - 800) > 320){ TWN_LAMPS.push([720, k], [880, k], [k, 720], [k, 880]); } }
 for(let i = 0; i < 8; i++){ const a = i*Math.PI/4 + Math.PI/8; TWN_LAMPS.push([800 + Math.cos(a)*(TOWN.R + 22), 800 + Math.sin(a)*(TOWN.R + 22)]); }
+// фонари не должны стоять внутри зданий лавок
+for(let i = TWN_LAMPS.length - 1; i >= 0; i--){ const [lx, ly] = TWN_LAMPS[i];
+  if(Object.values(TWN_SHOPS).some(([x, y, w, h]) => lx > x - 12 && lx < x + w + 12 && ly > y - 12 && ly < y + h + 40)) TWN_LAMPS.splice(i, 1); }
 
 function twnStreet(x, y){ return (Math.abs(x - 800) < 80 || Math.abs(y - 800) < 80); }
 function twnPlaza(x, y){ return Math.hypot(x - 800, y - 800) < TOWN.R; }
@@ -7786,7 +7789,7 @@ function twnChunk(ix, iy){
   g.strokeStyle = "#0B1015"; g.lineWidth = 6; g.beginPath(); g.arc(800, 800, TOWN.R + 4, 0, Math.PI*2); g.stroke();
   // дорожки к лавкам от площади
   g.strokeStyle = "#20272F"; g.lineCap = "round"; g.lineWidth = 46;
-  for(const [k, [x, y, w, h]] of Object.entries(TWN_SHOPS)){ const n = TWN_NPC.find(q => q.kind === k); g.beginPath(); g.moveTo(n.x, n.y); g.lineTo(x + w/2, n.y < y ? y + 40 : y + h); g.stroke(); }
+  for(const [k, [x, y, w, h]] of Object.entries(TWN_SHOPS)){ const n = TWN_NPC.find(q => q.kind === k); g.beginPath(); g.moveTo(n.x, n.y); g.lineTo(x + w/2, y + h/2); g.stroke(); }
   // дома
   for(const [x, y, w, h, roof] of TWN_HOUSES) twnHouse(g, x, y, w, h, roof, rnd);
   // здания лавок
@@ -8270,6 +8273,51 @@ function ncSkill(i, s){
     if(NC.grav){ const g = NC.grav, k = 1 - Math.max(0, g.at - now)/0.6; ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t*60;
       ctx.beginPath(); ctx.arc(g.x, g.y, g.r*(1 - k*0.6), 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
   };
+}
+// ===================== НОВЫЙ ВИД ЛОКАЦИЙ: АТМОСФЕРА =====================
+// У каждой локации своё настроение: цветной свет поверх мира и живые частицы.
+//   Нижние цеха (1 ур.) — тёплый свет ламп и тлеющие искры; Глубинные цеха (20 ур.) — холодный неон и пар криокамер;
+//   Ржавые поля — пыльная буря; Руины реактора — зелёные радиоактивные огоньки; Железный каньон — ветер с песком и угли.
+const AMB = {
+  sector1:{tint:"rgba(255,140,60,.07)", kind:"ember", n:40, c:["#FFB070", "#FF7A3A"]},
+  sector2:{tint:"rgba(80,170,255,.09)", kind:"mist", n:34, c:["#BFE8FF", "#7FC8FF"]},
+  scrapfields:{tint:"rgba(200,150,90,.06)", kind:"dust", n:46, c:["#C9A27A", "#9A7A58"]},
+  reactor_ruins:{tint:"rgba(110,255,140,.06)", kind:"rad", n:36, c:["#9CFF9C", "#5AE07A"]},
+  iron_canyon:{tint:"rgba(255,170,90,.05)", kind:"wind", n:44, c:["#E8C79A", "#FF9A4A"]}
+};
+const AMBP = {key:"", list:[]};
+function ambInit(){
+  const A = AMB[locKey]; AMBP.key = locKey; AMBP.list = [];
+  if(!A) return;
+  for(let i = 0; i < A.n; i++) AMBP.list.push({x:Math.random(), y:Math.random(), z:.5 + Math.random(), p:Math.random()*10, c:A.c[i % A.c.length]});
+}
+function drawAmbient(t, dt){
+  const A = AMB[locKey]; if(!A || (S.settings && S.settings.lowfx)) return;
+  if(AMBP.key !== locKey) ambInit();
+  const cx = window.camX || 0, cy = window.camY || 0;
+  ctx.save();
+  if(GFX.fx){ ctx.fillStyle = A.tint; ctx.fillRect(cx, cy, vw, vh); }          // цветной свет локации (на слабых телефонах выключается)
+  ctx.globalCompositeOperation = "lighter";
+  for(const q of AMBP.list){
+    // частицы живут в экранных координатах и «плывут» с параллаксом
+    if(A.kind === "ember"){ q.y -= dt*.05*q.z; q.x += Math.sin(t + q.p)*dt*.01; }
+    else if(A.kind === "mist"){ q.x += dt*.012*q.z; q.y += Math.sin(t*.5 + q.p)*dt*.006; }
+    else if(A.kind === "dust"){ q.x += dt*.06*q.z; q.y += Math.sin(t*2 + q.p)*dt*.01; }
+    else if(A.kind === "rad"){ q.y -= dt*.02*q.z; q.x += Math.sin(t*1.5 + q.p)*dt*.008; }
+    else { q.x += dt*.16*q.z; q.y += dt*.02*q.z; }
+    if(q.x > 1.05) q.x -= 1.1; if(q.x < -.05) q.x += 1.1; if(q.y < -.05) q.y += 1.1; if(q.y > 1.05) q.y -= 1.1;
+    const x = cx + q.x*vw, y = cy + q.y*vh, a = .35 + Math.sin(t*3 + q.p)*.25;
+    ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = q.c;
+    if(A.kind === "mist"){ ctx.globalAlpha = .08*q.z; circle(x, y, 26*q.z); ctx.fill(); }
+    else if(A.kind === "wind"){ ctx.fillRect(x, y, 10*q.z, 1.5); }
+    else if(A.kind === "rad"){ circle(x, y, 2.2*q.z); ctx.fill(); ctx.globalAlpha *= .3; circle(x, y, 7*q.z); ctx.fill(); }
+    else ctx.fillRect(x, y, 2*q.z, 2*q.z);
+  }
+  ctx.restore();
+}
+{
+  const _layerAmb = drawPvpLayer;
+  drawPvpLayer = function(t, dt){ _layerAmb(t, dt); drawAmbient(t, dt || .016); };
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
