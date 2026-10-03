@@ -1451,7 +1451,10 @@ async def ws_handler(request):
             elif t == "chat":
                 await handle_chat(d, info)
             elif t == "ping":                                       # клиент может мерить задержку
-                conn.push(realtime.encode({"t": "pong", "c": d.get("c"), "s": int(time.time() * 1000)}))
+                pong = {"t": "pong", "c": d.get("c"), "s": int(time.time() * 1000)}
+                if info.get("admin") or info.get("mod"):           # панель отладки: состояние сервера видят только админы и модераторы
+                    pong["srv"] = metrics.brief(len(clients))
+                conn.push(realtime.encode(pong))
             if t in WS_TYPES:
                 metrics.observe("ws.h." + t, (time.perf_counter() - t0) * 1000)
     except Exception:

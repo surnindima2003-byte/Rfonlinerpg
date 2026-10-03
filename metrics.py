@@ -59,6 +59,30 @@ def summary():
     return {"uptime_s": int(time.time() - started), "counters": dict(counters), "gauges": dict(gauges), "latency_ms": lat}
 
 
+def brief(online=0):
+    """Короткая сводка для панели отладки в игре (только админам и модераторам).
+
+    Считает по последним 200 замерам, а не по всем 2048, чтобы ответ на пинг оставался дешёвым."""
+    def p95(name):
+        dq = _samples.get(name)
+        if not dq:
+            return 0.0
+        tail = sorted(list(dq)[-200:])
+        return _pct(tail, 95)
+
+    def mx(name):
+        dq = _samples.get(name)
+        return round(max(list(dq)[-200:]), 2) if dq else 0.0
+
+    out = {"lag": p95("loop_lag"), "lagx": mx("loop_lag"), "tick": p95("world.tick"), "on": int(online)}
+    try:
+        import resource
+        out["mem"] = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)   # пик памяти процесса, МБ (Linux)
+    except Exception:
+        pass
+    return out
+
+
 async def loop_lag_monitor(interval=0.1):
     """Каждые 100 мс проверяем, насколько позже запланированного проснулся цикл: это и есть лаг event loop."""
     loop = asyncio.get_running_loop()

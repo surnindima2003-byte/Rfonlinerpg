@@ -44,6 +44,10 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .game{background:#141B22;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
 .game canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .hud{position:absolute;left:8px;right:108px;top:8px;color:#E4DED1;pointer-events:none}
+/* панель отладки: только админы и модераторы, открывается нажатием на аватар */
+body.dbg-ok .h2-av{pointer-events:auto;cursor:pointer}
+#dbgPanel{position:absolute;left:8px;top:120px;z-index:30;font:600 10.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#CFE8D0;background:rgba(6,10,14,.8);border:1px solid #2F3D4B;border-radius:8px;padding:6px 9px;pointer-events:none;white-space:pre}
+#dbgPanel[hidden]{display:none}
 .hud-card{background:rgba(20,27,34,.82);border:1px solid #34414E;border-radius:12px;padding:7px 10px}
 .hud-top{display:flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap}
 .hud-top b{font:14px 'Russo One',sans-serif}
@@ -1088,6 +1092,7 @@ textarea.field{min-height:70px;resize:vertical}
       <button type="button" id="adminBtn" hidden style="color:#F2C14B;border-color:#F2C14B">Админ</button>
     </div>
     <div class="loc-name" id="locName">Ангар</div>
+    <div id="dbgPanel" hidden></div>
     <div class="gmenu" id="gmenu">
       <button type="button" class="gm-b gm-toggle" id="gmToggle" aria-expanded="false" style="--c:#F2A93B"><svg class="mb-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path class="mb mb1" d="M5 7h14"/><path class="mb mb2" d="M5 12h14"/><path class="mb mb3" d="M5 17h14"/></svg><span>Меню</span></button>
       <div class="gm-list" id="gmList" hidden>
@@ -1665,6 +1670,18 @@ const keys = {};
 let vw = 0, vh = 0, dpr = 1;
 // графика: авто-снижение разрешения и кэши того, что не меняется от кадра к кадру
 const GFX = {cap:2, frames:0, slow:0, t0:0, vig:null, fx:true};   // fx — пятна света на земле (первое, что отключаем на слабом телефоне)
+// плавность: разгон и торможение робота, мягкая камера, шаг по пройденному пути
+// acc/dec — насколько быстро скорость догоняет нужную (≈0,15 с до полной, ≈0,1 с до остановки: PvP остаётся отзывчивым)
+// stride — сколько пикселей пути на один кадр шага; camK — жёсткость камеры; camLead — камера смотрит чуть вперёд по ходу
+const MOVE = {acc:15, dec:22, stride:20, camK:9, camLead:0.12, camSnap:420, walkMin:25};
+const CAM = {x:0, y:0, loc:null};
+// шаг и покачивание считаются по реальному пути, а не по часам: быстрее едешь — чаще шагаешь, упёрся в стену — стоишь
+function walkTrack(o, x, y, dt){
+  if(o._wx === undefined || Math.abs(x - o._wx) + Math.abs(y - o._wy) > 200){ o._wx = x; o._wy = y; o.wp = o.wp || 0; o.ws = 0; return; }
+  const d = Math.hypot(x - o._wx, y - o._wy); o._wx = x; o._wy = y;
+  o.wp = (o.wp + d/MOVE.stride) % 400;
+  if(dt > 0) o.ws += (d/dt - o.ws)*Math.min(1, dt*12);
+}
 
 function resize(){
   // оптимизация: холст в 1×; GFX.cap — потолок, который сам снижается, если телефон не успевает рисовать
@@ -1869,12 +1886,22 @@ function update(dt){
   // замедление от ударов Стража/Жнеца в PvP, оглушение — стоим на месте
   const speed = classParams().speed*(1 + st.spd)*(p.slowT > now ? 1 - (p.slowP || 0) : 1)*(p.stunT > now ? 0 : 1)*(p.stealthT > now ? 1.3 : 1);
   const ox0 = p.x, oy0 = p.y;
-  if(p.dashT > 0){ p.dashT -= dt; p.x += p.dx*1150*dt; p.y += p.dy*1150*dt; }
-  else if(p.moving){
-    p.x += mx*speed*dt; p.y += my*speed*dt;
-    const target = Math.atan2(my, mx); const da = ((target - p.ang + Math.PI*3) % (Math.PI*2)) - Math.PI; p.ang += da*Math.min(1, dt*12);
+  if(p.vx === undefined){ p.vx = 0; p.vy = 0; }
+  if(p.dashT > 0){ p.dashT -= dt; p.x += p.dx*1150*dt; p.y += p.dy*1150*dt; p.vx = p.dx*speed; p.vy = p.dy*speed; }   // после рывка едем дальше, а не встаём как вкопанные
+  else {
+    // скорость плавно догоняет нужную: короткий разгон и торможение вместо мгновенного старта и остановки
+    const k = 1 - Math.exp(-dt*(p.moving ? MOVE.acc : MOVE.dec));
+    p.vx += ((p.moving ? mx*speed : 0) - p.vx)*k; p.vy += ((p.moving ? my*speed : 0) - p.vy)*k;
+    if(!p.moving && Math.hypot(p.vx, p.vy) < 8){ p.vx = 0; p.vy = 0; }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    if(p.moving){ const target = Math.atan2(my, mx); const da = ((target - p.ang + Math.PI*3) % (Math.PI*2)) - Math.PI; p.ang += da*Math.min(1, dt*12); }
   }
   pushOut(p, p.r); slide(p, ox0, oy0, p.r); unstick(p, p.r); guardGate();
+  // упёрлись в стену или камень — гасим скорость в эту сторону, чтобы после отпускания не «доезжать» в стену
+  if(p.dashT <= 0 && dt > 0){
+    const ax = (p.x - ox0)/dt, ay = (p.y - oy0)/dt, cut = (v, a) => a*v <= 0 ? 0 : Math.abs(a) < Math.abs(v) ? a : v;
+    p.vx = cut(p.vx, ax); p.vy = cut(p.vy, ay);
+  }
   if(safeSpot(p)) S.hp = Math.min(st.maxhp, S.hp + st.maxhp*(locKey === "lobby" ? 0.15 : 0.05)*dt);
   if(st.regen) S.cp = Math.min(st.maxcp, (S.cp ?? st.maxcp) + st.regen*10*dt);       // регенерация: +CP в 10 раз больше
   if(st.regen) S.hp = Math.min(st.maxhp, S.hp + st.regen*dt);
@@ -1910,7 +1937,7 @@ function update(dt){
   // подход к цели: ближний бой — вплотную, стрелки — на дистанцию выстрела (раньше подходил только ближний бой)
   if(auto && t && !inReach && !p.moving && stick.id === null){
     const a = Math.atan2(t.y-p.y, t.x-p.x); const ax = p.x, ay = p.y;
-    p.x += Math.cos(a)*speed*dt; p.y += Math.sin(a)*speed*dt; p.ang = a; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate();
+    p.x += Math.cos(a)*speed*dt; p.y += Math.sin(a)*speed*dt; p.ang = a; p.moving = true; p.vx = p.vy = 0; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate();
     // застряли об стену или камень — через 1,2 с бросаем эту цель и берём другую
     if(tDist < autoS.lastD - 3){ autoS.lastD = tDist; autoS.stuckT = 0; } else autoS.stuckT += dt;
     if(autoS.stuckT > 1.2){ autoDrop(t, 8); }
@@ -1923,7 +1950,7 @@ function update(dt){
   if(foe){
     const fr = Math.hypot(foe.rx - p.x, foe.ry - p.y), fReach = fr <= RANGE + 22 && los(p.x, p.y, foe.rx, foe.ry);
     const fa = Math.atan2(foe.ry - p.y, foe.rx - p.x), fd = ((fa - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += fd*Math.min(1, dt*16);
-    if(auto && !fReach && !p.moving && stick.id === null && fr < 520){ const ax = p.x, ay = p.y; p.x += Math.cos(fa)*speed*dt; p.y += Math.sin(fa)*speed*dt; p.ang = fa; p.moving = true; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
+    if(auto && !fReach && !p.moving && stick.id === null && fr < 520){ const ax = p.x, ay = p.y; p.x += Math.cos(fa)*speed*dt; p.y += Math.sin(fa)*speed*dt; p.ang = fa; p.moving = true; p.vx = p.vy = 0; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
     if((firing || auto) && fReach && p.fireCd <= 0){
       p.atkT = 0.25; p.fireCd = 1/(CP.rate*(1 + buffV("rate"))*st.rate);
       const isCrit = Math.random()*100 < st.crit, dmg = Math.round((st.atk*(1 + buffV("atk")) + Math.floor(Math.random()*3))*(isCrit ? st.critPow : 1));
@@ -2315,7 +2342,7 @@ function drawNameStack(x, y, nick, nickColor, g){
 
 function drawBot(x, y, ang, aim, t, moving, flash){
   drawBuffAura(x, y - 22, t);
-  drawMech(ctx, x, y, {cls:S.cls, fac:S.faction, eq:eqGrades(S.eq), aim, moving, t, flash, atk:(p && p.atkT > 0) ? p.atkT/0.25 : 0, ps:1.5});
+  drawMech(ctx, x, y, {cls:S.cls, fac:S.faction, eq:eqGrades(S.eq), aim, moving, wp:p ? p.wp : undefined, t, flash, atk:(p && p.atkT > 0) ? p.atkT/0.25 : 0, ps:1.5});
   const myG = (typeof gCur !== "undefined" && gCur) ? {tag:gCur.tag, name:gCur.name, icon:(gCur.emblem || {}).icon, color:(gCur.emblem || {}).color} : null;
   const myCol = (S.pvpKr || 0) > 0 ? "#E0463A" : (typeof pvpFlagUntil !== "undefined" && pvpFlagUntil > now) ? "#B07CFF" : window.NET_ADMIN ? "#F2C14B" : "#E4DED1";
   const bars = typeof unitBars === "function" && unitBars();
@@ -2433,8 +2460,14 @@ function drawMinimap(){
 let drawDt = 0.016;
 function draw(t){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const cx = W < vw ? (W - vw)/2 : Math.max(0, Math.min(W - vw, p.x - vw/2));
-  const cy = H < vh ? (H - vh)/2 : Math.max(0, Math.min(H - vh, p.y - vh*0.45));
+  // мягкая камера: догоняет робота с небольшой задержкой и чуть смотрит вперёд по ходу движения
+  // при входе в локацию, телепорте и воскрешении — сразу на месте, без «полёта» через карту
+  const gx = W < vw ? (W - vw)/2 : Math.max(0, Math.min(W - vw, p.x + (p.vx || 0)*MOVE.camLead - vw/2));
+  const gy = H < vh ? (H - vh)/2 : Math.max(0, Math.min(H - vh, p.y + (p.vy || 0)*MOVE.camLead - vh*0.45));
+  if(CAM.loc !== locKey || Math.hypot(gx - CAM.x, gy - CAM.y) > MOVE.camSnap){ CAM.x = gx; CAM.y = gy; CAM.loc = locKey; }
+  else { const ck = 1 - Math.exp(-drawDt*MOVE.camK); CAM.x += (gx - CAM.x)*ck; CAM.y += (gy - CAM.y)*ck; }
+  // камера стоит ровно на пикселях экрана — пиксель-арт не «дрожит» при плавном движении
+  const cx = Math.round(CAM.x*dpr)/dpr, cy = Math.round(CAM.y*dpr)/dpr;
   window.camX = cx; window.camY = cy;
   ctx.fillStyle = "#0F151B"; ctx.fillRect(0, 0, vw, vh);
   ctx.save(); ctx.translate(-cx, -cy);
@@ -2447,7 +2480,8 @@ function draw(t){
   drawClassFx(drawDt);
   if(typeof drawPvpUnder === "function") drawPvpUnder(t);
   if(typeof drawOthers === "function") drawOthers(t, drawDt);
-  if(!p.dead) drawBot(p.x, p.y, p.ang, p.aim, t, p.moving, p.flash);
+  walkTrack(p, p.x, p.y, drawDt);
+  if(!p.dead) drawBot(p.x, p.y, p.ang, p.aim, t, p.ws > MOVE.walkMin || (p.moving && drawDt === 0), p.flash);
   if(typeof drawPvpLayer === "function") drawPvpLayer(t, drawDt);
   if(locKey === "lobby") drawLobbyOverlay(t, drawDt);
   for(const b of bolts){ ctx.fillStyle = "#E0694A"; ctx.shadowColor = "#E0694A"; ctx.shadowBlur = 10; circle(b.x, b.y, 5); ctx.fill(); ctx.shadowBlur = 0; }
@@ -2524,12 +2558,88 @@ function loop(ts){
   const raw = ts - last, dt = Math.min(0.05, raw/1000); last = ts;
   gfxWatch(raw);
   if(running && vw > 0){
+    const t0 = DBG.on ? performance.now() : 0;
     if(!paused) update(dt);
+    const t1 = DBG.on ? performance.now() : 0;
     drawDt = paused ? 0 : dt; draw(ts/1000); hud();
+    if(DBG.on) dbgFrame(raw, t1 - t0, performance.now() - t1);
     saveTimer += dt; if(saveTimer > 3){ saveTimer = 0; save(); }
   }
   requestAnimationFrame(loop);
 }
+// ===================== ПАНЕЛЬ ОТЛАДКИ (админы и модераторы) =====================
+// Открывается нажатием на аватар. Показывает, что тормозит: телефон (FPS, время кадра, расчёт/отрисовка),
+// сеть (пинг, разброс, потери) или сервер (задержка цикла и шага мира — их присылает сервер только админам).
+// Пока панель закрыта, ничего не меряется и пинги не отправляются.
+const DBG = {on:false, ok:false, n:0, sum:0, max:0, upd:0, rnd:0, t0:0, fps:0, avg:0, mx:0, u:0, r:0,
+  ping:0, pjit:0, seq:0, sent:new Map(), res:[], srv:null, mechs:0, mobs:0, pingT:0, txt:""};
+function dbgAllow(){
+  // в превью без Telegram панель тоже доступна — это режим разработки
+  DBG.ok = !!(window.NET_ADMIN || window.NET_MOD || !NET.on);
+  document.body.classList.toggle("dbg-ok", DBG.ok);
+  if(!DBG.ok && DBG.on) dbgToggle(false);
+}
+function dbgToggle(on){
+  DBG.on = on === undefined ? !DBG.on : on;
+  const el = $("dbgPanel"); el.hidden = !DBG.on;
+  if(DBG.on){
+    const card = document.querySelector(".hud2"), g = gameEl.getBoundingClientRect();
+    if(card){ const r = card.getBoundingClientRect(); el.style.top = Math.round(r.bottom - g.top + 6) + "px"; el.style.left = Math.round(r.left - g.left) + "px"; }
+    DBG.n = DBG.sum = DBG.max = DBG.upd = DBG.rnd = 0; DBG.t0 = performance.now(); DBG.res = []; DBG.sent.clear(); DBG.pingT = 0;
+    el.textContent = "сбор данных…";
+  }
+}
+function dbgFrame(raw, u, r){
+  if(raw < 250){ DBG.n++; DBG.sum += raw; DBG.max = Math.max(DBG.max, raw); DBG.upd += u; DBG.rnd += r; }
+  const ms = performance.now();
+  // пинг раз в 2 с; ответ дольше 5 с считаем потерянным
+  if(ms - DBG.pingT > 2000){
+    DBG.pingT = ms;
+    for(const [c, t] of DBG.sent) if(ms - t > 5000){ DBG.sent.delete(c); DBG.res.push(0); }
+    const ws = typeof NET !== "undefined" && NET.ws;
+    if(ws && ws.readyState === 1){ const c = ++DBG.seq; DBG.sent.set(c, ms); try{ ws.send(JSON.stringify({t:"ping", c})); }catch(e){} }
+    if(DBG.res.length > 30) DBG.res.splice(0, DBG.res.length - 30);
+  }
+  if(ms - DBG.t0 < 1000) return;
+  const span = ms - DBG.t0;
+  DBG.fps = Math.round(DBG.n*1000/span); DBG.avg = DBG.n ? DBG.sum/DBG.n : 0; DBG.mx = DBG.max;
+  DBG.u = DBG.n ? DBG.upd/DBG.n : 0; DBG.r = DBG.n ? DBG.rnd/DBG.n : 0;
+  DBG.n = DBG.sum = DBG.max = DBG.upd = DBG.rnd = 0; DBG.t0 = ms;
+  dbgRender();
+}
+function dbgPong(d){
+  const t = DBG.sent.get(d.c); if(t === undefined) return;
+  DBG.sent.delete(d.c); DBG.res.push(1);
+  const rtt = performance.now() - t;
+  DBG.pjit = DBG.ping ? DBG.pjit + (Math.abs(rtt - DBG.ping) - DBG.pjit)*0.25 : 0;
+  DBG.ping = DBG.ping ? DBG.ping + (rtt - DBG.ping)*0.35 : rtt;
+  if(d.srv && typeof d.srv === "object") DBG.srv = d.srv;
+}
+function dbgRender(){
+  const f1 = v => (Math.round(v*10)/10).toFixed(1), ws = typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1;
+  const lost = DBG.res.length ? Math.round(DBG.res.filter(x => !x).length*100/DBG.res.length) : 0;
+  const qlty = S.settings && S.settings.lowfx ? "low" : !GFX.fx || GFX.cap < 2 ? "auto-low" : "high";
+  const others = typeof NET !== "undefined" ? NET.others.size : 0;
+  let mobs = 0; const cx = window.camX || 0, cy = window.camY || 0;
+  for(const e of enemies) if(!e.dead && e.x > cx - 80 && e.x < cx + vw + 80 && e.y > cy - 100 && e.y < cy + vh + 80) mobs++;
+  const sv = DBG.srv;
+  const lines = [
+    "FPS " + DBG.fps + (S.settings && S.settings.fps60 === false ? " (лимит 30)" : ""),
+    "ping " + (ws ? Math.round(DBG.ping) + "ms ws" : "нет связи"),
+    "кадр avg " + f1(DBG.avg) + " / max " + f1(DBG.mx) + " мс",
+    "jit " + Math.round(DBG.pjit) + " / itp " + Math.round(ITP.delay) + " мс",
+    "lost " + lost + "%",
+    "upd " + f1(DBG.u) + " / rnd " + f1(DBG.r) + " мс",
+    "dpr " + (Math.round(dpr*100)/100) + " · " + cv.width + "×" + cv.height,
+    "qlty " + qlty + (GFX.fx ? "" : " · без света"),
+    "сцена: пилоты " + DBG.mechs + "/" + others + " · мобы " + mobs,
+    sv ? "srv loop " + f1(+sv.lag || 0) + "/" + f1(+sv.lagx || 0) + " · tick " + f1(+sv.tick || 0) + " мс" : "srv —",
+    sv ? "онлайн " + (+sv.on || 0) + (sv.mem ? " · " + sv.mem + " МБ" : "") : ""
+  ].filter(Boolean);
+  const txt = lines.join("\n");
+  if(txt !== DBG.txt){ DBG.txt = txt; $("dbgPanel").textContent = txt; }
+}
+document.querySelector(".h2-av").addEventListener("click", e => { if(!DBG.ok) return; e.stopPropagation(); dbgToggle(); });
 // ===================== ОКНА NPC И СУМКА =====================
 let sheetRender = null;
 function openSheet(title, sub, renderFn){
@@ -3877,6 +3987,7 @@ $("shBody").addEventListener("click", e => { const b = e.target.closest("button[
 const NET = {on:false, admin:false, id:null, ws:null, others:new Map(), god:false, api:null};
 NET.ready = new Promise(r => NET._ready = r);
 window.NET_GOD = false; window.NET_ADMIN = false;
+setTimeout(dbgAllow, 0);       // права на панель отладки: в Telegram уточнятся после входа (dbgAllow вызывается ещё раз)
 
 (() => {
   const TG = window.Telegram && window.Telegram.WebApp;
@@ -3957,6 +4068,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
     if(!srv) push(true);
     (r.grants || []).forEach(applyGrant);
     if(NET.admin){ $("adminBtn").hidden = false; }
+    dbgAllow();
     connect();
   }
   loadState();
@@ -3972,6 +4084,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
       if(d.t === "hello"){ S.pvpKr = +d.kr || 0;
         NET.admin = window.NET_ADMIN = !!d.admin; NET.id = d.id;
         NET.mod = window.NET_MOD = !!(d.mod || d.admin); S.mutedUntil = +d.muted || 0;
+        dbgAllow();
         NET.mw = +d.mw || 0;                                        // сервер умеет общих мобов
         if(!NET.mw && NET.admin) setTimeout(() => toast("⚠ Сервер без общих мобов: залей на него webserver.py и mobworld.py"), 4000);
         chatUid = String(d.id); chatDb = null;
@@ -3982,15 +4095,16 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         // протокол 2: сервер присылает только изменившихся соседей и id ушедших
         if(d.loc !== locKey){ NET.others.clear(); return; }
         if(d.full){ const keep = new Set((d.up || []).map(o => o.id)); for(const id of [...NET.others.keys()]) if(!keep.has(id)) NET.others.delete(id); }
-        for(const o of d.up || []){ const cur = NET.others.get(o.id); if(cur) Object.assign(cur, o); else NET.others.set(o.id, {...o, rx:o.x, ry:o.y}); }
+        for(const o of d.up || []){ let cur = NET.others.get(o.id); if(cur) Object.assign(cur, o); else NET.others.set(o.id, cur = {...o, rx:o.x, ry:o.y}); netSample(cur); }
         for(const id of d.gone || []) NET.others.delete(id);
       } else if(d.t === "players"){
         if(d.loc !== locKey){ NET.others.clear(); return; }
         const seen = new Set();
         for(const o of d.list || []){
           seen.add(o.id);
-          const cur = NET.others.get(o.id);
-          if(cur) Object.assign(cur, o); else NET.others.set(o.id, {...o, rx:o.x, ry:o.y});
+          let cur = NET.others.get(o.id);
+          if(cur) Object.assign(cur, o); else NET.others.set(o.id, cur = {...o, rx:o.x, ry:o.y});
+          netSample(cur);
         }
         for(const id of [...NET.others.keys()]) if(!seen.has(id)) NET.others.delete(id);
       } else if(d.t === "chat" && d.m && typeof d.m.text === "string"){
@@ -3999,6 +4113,7 @@ window.NET_GOD = false; window.NET_ADMIN = false;
         if(d.m.ch === "dm" && d.m.to === S.name && d.m.nick !== S.name && !S.dmList.includes(d.m.nick)) S.dmList.push(String(d.m.nick).slice(0, 16));
         onChatUpdate();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
+      else if(d.t === "pong"){ dbgPong(d); }
       else if(typeof onNetExtra === "function") onNetExtra(d);
     };
     ws.onclose = () => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames(); setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
@@ -4077,19 +4192,55 @@ window.NET_GOD = false; window.NET_ADMIN = false;
 })();
 
 // ---- другие пилоты на карте ----
+// Плавные чужие пилоты. Каждое положение от сервера кладём в буфер с временем прихода и рисуем
+// пилота чуть в прошлом (ITP.delay мс), плавно ведя его между двумя известными точками.
+// Задержка сама подстраивается под сеть: ровная связь — ~130 мс, рваная — до 380 мс. Так при пинге 200+
+// пилоты едут ровно, а не прыгают от пакета к пакету. Вперёд не угадываем: остановился — встаёт без отката.
+const ITP = {iv:110, jit:15, delay:160};
+function netSample(o){
+  const t = performance.now(), x = +o.x, y = +o.y;
+  if(!isFinite(x) || !isFinite(y)) return;
+  const b = o.buf || (o.buf = []), last = b[b.length - 1];
+  if(last && last.x === x && last.y === y) return;                 // повтор того же места (полный снимок раз в 10 с)
+  if(!last || Math.hypot(x - last.x, y - last.y) > 360){ b.length = 0; b.push({t, x, y}); o.rx = x; o.ry = y; return; }   // телепорт, вход в локацию
+  const gap = t - last.t;
+  // стоял и поехал: движение начинается сейчас, а не растягивается на всю паузу
+  if(gap > 400) b.push({t:t - ITP.iv, x:last.x, y:last.y});
+  else { ITP.iv += (gap - ITP.iv)*0.05; ITP.jit += (Math.abs(gap - ITP.iv) - ITP.jit)*0.05; }
+  b.push({t, x, y});
+  if(b.length > 16) b.splice(0, b.length - 16);
+}
+function netInterp(o, ms, dt){
+  const b = o.buf;
+  if(!b || !b.length){ o.rx = +o.x || 0; o.ry = +o.y || 0; return; }
+  const rt = ms - ITP.delay;
+  while(b.length > 2 && b[1].t <= rt) b.shift();
+  let x, y;
+  if(b.length === 1 || rt <= b[0].t){ x = b[0].x; y = b[0].y; }
+  else if(rt < b[1].t){ const a = b[0], c = b[1], k = (rt - a.t)/Math.max(1, c.t - a.t); x = a.x + (c.x - a.x)*k; y = a.y + (c.y - a.y)*k; }
+  else { x = b[b.length - 1].x; y = b[b.length - 1].y; }
+  // последний мягкий слой: прячет мелкие скачки при перестройке буфера
+  const k = 1 - Math.exp(-(dt || 0.016)*30);
+  o.rx += (x - o.rx)*k; o.ry += (y - o.ry)*k;
+}
 function drawOthers(t, dt){
   if(!NET.others.size) return;
+  const ms = performance.now();
+  const want = Math.max(90, Math.min(380, ITP.iv*1.25 + ITP.jit*2.5));
+  ITP.delay += (want - ITP.delay)*Math.min(1, (dt || 0.016)*0.8);
+  let shown = 0;
   for(const o of NET.others.values()){
     if(o.dead) continue;
-    const k = Math.min(1, (dt || 0.016)*10);
-    o.rx += (o.x - o.rx)*k; o.ry += (o.y - o.ry)*k;
+    netInterp(o, ms, dt);
+    walkTrack(o, o.rx, o.ry, dt || 0.016);
     // за краем экрана не рисуем (положение всё равно обновляем, чтобы не было рывка при появлении)
     const cx0 = window.camX || 0, cy0 = window.camY || 0;
     if(o.rx < cx0 - 90 || o.rx > cx0 + vw + 90 || o.ry < cy0 - 40 || o.ry > cy0 + vh + 160) continue;
     const F = FACTIONS[o.fac] || FACTIONS.aegis;
     if(o.flashT > 0) o.flashT -= dt || 0.016;
     if(o.sth){ ctx.save(); ctx.globalAlpha = 0.3; }
-    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.moving, t:t + (o.id % 7), ps:1.5, flash:o.flashT > 0 ? o.flashT : 0});
+    shown++;
+    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, aim:o.aim || 0, moving:o.ws > MOVE.walkMin, wp:o.wp, t:t + (o.id % 7), ps:1.5, flash:o.flashT > 0 ? o.flashT : 0});
     if(o.sth) ctx.restore();
     const name = String(o.nick || "Пилот").slice(0, 16);
     const mate = typeof inParty === "function" && inParty(o.id);
@@ -4098,6 +4249,7 @@ function drawOthers(t, dt){
     drawNameStack(o.rx, o.ry - (bars ? 36 : 28), (mate ? "◆ " : "") + (o.admin ? "[ADM] " : "") + name + " · " + (+o.lvl || 1), o.kr > 0 ? "#E0463A" : o.fl ? "#B07CFF" : mate ? "#7BC98A" : (o.admin ? "#F2C14B" : F.color),
       o.gt ? {tag:String(o.gt).slice(0, 4), name:String(o.gn || "").slice(0, 20), icon:o.gi, color:o.gc} : null);
   }
+  DBG.mechs = shown;
 }
 // ===================== КЛАССЫ: УМЕНИЯ И ВЫБОР =====================
 const CB = {cd:[0,0,0,0], buffs:{}, queue:[], fx:[]};
@@ -5590,14 +5742,16 @@ function drawMech(g, x, y, o){
   const dir = Math.cos(o.aim || 0) >= 0 ? 1 : -1;
   let anim = "idle", f = Math.floor(t*2) % 2;
   if(o.atk > 0){ anim = "attack"; f = o.atk > 0.5 ? 0 : 1; }
-  else if(o.moving){ anim = "walk"; f = Math.floor(t*8) % 4; }
+  else if(o.moving){ anim = "walk"; f = o.wp !== undefined ? Math.floor(o.wp) % 4 : Math.floor(t*8) % 4; }   // кадр шага — по пройденному пути
   const spr = spriteCanvas(kind, o, anim, f, rps), DW = SPR_W*ps, DH = SPR_H*ps;
   // тень и свечение под ногами
   g.save();
   g.fillStyle = "rgba(0,0,0,.38)"; g.beginPath(); g.ellipse(x, y, (kind === "guard" ? 11 : 9)*ps, 2.6*ps, 0, 0, Math.PI*2); g.fill();
 
   g.restore();
-  g.save(); g.translate(Math.round(x), Math.round(y)); g.scale(dir, 1);
+  // на основном холсте округляем до пикселя экрана (а не CSS-пикселя): при плавной камере робот не дёргается на 1 px
+  const pr = g === ctx ? dpr : 1, X = Math.round(x*pr)/pr, Y = Math.round(y*pr)/pr;
+  g.save(); g.translate(X, Y); g.scale(dir, 1);
   g.imageSmoothingEnabled = frac; if(frac) g.imageSmoothingQuality = "high";
   // корпус и подсветка запекаются в один холст (два варианта яркости): одна отрисовка вместо двух
   // и без переключения режима смешивания на каждого пилота
@@ -5612,7 +5766,7 @@ function drawMech(g, x, y, o){
   }
   g.drawImage(cb, -SPR_AX*ps, -SPR_AY*ps, DW, DH);
   g.restore();
-  if(o.flash > 0){ g.save(); g.globalAlpha = .5; g.globalCompositeOperation = "lighter"; g.translate(Math.round(x), Math.round(y)); g.scale(dir, 1); g.drawImage(spr.base, -SPR_AX*ps, -SPR_AY*ps, DW, DH); g.restore(); }
+  if(o.flash > 0){ g.save(); g.globalAlpha = .5; g.globalCompositeOperation = "lighter"; g.translate(X, Y); g.scale(dir, 1); g.drawImage(spr.base, -SPR_AX*ps, -SPR_AY*ps, DW, DH); g.restore(); }
 }
 
 // портрет для интерфейса
