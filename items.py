@@ -18,6 +18,7 @@ from models import ItemInst, SphereBal, GameSave, LootDay
 import metrics
 import mobguard
 from db_atomic import insert_ignore
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 log = logging.getLogger("items")
 
@@ -305,9 +306,9 @@ async def set_item_status(s, item_uid, owner, from_status, to_status, new_owner=
 
 
 # ---------- дневная «усталость» лута ----------
-LOOT_FULL = int(__import__("os").getenv("LOOT_FULL_KILLS", "2500"))     # до стольких убийств в сутки — полный шанс
-LOOT_LOW = int(__import__("os").getenv("LOOT_LOW_KILLS", "6000"))       # к этому числу шанс опускается до LOOT_FLOOR
-LOOT_FLOOR = float(__import__("os").getenv("LOOT_FLOOR", "0.2"))
+LOOT_FULL = env_int("LOOT_FULL_KILLS", 2500)     # до стольких убийств в сутки — полный шанс
+LOOT_LOW = env_int("LOOT_LOW_KILLS", 6000)       # к этому числу шанс опускается до LOOT_FLOOR
+LOOT_FLOOR = env_float("LOOT_FLOOR", 0.2)
 
 
 def loot_factor(kills_today):

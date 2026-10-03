@@ -1,4 +1,26 @@
 import os
+import sys
+
+
+def _env_num(name, default, cast):
+    """Число из переменной окружения. Пустое значение (переменная заведена в Railway, но не заполнена)
+    или опечатка не роняют сервер: берётся значение по умолчанию и пишется предупреждение в лог."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return cast(default)
+    try:
+        return cast(float(raw.strip().replace(",", "."))) if cast is int else cast(raw.strip().replace(",", "."))
+    except ValueError:
+        print(f"[config] {name}={raw!r} — не число, использую {default}", file=sys.stderr)
+        return cast(default)
+
+
+def env_int(name, default):
+    return _env_num(name, default, int)
+
+
+def env_float(name, default):
+    return _env_num(name, default, float)
 
 # Токен бота задаётся в Railway → Variables → BOT_TOKEN
 BOT_TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_TOKEN_HERE")
@@ -9,7 +31,7 @@ DB_URL = os.getenv("DB_URL", "sqlite+aiosqlite:///robot_mmo.db")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 
 # Порт веб-сервера: Railway передаёт его сам
-PORT = int(os.getenv("PORT", "8080"))
+PORT = env_int("PORT", 8080)
 
 # Администраторы игры: Telegram-ники через запятую, без @
 ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "D0gEx0").split(",") if u.strip()}
@@ -30,12 +52,12 @@ TON_NETWORK = os.getenv("TON_NETWORK", "testnet").strip().lower()
 GAME_WALLET = os.getenv("GAME_WALLET", "").strip()
 # Ключ API toncenter.com (бесплатный, из @tonapibot) — без него лимит 1 запрос в секунду.
 TONCENTER_KEY = os.getenv("TONCENTER_KEY", "").strip()
-GRAM_WITHDRAW_MIN = float(os.getenv("GRAM_WITHDRAW_MIN", "1"))
-GRAM_WITHDRAW_FEE = float(os.getenv("GRAM_WITHDRAW_FEE", "0.10"))
+GRAM_WITHDRAW_MIN = env_float("GRAM_WITHDRAW_MIN", 1)
+GRAM_WITHDRAW_FEE = env_float("GRAM_WITHDRAW_FEE", 0.10)
 
 # Пополнение звёздами: 1 ⭐ = STAR_USD долларов (выплата Telegram разработчику), 1 GRAM = GRAM_USD долларов
-STAR_USD = float(os.getenv("STAR_USD", "0.013"))
-GRAM_USD = float(os.getenv("GRAM_USD", "1.55"))
+STAR_USD = env_float("STAR_USD", 0.013)
+GRAM_USD = env_float("GRAM_USD", 1.55)
 STAR_PACKS = [50, 100, 250, 500, 1000, 2500]
 
 # Имя окружения: production (боевой сервер) или staging (тестовый). На тестовом в игре видна метка.
@@ -45,16 +67,16 @@ BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backups")
 
 # ---- Живой мир и нагрузка (см. docs/server-load-plan.md) ----
 # Частота рассылки позиций. 10 — как было; 5 вдвое снижает трафик, если клиент плавно интерполирует.
-WORLD_HZ = max(1, min(20, int(os.getenv("WORLD_HZ", "10"))))
+WORLD_HZ = max(1, min(20, env_int("WORLD_HZ", 10)))
 # Радиус видимости в пикселях мира: игрокам шлём только тех, кто ближе. 0 — всю локацию (как было).
-VIEW_RADIUS = float(os.getenv("VIEW_RADIUS", "0"))
+VIEW_RADIUS = env_float("VIEW_RADIUS", 0)
 # Сколько вкладок одного игрока держим одновременно
-WS_MAX_PER_UID = int(os.getenv("WS_MAX_PER_UID", "3"))
+WS_MAX_PER_UID = env_int("WS_MAX_PER_UID", 3)
 # Входящие сообщения с одного сокета: в среднем в секунду и допустимый всплеск
-WS_IN_RATE = float(os.getenv("WS_IN_RATE", "60"))
-WS_IN_BURST = float(os.getenv("WS_IN_BURST", "120"))
+WS_IN_RATE = env_float("WS_IN_RATE", 60)
+WS_IN_BURST = env_float("WS_IN_BURST", 120)
 # Сколько секунд ждём авторизацию после открытия сокета
-WS_AUTH_TIMEOUT = float(os.getenv("WS_AUTH_TIMEOUT", "5"))
+WS_AUTH_TIMEOUT = env_float("WS_AUTH_TIMEOUT", 5)
 # Токен для /metrics. Пустой — эндпоинт выключен.
 METRICS_TOKEN = os.getenv("METRICS_TOKEN", "").strip()
 # Нагрузочный тест: работает ТОЛЬКО на staging при LOADTEST=1. Боты используют выдуманные id от LOADTEST_UID_BASE

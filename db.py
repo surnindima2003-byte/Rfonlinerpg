@@ -10,6 +10,7 @@ import metrics
 from config import DB_URL
 
 from models import Base
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 log = logging.getLogger("db")
 
@@ -25,10 +26,10 @@ SQLITE_URL = DB_URL.replace("+aiosqlite", "")
 IS_PG = PG_URL.startswith(("postgres://", "postgresql://"))
 
 # Пул соединений. Значения стартовые — подбираются по метрикам /metrics (sql.*), а не «на всякий случай больше».
-POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
-MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-POOL_TIMEOUT = float(os.getenv("DB_POOL_TIMEOUT", "3"))
-STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "5000"))
+POOL_SIZE = env_int("DB_POOL_SIZE", 10)
+MAX_OVERFLOW = env_int("DB_MAX_OVERFLOW", 10)
+POOL_TIMEOUT = env_float("DB_POOL_TIMEOUT", 3)
+STATEMENT_TIMEOUT_MS = env_int("DB_STATEMENT_TIMEOUT_MS", 5000)
 
 if IS_PG:
     URL = PG_URL.replace("postgres://", "postgresql+psycopg2://", 1).replace("postgresql://", "postgresql+psycopg2://", 1)

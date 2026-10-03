@@ -17,12 +17,13 @@ import time
 from collections import deque
 
 import metrics
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 log = logging.getLogger("realtime")
 
-MAX_Q_MSGS = int(os.getenv("WS_MAX_QUEUE_MSGS", "400"))          # надёжных сообщений в очереди
-MAX_Q_BYTES = int(os.getenv("WS_MAX_QUEUE_BYTES", str(512 * 1024)))
-SEND_TIMEOUT = float(os.getenv("WS_SEND_TIMEOUT", "10"))           # столько ждём одну отправку медленному клиенту
+MAX_Q_MSGS = env_int("WS_MAX_QUEUE_MSGS", 400)          # надёжных сообщений в очереди
+MAX_Q_BYTES = env_int("WS_MAX_QUEUE_BYTES", 512 * 1024)
+SEND_TIMEOUT = env_float("WS_SEND_TIMEOUT", 10)           # столько ждём одну отправку медленному клиенту
 
 CLOSE_SLOW = 4008        # клиент не успевает читать
 CLOSE_REPLACED = 4003    # слишком много вкладок одного игрока

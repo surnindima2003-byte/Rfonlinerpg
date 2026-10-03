@@ -19,12 +19,13 @@ import os
 import time
 
 import metrics
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 MODE = os.getenv("MOB_GUARD", "shadow").strip().lower()
-SEEN_MIN = float(os.getenv("MOB_SEEN_MIN", "0.85"))       # доля прочности моба, которую сервер должен увидеть ударами
-DPS_K = float(os.getenv("MOB_DPS_K", "12"))              # запас бюджета урона; 12 перекрывает умения, криты и удары по площади
+SEEN_MIN = env_float("MOB_SEEN_MIN", 0.85)       # доля прочности моба, которую сервер должен увидеть ударами
+DPS_K = env_float("MOB_DPS_K", 12)              # запас бюджета урона; 12 перекрывает умения, криты и удары по площади
 BUDGET_SECONDS = 8.0                                      # столько секунд бюджета можно накопить заранее
-BOSS_RESPAWN = int(os.getenv("MOB_BOSS_RESPAWN", "280"))  # в игре главарь возрождается через 300 с
+BOSS_RESPAWN = env_int("MOB_BOSS_RESPAWN", 280)  # в игре главарь возрождается через 300 с
 FIGHT_TTL = 180                                           # незаконченный бой забывается через 3 минуты
 MAX_FIGHTS = 300                                          # одновременных боёв на игрока (защита памяти)
 

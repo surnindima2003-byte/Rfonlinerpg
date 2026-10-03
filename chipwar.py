@@ -15,16 +15,17 @@ import json
 import logging
 import os
 import time
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 log = logging.getLogger("chipwar")
 
 LOC = os.getenv("CHIPWAR_LOC", "iron_canyon")
-ZONE = (float(os.getenv("CHIPWAR_X", "1100")), float(os.getenv("CHIPWAR_Y", "1100")), float(os.getenv("CHIPWAR_R", "190")))
+ZONE = (env_float("CHIPWAR_X", 1100), env_float("CHIPWAR_Y", 1100), env_float("CHIPWAR_R", 190))
 # расписание по московскому времени: «день ЧЧ:ММ» через запятую
 SCHEDULE = os.getenv("CHIPWAR_SCHEDULE", "tue 19:00, sat 18:00")
-TZ_OFFSET = int(os.getenv("CHIPWAR_TZ_OFFSET", "3"))          # часы от UTC
-DURATION = int(os.getenv("CHIPWAR_MINUTES", "20")) * 60
-TARGET = int(os.getenv("CHIPWAR_TARGET", "900"))
+TZ_OFFSET = env_int("CHIPWAR_TZ_OFFSET", 3)          # часы от UTC
+DURATION = env_int("CHIPWAR_MINUTES", 20) * 60
+TARGET = env_int("CHIPWAR_TARGET", 900)
 MIN_LVL = 10                                                  # как защита новичков в PvP
 PER_PLAYER_MAX = 3                                            # больше трёх в круге очки не ускоряют
 BUFF_HOURS = 24

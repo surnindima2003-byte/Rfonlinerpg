@@ -5039,7 +5039,7 @@ $("scrChar").addEventListener("click", e => {
   else if(d.dset){ if(droneOwned(d.dset)){ S.drone = d.dset; Sfx.play("pick"); toast("Дрон «" + DRONES[d.dset].name + "» в деле"); save(); } }
   else if(d.doff){ S.drone = ""; Sfx.play("ui"); toast("Дрон отправлен в ангар"); save(); }
   else if(d.dshop){ shopTab = "drones"; openShop(); return; }
-  else if(d.dcraftgo){ toast("Подойди к Мастерской в ангаре"); return; }
+  else if(d.dcraftgo){ toast("Дрон собирается в Мастерской: подойди к ней в ангаре"); return; }
   else if(d.sktab){ skTab = d.sktab; Sfx.play("ui"); }
   else if(d.up){
     const u = UPGRADES.find(x => x.id === d.up), lv = S.up[u.id] || 0, cost = upCostScrap(u, lv);
@@ -10427,21 +10427,22 @@ function drawOtherDrone(o, t, dt){
 // ---- вкладка «Дрон» в Персонаже ----
 function droneCard(id){
   const D = DRONES[id], own = droneOwned(id), on = S.drone === id && own, gc = GRADES[D.g].color;
-  const how = D.src === "craft" ? `Мастерская · с ${D.lvl} ур.` : `Магазин GRAM · ${gramF(D.price)} GRAM`;
+  const how = D.src === "craft" ? `Собрать в Мастерской · с ${D.lvl} ур. · ${Object.entries(D.need).map(([k, n]) => n.toLocaleString("ru-RU") + " " + (k === "scrap" ? "лома" : k === "cores" ? "ядер" : ITEMS[k].name.toLowerCase())).join(", ")}`
+    : `Только в магазине GRAM · ${gramF(D.price)} GRAM`;
   const btn = on ? `<button class="act alt" type="button" data-doff="1">Убрать</button>`
     : own ? `<button class="act" type="button" data-dset="${id}">Выпустить</button>`
-    : D.src === "gram" ? `<button class="act alt" type="button" data-dshop="1">В магазин</button>`
-    : `<button class="act alt" type="button" data-dcraftgo="1">Собрать</button>`;
+    : D.src === "gram" ? `<button class="act alt" type="button" data-dshop="1">Купить · ${gramF(D.price)} GRAM</button>`
+    : `<button class="act alt" type="button" data-dcraftgo="1">Мастерская</button>`;
   return `<div class="li" style="${on ? "border-color:" + gc : ""}"><div class="ic" style="border-color:${gc};${own ? "" : "opacity:.45"}">${droneIcon(id, 34)}</div>
     <div class="tx"><span style="color:${gc}">${D.name}${on ? " · летает" : own ? "" : " 🔒"}</span><small>${droneBonusText(D)} · сбор лута ${D.r}</small><small>${own ? "Есть · лежит в сумке или на складе" : how}</small></div>${btn}</div>`;
 }
 function dronesView(){
   const D = droneOn(), own = DRONE_IDS.filter(droneOwned).length;
   let h = `<section class="pcard"><div class="cdetail"><div class="ic" style="width:64px;height:56px;display:flex;align-items:center;justify-content:center;border-color:${D ? GRADES[D.g].color : "var(--line)"}">${D ? droneIcon(S.drone, 52) : `<i class="empty-ic"></i>`}</div>
-    <div class="tx"><span>${D ? "Дрон «" + D.name + "»" : "Дрон не выбран"}</span><small>${D ? droneBonusText(D) + " · подбирает лут в радиусе " + D.r : "Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут"}</small><small>Дронов в ангаре: ${own} из ${DRONE_IDS.length}</small></div></div></section>`;
+    <div class="tx"><span>${D ? "Дрон «" + D.name + "»" : "Дрон не выбран"}</span><small>${D ? droneBonusText(D) + " · подбирает лут в радиусе " + D.r : "Дрона нужно собрать в Мастерской или купить в магазине GRAM. Он летает рядом, даёт бонус и сам собирает лут"}</small><small>Дронов в ангаре: ${own} из ${DRONE_IDS.length}</small></div></div></section>`;
   h += `<section class="pcard"><h3 class="bag-h">Собираются в Мастерской</h3><div class="list">${DRONE_IDS.filter(id => DRONES[id].src === "craft").map(droneCard).join("")}</div></section>`;
   h += `<section class="pcard"><h3 class="bag-h">Из магазина GRAM</h3><div class="list">${DRONE_IDS.filter(id => DRONES[id].src === "gram").map(droneCard).join("")}</div></section>`;
-  return h + `<p class="hint">Прокачки у дронов нет — они отличаются бонусами и радиусом сбора. Работает один дрон, менять можно в любой момент бесплатно</p>`;
+  return h + `<p class="hint">Бесплатных дронов нет: дрона нужно собрать в Мастерской за лом, ядра и материалы или купить в магазине GRAM. Выпустить можно только своего дрона из сумки или склада. Прокачки нет — дроны отличаются бонусами и радиусом сбора</p>`;
 }
 // ---- раздел дронов в Мастерской ----
 function droneCraftHtml(){

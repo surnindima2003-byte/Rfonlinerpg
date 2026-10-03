@@ -24,14 +24,15 @@ import os
 import time
 
 import metrics
+from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
 PVP_MODE = os.getenv("PVP_GUARD", "on").strip().lower()
 MOVE_MODE = os.getenv("MOVE_GUARD", "shadow").strip().lower()
 
 COMBAT_SEC = 10.0          # столько секунд после удара игрок считается в бою
 HP_FACTOR = 0.55           # доля урона по прочности, которую сервер засчитывает (клиент режет урон пассивками до 45%)
-MOVE_RATE = float(os.getenv("MOVE_RATE", "460"))     # пикселей в секунду (быстрейший класс с бонусами ~300)
-MOVE_BURST = float(os.getenv("MOVE_BURST", "650"))   # запас на рывок (1150 px/с × 0,15 с) и телепорт 360
+MOVE_RATE = env_float("MOVE_RATE", 460)     # пикселей в секунду (быстрейший класс с бонусами ~300)
+MOVE_BURST = env_float("MOVE_BURST", 650)   # запас на рывок (1150 px/с × 0,15 с) и телепорт 360
 
 _state = {}                # uid -> {"hp", "cp", "t", "heal", "heal_t"}
 
