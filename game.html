@@ -1272,6 +1272,12 @@ for(const [fam, F] of Object.entries(GEAR_FAM)) for(const T of TIERS){
   ITEMS["g_" + fam + "_" + T.n] = {name:T.adj[F.g] + " " + F.noun, type:"gear", slot:F.slot, fam, tier:T.n, cls:F.cls, lvl:T.lvl > 1 ? T.lvl : 0,
     sell:Math.round(6*Math.pow(k, 2.2)), price:T.n === 1 ? 45 : 0, ...st};
 }
+for(const T of TIERS){
+  const b = ITEMS["g_blades_" + T.n], h = ITEMS["g_hammer_" + T.n];
+  if(b) ITEMS["g_phaseblades_" + T.n] = {...b, name:T.adj[2] + " фазовые клинки", cls:"ghost", atk:Math.round(b.atk*1.1), crit:(b.crit || 0) + 1};
+  if(h) ITEMS["g_glaive_" + T.n] = {...h, name:T.adj[1] + " глефа", cls:"glyph", hp:Math.round((h.def || 1)*6)};
+}
+CLASS_WPN.ghost = "phaseblades"; CLASS_WPN.glyph = "glaive";
 const GEAR_IDS = Object.keys(ITEMS).filter(k => ITEMS[k].type === "gear" );
 // самые старые вещи (до поколений) → новые; W1/W3 — оружие класса владельца
 const LEGACY_GEAR = {st_head:"g_sensor_1", sensor1:"g_sensor_1", sensor2:"g_sensor_3", st_armor:"g_armor_1", plate1:"g_armor_1", plate2:"g_armor_3",
@@ -1352,7 +1358,18 @@ const CLASSES = {
     {id:"plasma", lore:"Сгусток перегретой плазмы прожигает броню насквозь.", name:"Плазменный шар", desc:"Снаряд с ×2 уроном", cd:5, type:"strike", mult:2, big:true},
     {id:"emp", lore:"Электромагнитный импульс бьёт по области и выключает врагов.", name:"ЭМИ-волна", desc:"Урон в радиусе 130, оглушение на 3 сек и −20% защиты на 5 сек", cd:10, type:"aoe", mult:1.2, radius:130, stun:3},
     {id:"field", lore:"Генератор поднимает силовой купол вокруг корпуса.", name:"Силовое поле", desc:"+50% брони и +30% атаки на 4 сек", cd:18, type:"buff", buff:"def", v:0.5, dur:4},
-    {id:"blink", lore:"Квантовый перенос мгновенно перемещает робота вперёд.", name:"Телепорт", desc:"Мгновенный перенос на 360 вперёд", cd:12, type:"dash", dist:360, instant:true}]}
+    {id:"blink", lore:"Квантовый перенос мгновенно перемещает робота вперёд.", name:"Телепорт", desc:"Мгновенный перенос на 360 вперёд", cd:12, type:"dash", dist:360, instant:true}]},
+  // ===== новые классы (вторая профессия, 4 сезон) =====
+  ghost:{name:"Призрак", role:"Ближний бой · криты", color:"#FF5FA2", hp:0.85, atk:1.2, def:0.8, speed:195, rate:1.45, range:80, melee:true, skills:[
+    {id:"phase", lore:"Корпус на миг уходит в фазу и проходит сквозь врага, оставляя за собой разрез.", name:"Фазовый разрез", desc:"Проход сквозь цель с ×2,2 урона и выход за её спиной; по целям ниже 50% прочности — гарантированный крит", cd:9, type:"phase", mult:2.2, dist:300, pvpAs:"leap"},
+    {id:"echo", lore:"Голографический двойник замирает на месте и повторяет каждый твой взмах клинком.", name:"Эхо-двойник", desc:"На 6 сек на месте остаётся двойник и повторяет твои обычные удары с 50% урона", cd:22, type:"echo", v:0.5, dur:6},
+    {id:"siren", lore:"Визг глушилки срывает прицелы и выкручивает броню вокруг на минимум.", name:"Сирена помех", desc:"Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30%", cd:14, type:"siren", radius:130, mult:0.6, pvpAs:"aoe"},
+    {id:"nulltrace", lore:"Сигнатура обнуляется: сенсоры врагов видят пустое место.", name:"Нулевой след", desc:"Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит", cd:20, type:"stealth", dur:4}]},
+  glyph:{name:"Глифоносец", role:"Ближний бой · контроль", color:"#FFB347", hp:1.2, atk:1.0, def:1.3, speed:160, rate:1.1, range:95, melee:true, skills:[
+    {id:"gravity", lore:"Глиф искривляет поле, стягивает металл к центру и схлопывается.", name:"Глиф притяжения", desc:"Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×1,6 урона", cd:14, type:"gravity", radius:150, mult:1.6, pvpAs:"aoe"},
+    {id:"chain", lore:"Разряд прыгает от глифа к глифу и с каждой целью набирает силу.", name:"Цепь глифов", desc:"Разряд по 5 целям подряд, каждый следующий прыжок +15% урона", cd:10, type:"chain", n:5, mult:1.2, pvpAs:"strike"},
+    {id:"seal", lore:"Зеркальная печать возвращает удары тем, кто их нанёс.", name:"Печать отражения", desc:"5 сек: −40% входящего урона, 40% урона возвращается атакующему", cd:20, type:"buff", buff:"reflect", v:0.4, dur:5},
+    {id:"recall", lore:"Руна запоминает точку. Вызови её снова — и ты уже там, с починенным корпусом.", name:"Руна возврата", desc:"Ставит руну на 10 сек; повторное нажатие — возврат к руне и +15% прочности", cd:16, type:"recall", v:0.15}]}
 };
 const NO_CLASS = {hp:1, atk:1, def:1, speed:175, rate:1/0.55, range:240, melee:false};
 const clsOf = id => CLASSES[id] || null;
@@ -1837,7 +1854,7 @@ function update(dt){
   const ml = Math.hypot(mx,my); if(ml > 1){ mx /= ml; my /= ml; }
   p.moving = ml > 0.08;
   // замедление от ударов Стража/Жнеца в PvP, оглушение — стоим на месте
-  const speed = classParams().speed*(1 + st.spd)*(p.slowT > now ? 1 - (p.slowP || 0) : 1)*(p.stunT > now ? 0 : 1);
+  const speed = classParams().speed*(1 + st.spd)*(p.slowT > now ? 1 - (p.slowP || 0) : 1)*(p.stunT > now ? 0 : 1)*(p.stealthT > now ? 1.3 : 1);
   const ox0 = p.x, oy0 = p.y;
   if(p.dashT > 0){ p.dashT -= dt; p.x += p.dx*1150*dt; p.y += p.dy*1150*dt; }
   else if(p.moving){
@@ -5381,6 +5398,61 @@ function buildSprite(kind, P, anim, f){
     if(anim === "attack" && f === 1){ put(44, 21 + B, "#8C98A5"); put(45, 20 + B, "#6B7580"); }
   }
 
+  else if(kind === "ghost"){
+    // ---- Призрак: тонкий корпус, развевающийся шарф-кабель, узкий визор и фазовые клинки в обеих руках ----
+    const wave = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
+    // шарф-кабель за спиной
+    for(let j = 0; j < 11; j++){ const y = 17 + B + (j >> 1) + (j > 5 ? wave : 0); rect(16 - j, y, 2, 1, j % 3 === 0 ? P.glow : P.dk, j % 3 === 0); }
+    put(5, 23 + B + wave, P.glowHi, true);
+    // тонкие ноги
+    const sleg = (x, dx, lift, front) => {
+      const c = front ? M : [P.dk, P.md, P.dd, P.lt];
+      block(x + dx, 31 - lift, 3, 5, c[0], c[1], c[2], c[3]);
+      line(x + dx + 1, 36 - lift, x + dx, 40 - lift, c[2]); put(x + dx + 1, 33 - lift, P.glow, true);
+      rect(x + dx - 1, 41 - lift, 5, 1, P.dd);
+    };
+    sleg(17, legB, liftB, false); sleg(22, legF, liftF, true);
+    rect(17, 30 + B, 9, 2, P.dd);
+    // задняя рука с клинком вниз
+    line(16, 21 + B, 13, 27 + B, P.dk); line(13, 27 + B, 9, 35 + B, P.glow, true); put(9, 36 + B, P.glowHi, true);
+    // узкий корпус со светящейся фазовой линией
+    block(16, 19 + B, 11, 11, P.dk, P.md, P.dd, P.lt);
+    line(21, 20 + B, 21, 28 + B, P.glow, true); put(20, 24 + B, P.glowHi, true); put(22, 24 + B, P.glowHi, true);
+    rect(17, 29 + B, 9, 1, P.arm);
+    // голова-капюшон с узким визором и гребнем
+    block(17, 10 + B, 9, 8, P.dk, P.md, P.dd, P.lt);
+    rect(19, 13 + B, 7, 2, "#0B0F13"); rect(20, 13 + B, 6, 1, P.eye, true);
+    line(18, 10 + B, 15, 6 + B, P.md); line(19, 10 + B, 17, 5 + B, P.lt); put(15, 5 + B, P.glow, true);
+    // передняя рука и клинок: замах вверх / разрез вперёд / клинок у бедра
+    if(anim === "attack" && f === 0){ line(26, 20 + B, 29, 15 + B, P.md); line(29, 15 + B, 36, 4 + B, P.glow, true); put(37, 3 + B, P.glowHi, true); }
+    else if(anim === "attack"){ line(26, 21 + B, 31, 22 + B, P.md); line(31, 22 + B, 45, 25 + B, P.glow, true); put(46, 25 + B, P.glowHi, true); for(const [x, y] of [[40, 21], [43, 28], [37, 27]]) put(x, y + B, P.glowHi, true); }
+    else { line(26, 21 + B, 28, 26 + B, P.md); line(28, 26 + B, 35, 33 + B, P.glow, true); put(36, 34 + B, P.glowHi, true); }
+  }
+  else if(kind === "glyph"){
+    // ---- Глифоносец: броня с золотыми глифами, кольцо-глиф на груди, гребень и глефа с полумесяцем ----
+    legPair(5, 15, 21);
+    rect(15, 30 + B, 12, 2, P.dd);
+    // парящий глиф за спиной
+    for(const [x, y] of [[8, 13], [7, 14], [9, 14], [8, 15], [8, 12]]) put(x, y + B, P.glow, true);
+    put(8, 14 + B, P.glowHi, true);
+    // корпус с кольцом-глифом
+    block(13, 18 + B, 16, 12, P.md, P.lt, P.dk, P.hi);
+    for(let a = 0; a < 12; a++){ const x = 21 + Math.round(Math.cos(a/12*Math.PI*2)*3), y = 24 + B + Math.round(Math.sin(a/12*Math.PI*2)*3); put(x, y, P.glow, true); }
+    put(21, 24 + B, P.core, true); put(21, 23 + B, "#fff", true);
+    line(14, 28 + B, 28, 28 + B, P.arm);
+    // наплечники с метками
+    block(10, 16 + B, 6, 5, P.md, P.lt, P.dk, P.hi); put(12, 18 + B, P.glow, true); put(13, 18 + B, P.glow, true);
+    block(27, 16 + B, 6, 5, P.md, P.lt, P.dk, P.hi); put(29, 18 + B, P.glow, true); put(30, 18 + B, P.glow, true);
+    // голова с гребнем
+    block(17, 10 + B, 9, 8, P.md, P.lt, P.dk, P.hi);
+    rect(20, 13 + B, 5, 2, "#0B0F13"); rect(21, 13 + B, 3, 1, P.eye, true);
+    line(21, 9 + B, 21, 6 + B, P.trim); put(21, 5 + B, P.glow, true);
+    // глефа: древко и светящийся полумесяц
+    const crescent = (cx, cy, dir) => { for(const [dx, dy] of [[0, -3], [1, -3], [2, -2], [3, -1], [3, 0], [3, 1], [2, 2], [1, 3], [0, 3]]) put(cx + dx*dir, cy + dy, P.wpn, true); put(cx + 2*dir, cy, P.glowHi, true); };
+    if(anim === "attack" && f === 0){ line(28, 26 + B, 40, 6 + B, P.gunHi); crescent(40, 6 + B, 1); }
+    else if(anim === "attack"){ line(27, 23 + B, 40, 25 + B, P.gunHi); crescent(40, 25 + B, 1); for(const [x, y] of [[36, 19], [38, 31], [44, 25]]) put(x, y + B, P.glowHi, true); }
+    else { line(32, 35 + B, 32, 8 + B, P.gunHi); crescent(33, 7 + B, 1); block(29, 21 + B, 4, 4, P.dk, P.md, P.dd); }
+  }
   else if(kind === "techno"){
     // ---- кибер-колдун: острый капюшон, тёмный плащ со светящимися схемами, рваная накидка, посох с кристаллом ----
     const sway = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
@@ -7438,20 +7510,21 @@ useSkill = function(i){
   if(!C || CB.cd[i] > 0 || !p || p.dead || paused) return _useSkillPvp(i);
   const o = typeof tgtPlayer === "function" ? tgtPlayer() : null;
   const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
-  if(!o || !pvpZone() || !PVP_SKILLS.includes(s.type)) return _useSkillPvp(i);   // баффы, рывки и бой с мобами — как обычно
+  const ty = s.pvpAs || s.type;
+  if(!o || !pvpZone() || !PVP_SKILLS.includes(ty)) return _useSkillPvp(i);   // баффы, рывки и бой с мобами — как обычно
   const why = pvpBlockReason(o);
   if(why){ toast(why); return; }
   const d = Math.hypot(o.rx - p.x, o.ry - p.y);
-  const reach = s.type === "aoe" ? s.radius + 40 : s.type === "leap" ? (s.dist || 300) + 40 : classParams().range + stat().range + 80;
+  const reach = ty === "aoe" ? s.radius + 40 : ty === "leap" ? (s.dist || 300) + 40 : classParams().range + stat().range + 80;
   if(d > reach){ toast("Цель далеко: подойди ближе"); return; }
   if(!los(p.x, p.y, o.rx, o.ry)){ toast("Цель за стеной"); return; }
-  if(s.type === "leap"){                                          // рывок к пилоту, как к мобу
+  if(ty === "leap"){                                              // рывок к пилоту, как к мобу
     const a = Math.atan2(o.ry - p.y, o.rx - p.x), step = Math.max(0, d - 40), bx = p.x, by = p.y;
     CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*step, y2:p.y + Math.sin(a)*step, life:.3, max:.3, c:C.color});
     [p.x, p.y] = landAlong(bx, by, bx + Math.cos(a)*step, by + Math.sin(a)*step, p.r); pushOut(p, p.r); unstick(p, p.r);
     p.ang = p.aim = a; p.inv = 0.3;
   }
-  const st = stat(), hits = s.type === "burst" ? (s.n || 3) : 1;
+  const st = stat(), hits = ty === "burst" ? (s.n || 3) : 1;
   const dmg = Math.round(st.atk*(1 + buffV("atk"))*(1 + st.skillDmg)*s.mult*hits);
   pvpStrike(o, dmg, false, true);                                 // оглушение по игрокам не применяем: слишком сильно в PvP
   CB.fx.push({type:"ring", x:o.rx, y:o.ry, r:36, life:.4, max:.4, c:C.color});
@@ -8031,7 +8104,7 @@ function onHitEffects(e){
       const extra = {};
       if(!skill && (S.cls === "guard" || S.cls === "reaper")) extra.sl = 1;
       if(!skill && S.cls === "reaper" && Math.random() < 0.2) extra.st = 1;
-      if(BAL.skill === "emp" || BAL.skill === "volley") extra.br = 1;
+      if(BAL.skill === "emp" || BAL.skill === "volley" || BAL.skill === "siren") extra.br = 1;
       if(Object.keys(extra).length){ const send = ws.send.bind(ws); ws.send = m => { ws.send = send; const d = JSON.parse(m); send(JSON.stringify({...d, ...extra})); }; }
     }
     return _pvpS(o, dmg, crit, skill);
@@ -8053,6 +8126,151 @@ setInterval(() => {
   const C = clsOf(S.cls); if(!C) return;
   C.skills.forEach((sk, i) => { if(sk.buff === "steal" && !(CB.cd[i] > 0)) useSkill(i); });
 }, 400);
+// ===================== НОВЫЕ КЛАССЫ: ПРИЗРАК И ГЛИФОНОСЕЦ =====================
+// Иконки умений
+Object.assign(SKILL_ART, {
+  phase:I => `<path d="M10 50 54 14" stroke="${I.L}" stroke-width="7" opacity=".45" filter="url(#${I.u}sg)"/>
+    <path d="M12 52 30 30" stroke="url(#${I.u}e)" stroke-width="4" stroke-linecap="round"/><path d="M36 26 52 12" stroke="url(#${I.u}e)" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 3"/>
+    <circle cx="33" cy="28" r="7" fill="none" stroke="#fff" stroke-width="1.4" stroke-dasharray="2 3"/><path d="M20 22c6 2 10 6 12 12" stroke="#fff" stroke-width="1.2" fill="none" opacity=".7"/>`,
+  echo:I => `<path d="M26 14l8 4v16l-8 6-8-6V18z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.4"/>
+    <path d="M40 18l8 4v16l-8 6-8-6V22z" fill="${I.L}" opacity=".35" stroke="${I.L}" stroke-width="1.2" stroke-dasharray="2 2"/>
+    <path d="M22 26h8M36 30h8" stroke="url(#${I.u}e)" stroke-width="2.4"/><path d="M14 52 30 40M34 54 50 42" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/>`,
+  siren:I => `<circle cx="32" cy="32" r="8" fill="url(#${I.u}e)" stroke="#fff" stroke-width="1.2"/>
+    <path d="M18 18a20 20 0 0 0 0 28M46 18a20 20 0 0 1 0 28" stroke="${I.L}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M11 12a29 29 0 0 0 0 40M53 12a29 29 0 0 1 0 40" stroke="${I.L}" stroke-width="2" fill="none" opacity=".6" stroke-linecap="round" stroke-dasharray="4 3"/>`,
+  nulltrace:I => `<path d="M32 10c12 0 20 10 20 22S44 54 32 54 12 44 12 32s8-22 20-22z" fill="none" stroke="${I.L}" stroke-width="2" stroke-dasharray="3 4" opacity=".8"/>
+    <path d="M22 30h20" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/><circle cx="26" cy="30" r="2" fill="#fff"/><circle cx="38" cy="30" r="2" fill="#fff"/>
+    <path d="M20 44h24" stroke="${I.L}" stroke-width="1.4" opacity=".5"/>`,
+  gravity:I => `<circle cx="32" cy="32" r="20" fill="none" stroke="${I.L}" stroke-width="2.2" stroke-dasharray="5 3"/>
+    <circle cx="32" cy="32" r="11" fill="none" stroke="url(#${I.u}e)" stroke-width="2.6"/><circle cx="32" cy="32" r="4" fill="#fff"/>
+    <path d="M10 14l9 9M54 14l-9 9M10 50l9-9M54 50l-9-9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>`,
+  chain:I => `<path d="M10 46 22 30l10 12 10-20 12 8" stroke="${I.L}" stroke-width="6" fill="none" opacity=".4" filter="url(#${I.u}sg)"/>
+    <path d="M10 46 22 30l10 12 10-20 12 8" stroke="url(#${I.u}e)" stroke-width="2.8" fill="none" stroke-linejoin="round"/>
+    ${[[10, 46], [22, 30], [32, 42], [42, 22], [54, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.4" fill="url(#${I.u}dm)" stroke="#fff" stroke-width="1.1"/>`).join("")}`,
+  seal:I => `<path d="M32 8 52 18v14c0 12-9 20-20 24C21 52 12 44 12 32V18z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.6"/>
+    <path d="M24 30h16M32 22v16" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/><path d="M46 40 56 48M50 36l8-2" stroke="${I.L}" stroke-width="2" stroke-linecap="round"/>`,
+  recall:I => `<circle cx="32" cy="34" r="16" fill="none" stroke="url(#${I.u}e)" stroke-width="3"/>
+    <path d="M32 22v12l8 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M14 22a20 20 0 0 1 8-10l-1 8z" fill="${I.L}"/>
+    <path d="M24 54h16" stroke="${I.L}" stroke-width="2" opacity=".6"/>`
+});
+BUFF_COLOR.reflect = "#FFB347";
+
+// ---- логика новых умений (по мобам; по игрокам — через pvpAs в PvP-обёртке) ----
+const NC = {echo:null, rune:null, grav:null};
+function ncTarget(r){ const lk = typeof lockedEnemy === "function" ? lockedEnemy() : null;
+  return lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r ? lk : nearestEnemy(r); }
+function ncSkill(i, s){
+  const st = stat(), C = clsOf(S.cls), atk = st.atk*(1 + buffV("atk"))*(1 + st.skillDmg);
+  const done = () => { CB.cd[i] = s.cd*(1 - st.cdr); Sfx.play("crit"); if(Sfx.haptic) Sfx.haptic("medium"); };
+  if(s.type === "phase"){
+    const t = ncTarget(s.dist); if(!t){ toast("Нет цели рядом"); return; }
+    const a = Math.atan2(t.y - p.y, t.x - p.x), d = Math.hypot(t.x - p.x, t.y - p.y) + NPCS[t.type].r + 28;
+    CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*d, y2:p.y + Math.sin(a)*d, life:.35, max:.35, c:C.color});
+    const crit = t.hp/t.max < 0.5;
+    [p.x, p.y] = landAlong(p.x, p.y, p.x + Math.cos(a)*d, p.y + Math.sin(a)*d, p.r); pushOut(p, p.r); unstick(p, p.r);
+    p.ang = p.aim = a + Math.PI; p.inv = 0.35;
+    hitEnemy(t, atk*s.mult*(crit ? st.critPow : 1), crit ? "crit" : "strike-m"); done(); return;
+  }
+  if(s.type === "echo"){ NC.echo = {x:p.x, y:p.y, aim:p.aim, until:now + s.dur, v:s.v}; CB.fx.push({type:"ring", x:p.x, y:p.y, r:40, life:.4, max:.4, c:C.color}); done(); return; }
+  if(s.type === "siren"){
+    for(const e of enemies){ if(e.dead || Math.hypot(e.x - p.x, e.y - p.y) > s.radius + NPCS[e.type].r) continue;
+      hitEnemy(e, atk*s.mult, "aoe"); e.brkT = now + 5; e.chase = false; e.roomAggro = false; e.slowP = Math.max(e.slowT > now ? e.slowP || 0 : 0, 0.3); e.slowT = now + 3; }
+    for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius*(0.5 + k*0.25), life:.45 + k*.1, max:.45 + k*.1, c:C.color});
+    done(); return;
+  }
+  if(s.type === "stealth"){ p.stealthT = now + s.dur; for(const e of enemies) e.chase = false; toast("Нулевой след: ты невидим для мобов"); done(); return; }
+  if(s.type === "gravity"){
+    const t = ncTarget(260), cx = t ? t.x : p.x + Math.cos(p.aim)*120, cy = t ? t.y : p.y + Math.sin(p.aim)*120;
+    NC.grav = {x:cx, y:cy, r:s.radius, at:now + 0.6, dmg:atk*s.mult};
+    for(const e of enemies) if(!e.dead && !NPCS[e.type].boss && Math.hypot(e.x - cx, e.y - cy) < s.radius){ e.pullT = now + 0.6; e.chase = true; }
+    done(); return;
+  }
+  if(s.type === "chain"){
+    let cur = ncTarget(classParams().range + st.range + 60); if(!cur){ toast("Нет цели рядом"); return; }
+    const hit = new Set(); let px = p.x, py = p.y;
+    for(let k = 0; k < s.n && cur; k++){
+      hit.add(cur); beams.push({x1:px, y1:py - 16, x2:cur.x, y2:cur.y - 16, life:0.25}); hitEnemy(cur, atk*s.mult*(1 + 0.15*k), "beam");
+      px = cur.x; py = cur.y;
+      let best = null, bd = 160; for(const e of enemies){ if(e.dead || hit.has(e)) continue; const d = Math.hypot(e.x - px, e.y - py); if(d < bd){ bd = d; best = e; } }
+      cur = best;
+    }
+    done(); return;
+  }
+  if(s.type === "recall"){
+    if(NC.rune && NC.rune.until > now){
+      const r = NC.rune; NC.rune = null;
+      CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:r.x, y2:r.y, life:.4, max:.4, c:C.color});
+      p.x = r.x; p.y = r.y; unstick(p, p.r);
+      const h = st.maxhp*s.v; S.hp = Math.min(st.maxhp, S.hp + h); healCP(h); addText(p.x, p.y - 40, "+" + Math.round(h), "#7BC98A");
+      done(); return;
+    }
+    NC.rune = {x:p.x, y:p.y, until:now + 10}; CB.cd[i] = 0.5; toast("Руна поставлена — нажми ещё раз в течение 10 сек"); Sfx.play("ui"); return;
+  }
+}
+{
+  const NEW_TYPES = ["phase", "echo", "siren", "stealth", "gravity", "chain", "recall"];
+  const _useNC = useSkill;
+  useSkill = function(i){
+    const C = clsOf(S.cls); if(!C || CB.cd[i] > 0 || !p || p.dead || paused) return _useNC(i);
+    const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+    if(!NEW_TYPES.includes(s.type) || locKey === "lobby") return _useNC(i);
+    // выбран игрок и есть PvP-аналог — по игроку бьёт PvP-обёртка
+    if(s.pvpAs && typeof tgtPlayer === "function" && tgtPlayer() && pvpZone()) return _useNC(i);
+    BAL.skill = s.id;
+    try{ ncSkill(i, s); } finally { BAL.skill = null; }
+  };
+  // эхо-двойник повторяет обычные удары; удар из тени — ×3 крит
+  const _hitNC = hitEnemy;
+  hitEnemy = function(e, dmg, kind){
+    if(e && !e.dead && p.stealthT > now && (p._basic || BAL.skill)){ p.stealthT = 0; dmg *= 3*stat().critPow/2; kind = "crit"; addText(e.x, e.y - 50, "ИЗ ТЕНИ", "#FF5FA2"); }
+    const r = _hitNC(e, dmg, kind);
+    if(p._basic && NC.echo && NC.echo.until > now && e && Math.hypot(e.x - NC.echo.x, e.y - NC.echo.y) < 260){
+      CB.queue.push({t:0.18, e, dmg:dmg*NC.echo.v, done:false});
+      beams.push({x1:NC.echo.x, y1:NC.echo.y - 18, x2:e.x, y2:e.y - 16, life:0.12});
+    }
+    return r;
+  };
+  // Печать отражения: −40% входящего урона и 40% возвращается атакующему мобу
+  const _hurtNC = hurtPlayer;
+  hurtPlayer = function(dmg, src){
+    const rv = buffV("reflect");
+    if(rv > 0){ if(src && typeof src === "object" && !src.dead) _hitNC(src, dmg*rv, "aoe"); dmg *= 1 - rv; }
+    return _hurtNC(dmg, src);
+  };
+  // мобы: стягивание глифом, детонация, невидимость
+  const _updNC = updateEnemies;
+  updateEnemies = function(dt, st){
+    const r = _updNC(dt, st);
+    if(p && p.stealthT > now) for(const e of enemies) e.chase = false;
+    if(NC.grav){
+      const g = NC.grav;
+      for(const e of enemies) if(e.pullT > now && !e.dead){ const dx = g.x - e.x, dy = g.y - e.y, d = Math.hypot(dx, dy); if(d > 12){ e.x += dx/d*Math.min(d, 420*dt); e.y += dy/d*Math.min(d, 420*dt); } }
+      if(now >= g.at){ NC.grav = null;
+        for(const e of enemies) if(!e.dead && Math.hypot(e.x - g.x, e.y - g.y) < g.r*0.7 + NPCS[e.type].r) hitEnemy(e, g.dmg, "aoe");
+        for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:g.x, y:g.y, r:g.r*(0.4 + k*0.3), life:.4, max:.4, c:"#FFB347"}); Sfx.play("crit"); }
+    }
+    return r;
+  };
+  // Призрак в тени — полупрозрачный и на 30% быстрее
+  const _botNC = drawBot;
+  drawBot = function(x, y, ang, aim, t, moving, flash){
+    if(p.stealthT > now){ ctx.save(); ctx.globalAlpha = 0.35; _botNC(x, y, ang, aim, t, moving, flash); ctx.restore(); return; }
+    return _botNC(x, y, ang, aim, t, moving, flash);
+  };
+  // эхо-двойник, руна и глиф притяжения на земле
+  const _layerNC = drawPvpLayer;
+  drawPvpLayer = function(t, dt){
+    _layerNC(t, dt);
+    if(NC.echo && NC.echo.until > now){ ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t*10)*0.08; ctx.globalCompositeOperation = "lighter";
+      drawMech(ctx, NC.echo.x, NC.echo.y, {cls:S.cls, fac:S.faction, eq:{}, aim:p.aim, moving:false, t, ps:1.5, atk:p.atkT > 0 ? p.atkT*4 : 0}); ctx.restore(); }
+    if(NC.rune && NC.rune.until > now){ const r = NC.rune; ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 2; ctx.globalAlpha = .8;
+      ctx.beginPath(); ctx.ellipse(r.x, r.y, 22, 9, 0, 0, Math.PI*2); ctx.stroke();
+      for(let k = 0; k < 4; k++){ const a = t*2 + k*Math.PI/2; ctx.fillStyle = "#FFE0A0"; ctx.fillRect(r.x + Math.cos(a)*22 - 2, r.y + Math.sin(a)*9 - 2, 4, 4); }
+      ctx.font = "11px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#FFB347"; ctx.fillText(Math.ceil(r.until - now) + " с", r.x, r.y - 14); ctx.restore(); }
+    if(NC.grav){ const g = NC.grav, k = 1 - Math.max(0, g.at - now)/0.6; ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t*60;
+      ctx.beginPath(); ctx.arc(g.x, g.y, g.r*(1 - k*0.6), 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+  };
+}
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.

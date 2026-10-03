@@ -23,9 +23,9 @@ log = logging.getLogger("items")
 
 # снаряжение: (id, минимальный уровень) — зеркало ITEMS из игры, стартовые вещи не выпадают
 # 9 видов × 5 поколений (1, 10, 20, 30, 40 ур.) — зеркало GEAR_FAM/TIERS из игры
-GEAR_FAMS = ("hammer", "blades", "rifle", "staff", "sensor", "armor", "module", "core", "legs")
+GEAR_FAMS = ("hammer", "blades", "rifle", "staff", "sensor", "armor", "module", "core", "legs", "phaseblades", "glaive")
 TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
-CLASS_WPN = {"guard": "hammer", "reaper": "blades", "sniper": "rifle", "techno": "staff"}
+CLASS_WPN = {"guard": "hammer", "reaper": "blades", "sniper": "rifle", "techno": "staff", "ghost": "phaseblades", "glyph": "glaive"}
 GEAR = [(f"g_{f}_{t}", lv) for f in GEAR_FAMS for t, lv in TIER_LVL.items()]
 GEAR_IDS = {g for g, _ in GEAR}
 # старые вещи → новые; W1/W2 — оружие класса владельца 1-го/2-го поколения

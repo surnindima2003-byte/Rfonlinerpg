@@ -43,7 +43,7 @@ MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear"}
 SAFE_LOCS = {"lobby", "arena_fear"}          # здесь PvP нет никогда
 FACTIONS = {"aegis", "vex", "core"}
-CLASSES = {"", "guard", "reaper", "sniper", "techno"}
+CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
 GEAR_IDS = items.GEAR_IDS | {"kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti"}
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
@@ -241,7 +241,7 @@ async def api_save(request):
             clash = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == new_nick.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
             if not clash:
                 row.nick = new_nick
-        row.cls = s_.get("cls") if s_.get("cls") in ("guard", "reaper", "sniper", "techno") else ""
+        row.cls = s_.get("cls") if s_.get("cls") in CLASSES and s_.get("cls") else ""
         row.guild_id = str(s_.get("guildId", ""))[:64]
         await s.commit()
     return web.json_response({"ok": True})
@@ -1203,7 +1203,7 @@ async def handle_pvp(d, info):
         hit["sl"] = 1
     if d.get("st") and info.get("cls") == "reaper" and not skill:
         hit["st"] = 1
-    if d.get("br") and skill and info.get("cls") in ("techno", "sniper"):
+    if d.get("br") and skill and info.get("cls") in ("techno", "sniper", "ghost"):
         hit["br"] = 1
     hub.to_uid(to, hit)
     broadcast_pvp_fx(info, tgt, dmg, crit, skill)
