@@ -1210,6 +1210,19 @@ const ERR_Q = [];
   window.addEventListener("unhandledrejection", e => push("Promise: " + (e.reason && e.reason.message || e.reason), e.reason && e.reason.stack));
   setInterval(() => { if(!ERR_Q.length || typeof NET === "undefined" || !NET.on || !NET.id) return; const x = ERR_Q.shift(); NET.api("/api/err", x).catch(() => {}); }, 4000);
 })();
+// ---- защита рисования: отрицательный радиус ----
+// Safari (iPhone) роняет кадр ошибкой «IndexSizeError: The index is not in the allowed range», если радиус
+// круга, эллипса, скругления или градиента хоть на долю пикселя меньше нуля. Так бывает у тающих эффектов
+// (радиус считается от оставшегося времени) и у полосок при нулевой ширине. Отрицательный радиус рисуем как 0.
+(function(){
+  const P = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype; if(!P) return;
+  const pos = v => v > 0 ? v : 0;                                   // NaN тоже превращается в 0
+  const arc = P.arc, ellipse = P.ellipse, arcTo = P.arcTo, rg = P.createRadialGradient;
+  P.arc = function(x, y, r, a0, a1, ccw){ return arc.call(this, x, y, pos(r), a0, a1, ccw); };
+  if(ellipse) P.ellipse = function(x, y, rx, ry, rot, a0, a1, ccw){ return ellipse.call(this, x, y, pos(rx), pos(ry), rot, a0, a1, ccw); };
+  P.arcTo = function(x1, y1, x2, y2, r){ return arcTo.call(this, x1, y1, x2, y2, pos(r)); };
+  P.createRadialGradient = function(x0, y0, r0, x1, y1, r1){ return rg.call(this, x0, y0, pos(r0), x1, y1, pos(r1)); };
+})();
 // ===================== ДАННЫЕ И СОСТОЯНИЕ =====================
 const $ = id => document.getElementById(id);
 const rnd = ([a,b]) => a + Math.floor(Math.random()*(b-a+1));
@@ -1768,7 +1781,7 @@ function robotSVG(f, eq){
 // Короткие синтезированные звуки: не нужны файлы, работают офлайн.
 const Sfx = (() => {
   let ac = null;
-  const ctxA = () => { if(!ac){ try{ ac = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state === "suspended") ac.resume(); return ac; };
+  const ctxA = () => { if(!ac){ try{ ac = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state === "suspended") Promise.resolve(ac.resume()).catch(() => {}); return ac; };   // iPhone может отказать (звонок, фон) — не ошибка
   function tone(freq, dur, type, gain, slide){
     if(!S.settings.sound) return; const a = ctxA(); if(!a) return;
     const o = a.createOscillator(), g = a.createGain(), t = a.currentTime, v = gain*S.settings.vol;
@@ -10237,9 +10250,9 @@ const Music = (() => {
     if(!on && playing){ setTimeout(() => { if(!S.settings.music){ playing = false; clearInterval(timer); } }, 1300); }
   }
   // браузеры разрешают звук только после касания экрана
-  const start = () => { if(!init()) return; if(ac.state === "suspended") ac.resume(); apply(); };
+  const start = () => { if(!init()) return; if(ac.state === "suspended") Promise.resolve(ac.resume()).catch(() => {}); apply(); };
   ["pointerdown", "keydown"].forEach(ev => window.addEventListener(ev, start, {once:true, passive:true}));
-  document.addEventListener("visibilitychange", () => { if(!ac) return; if(document.hidden) ac.suspend(); else if(S.settings.music) ac.resume(); });
+  document.addEventListener("visibilitychange", () => { if(!ac) return; if(document.hidden) Promise.resolve(ac.suspend()).catch(() => {}); else if(S.settings.music) Promise.resolve(ac.resume()).catch(() => {}); });
   return {apply, start};
 })();
 // ===================== АРТЕФАКТЫ: ИКОНКИ, СЛОТ, КРАФТ =====================
