@@ -924,6 +924,7 @@ def clean_pos(d, info):
         info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
         info["df"] = int(d["df"]) if isinstance(d.get("df"), (int, float)) else None
         info["sth"] = 1 if d.get("sth") and info.get("cls") == "ghost" else 0          # Призрак в тени (видят и другие)
+        info["dr"] = d.get("dr") if d.get("dr") in DRONE_IDS else ""                  # дрон-компаньон рядом с роботом
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
@@ -937,7 +938,9 @@ def clean_pos(d, info):
 
 
 PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
-               "hp", "mhp", "cp", "mcp", "bm", "admin", "sth")
+               "hp", "mhp", "cp", "mcp", "bm", "admin", "sth", "dr")
+# дроны-компаньоны (как в game.html → DRONES): другим игрокам показываем только известные виды
+DRONE_IDS = {"d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phantom", "d_sol"}
 
 
 def public(info):

@@ -30,6 +30,8 @@ SHOP_SALE = 0.7
 _BASE = {"p_start": 1, "p_base": 5, "p_std": 20, "p_elite": 100, "p_legend": 180, "p_epic": 600, "p_cores": 10,
          "d_start": 30, "d_base": 65, "d_adv": 220, "d_sup": 370, "d_top": 550, "d_admin": 700}
 PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots": 1, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
+# дроны-компаньоны: по полной цене, без скидки сезона (как в game.html → DRONES, src "gram")
+PACK_PRICES.update({"dr_nova": 15, "dr_aegis": 30, "dr_phantom": 60, "dr_sol": 120})
 
 
 def g(nano):
