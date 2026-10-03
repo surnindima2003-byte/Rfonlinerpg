@@ -43,6 +43,7 @@ def view(uid=None):
     if uid is not None:
         v["me"] = uid in st["reg"]
         v["used"] = uid in st["used"]
+        v["dead"] = uid in st["dead"]
     return v
 
 
@@ -146,7 +147,7 @@ def setup(app, read_auth, online):
             return web.json_response({"ok": False, "error": "Запись сейчас закрыта"})
         if int(info.get("lvl", 1)) < 10 and not user["admin"]:
             return web.json_response({"ok": False, "error": "Кровавая башня — с 10 уровня"})
-        if uid in st["used"]:
+        if uid in st["used"] and not user["admin"]:                    # админу можно повторять для проверки
             return web.json_response({"ok": False, "error": "Попытка на сегодня уже использована"})
         st["reg"].add(uid); st["nick"][uid] = info.get("nick", user["name"][:16]); st["dirty"] = True
         return web.json_response({"ok": True, **view(uid)})

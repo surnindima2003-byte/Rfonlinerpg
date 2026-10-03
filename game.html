@@ -8440,8 +8440,10 @@ const wbBar = document.createElement("div"); wbBar.className = "wb-bar"; wbBar.h
 wbBar.innerHTML = `<b>Владыка Ржавчины</b><div class="wb-hp"><i></i><span></span></div>`;
 document.getElementById("scrGame").append(wbBar);
 setInterval(() => {
+  if(locKey === "tower") return;                     // в башне этой плашкой управляет босс башни
   const on = wbOn(); if(wbBar.hidden === on) wbBar.hidden = !on; if(!on) return;
   const B = WB.st, k = B.hp/B.max;
+  wbBar.querySelector("b").textContent = B.name || "Владыка Ржавчины";
   wbBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
   wbBar.querySelector("span").textContent = B.hp.toLocaleString("ru-RU") + " / " + B.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%";
 }, 250);
@@ -8592,7 +8594,9 @@ function renderTW(){
   const big = ph === "reg" ? `${mm}:${String(ss).padStart(2, "0")}` : ph === "run" ? "Идёт забег" : `${hh}ч ${Math.floor(left%36e5/6e4)}м`;
   const sub = ph === "reg" ? (T.me ? "Вы в очереди" : "Ждём игроков") : ph === "run" ? "Босс: " + (T.hp || 0).toLocaleString("ru-RU") : "До открытия · 20:30 МСК";
   body().innerHTML = `<div class="wb-top"><b>${big}</b><small>${sub}</small><em>Записалось: ${T.reg || 0} · Попыток сегодня: ${T.used ? 0 : 1}/1</em>
-      ${ph === "reg" ? (T.me ? `<button class="act alt" type="button" data-twjoin="leave">Отменить запись</button>` : `<button class="act tw-join" type="button" data-twjoin="join" ${T.used ? "disabled" : ""}>Записаться</button>`) : ""}</div>
+      ${ph === "reg" ? (T.me ? `<button class="act alt" type="button" data-twjoin="leave">Отменить запись</button>` : `<button class="act tw-join" type="button" data-twjoin="join" ${T.used ? "disabled" : ""}>Записаться</button>`)
+        : ph === "run" && T.me && !T.dead && !TW.out && locKey !== "tower" ? `<button class="act tw-join" type="button" data-twjoin="enter">Войти в башню</button>`
+        : ph === "run" && T.me && (T.dead || TW.out) ? `<small style="color:var(--rust)">Ты выбыл из забега</small>` : ""}</div>
     <p class="hint"><b>Правила:</b><br>• Открыта каждый день в 20:30 по Москве, всего на 5 минут<br>• Регистрация 5 минут после открытия, затем один общий старт — бегут все, кто записался<br>• Одна попытка в день, тратится при старте забега<br>• У каждого своя дорога: 60 монстров 5 уровня, затем 60 монстров 10 уровня, вплотную друг к другу<br>• Все дороги ведут к одному общему боссу — без дропа<br>• Побеждает тот, кто нанёс боссу больше всего урона — не обязательно добивший<br>• Смерть в коридоре — выбывание из забега<br>• В конце каждой линии монстров — барьер: не пройти, пока не убиты все<br>• Только с 10 уровня</p>
     <div class="spt-sec"><b>Награды:</b></div>
     <div class="wb-drop"><span>⭐ Опыт с монстров в Башне</span><b>×4</b></div>
@@ -8600,7 +8604,17 @@ function renderTW(){
     <div class="wb-drop"><span>👑 Ядра — победителю</span><b>+30</b></div>
     ${window.NET_ADMIN && (ph === "idle" || ph === "done") ? `<button class="act alt" type="button" data-twjoin="admin" style="margin-top:8px">Админ: открыть запись на 40 сек</button>` : ""}`;
 }
-function twLoad(){ if(typeof NET !== "undefined" && NET.api) NET.api("/api/tower/state", {}).then(r => { if(r && r.ok){ TW.st = r; if(sheetRender === renderTW) renderTW(); } }).catch(() => {}); }
+function twEnter(){
+  if(locKey === "tower" || TW.out) return;
+  if(TW.entering && performance.now() - TW.entering < 4000) return;
+  TW.entering = performance.now(); TW.run = true;
+  if(typeof closeSheet === "function" && sheetRender === renderTW) closeSheet();
+  toast("🩸 Кровавая башня: старт! Прорвись через монстров к боссу"); travel("tower");
+}
+// сервер говорит «забег идёт, ты записан и жив» — а мы не в башне (пропустили сигнал старта, перезапуск, переподключение)
+function twSync(){ const T = TW.st; if(T && T.phase === "run" && T.me && !T.dead && !TW.out && locKey !== "tower") twEnter(); }
+function twLoad(){ if(typeof NET !== "undefined" && NET.api) NET.api("/api/tower/state", {}).then(r => { if(r && r.ok){ TW.st = r; twSync(); if(sheetRender === renderTW) renderTW(); } }).catch(() => {}); }
+setTimeout(twLoad, 5000); setInterval(() => { if(TW.st && TW.st.phase === "reg" && TW.st.me) twLoad(); }, 5000);
 function openTower(){ openSheet("Кровавая башня", "Забег через коридоры монстров", renderTW); twLoad();
   clearInterval(TW.tm); TW.tm = setInterval(() => { if(sheetRender !== renderTW){ clearInterval(TW.tm); return; } renderTW(); }, 1000); }
 {
@@ -8609,13 +8623,14 @@ function openTower(){ openSheet("Кровавая башня", "Забег че�
   document.getElementById("shBody").addEventListener("click", e => {
     const b = e.target.closest("button"); if(!b) return;
     if(b.dataset.twopen) openTower();
+    else if(b.dataset.twjoin === "enter"){ TW.out = false; TW.entering = 0; twEnter(); }
     else if(b.dataset.twjoin){ const k = b.dataset.twjoin; b.disabled = true;
       NET.api("/api/tower/join", k === "leave" ? {leave:1} : k === "admin" ? {admin_open:1} : {}).then(r => { if(r && r.ok){ TW.st = r; toast(k === "join" ? "Ты записан в Кровавую башню" : k === "leave" ? "Запись отменена" : "Запись открыта"); } else toast((r && r.error) || "Не удалось"); renderTW(); }).catch(() => toast("Нет связи с сервером")); }
   });
   const prevTW = onNetExtra;
   onNetExtra = function(d){
-    if(d.t === "tw"){ TW.st = {...(TW.st || {}), ...d}; if(sheetRender === renderTW) renderTW(); return; }
-    if(d.t === "twstart"){ TW.run = true; TW.out = false; TW.st = {...(TW.st || {}), phase:"run", hp:d.max, max:d.max}; closeSheet(); toast("🩸 Кровавая башня: старт! Прорвись через монстров к боссу"); travel("tower"); return; }
+    if(d.t === "tw"){ TW.st = {...(TW.st || {}), ...d}; twSync(); if(sheetRender === renderTW) renderTW(); return; }
+    if(d.t === "twstart"){ TW.out = false; TW.st = {...(TW.st || {}), phase:"run", hp:d.max, max:d.max, me:true, dead:false}; twEnter(); return; }
     if(d.t === "twend"){ TW.run = false; const txt = d.win ? "👑 Ты победил в Кровавой башне! +40 ядер" : d.killed ? "Босс башни повержен. Победитель: " + (d.winner || "—") + " · +10 ядер, если бил босса" : "Забег окончен: босс устоял";
       toast(txt); if(TW.st){ TW.st.phase = "done"; TW.st.hp = 0; } setTimeout(() => { if(locKey === "tower") travel("lobby"); }, 5000); return; }
     prevTW(d);
