@@ -113,6 +113,10 @@ async def migrate_gear():
     if moved:
         log.info("Снаряжение: переведено на новую систему %s записей", moved)
 SPHERES = ("sph_cu", "sph_ti")
+# руны (как в game.html → RUNES). Учтённые руны хранятся в той же таблице балансов, что и сферы,
+# и, как сферы, продаются на маркете за GRAM. Учёт идёт только через паки магазина и маркет.
+RUNES = ("r_atk", "r_def", "r_hp", "r_crit", "r_spd", "r_aspd", "r_cpow", "r_regen", "r_war", "r_bastion", "r_storm", "r_fortune")
+REG_IDS = SPHERES + RUNES       # всё, что учитывается штуками (без номера)
 BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1}
 DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40)}
@@ -285,7 +289,7 @@ async def api_items(request):
             items = (await s.execute(select(ItemInst).where(ItemInst.owner == uid, ItemInst.status == "inv"))).scalars().all()
             sph = {r.item: r.n for r in (await s.execute(select(SphereBal).where(SphereBal.owner == uid))).scalars().all()}
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
-                                      "sph": {k: sph.get(k, 0) for k in SPHERES}})
+                                      "sph": {k: sph.get(k, 0) for k in REG_IDS}})
 
         if op == "kill":
             # старый путь (HTTP) — для закэшированных клиентов; новые шлют убийства через WebSocket
@@ -328,7 +332,7 @@ async def api_items(request):
                 await s.execute(update(ItemInst).where(ItemInst.uid.in_(uids), ItemInst.owner == uid, ItemInst.status == "inv")
                                 .values(status="gone").execution_options(synchronize_session=False))
             sp = body.get("sph") or {}
-            for sid in SPHERES:
+            for sid in REG_IDS:
                 try:
                     n = int(sp.get(sid, 0) or 0)
                 except (TypeError, ValueError):
@@ -349,13 +353,14 @@ async def escrow_for_market(s, uid, item):
         if not x or x.owner != uid or x.status != "inv" or not await set_item_status(s, x.uid, uid, "inv", "market"):
             return None, "Эта вещь не подтверждена сервером, продать её за GRAM нельзя"
         return {"id": x.item, "g": x.g, "e": x.e, "n": 1, "uid": x.uid}, None
-    if item.get("id") in SPHERES:
+    if item.get("id") in REG_IDS:
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            return None, f"Учтённых сфер только {row.n or 0}: остальные нельзя продать за GRAM"
+            what = "сфер" if item["id"] in SPHERES else "рун"
+            return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение и сферы, выбитые с мобов"
+    return None, "За GRAM можно продавать только снаряжение, сферы с мобов и руны из магазина"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -450,7 +455,12 @@ async def migrate_market_registry():
 
 # предметы паков магазина GRAM, которые регистрируются сервером (их потом можно продать на маркете)
 # "W2" — оружие класса покупателя 2-го поколения, "W3" — 3-го
-PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "spheres": [("sph", "sph_cu", 3)], "cores": [("sph", "sph_ti", 1)]}
+PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "spheres": [("sph", "sph_cu", 3)], "cores": [("sph", "sph_ti", 1)],
+              # паки рун (как в game.html → PACKS, вкладка «Руны»): руны выдаёт и учитывает сервер
+              "rn_base": [("sph", "r_atk", 2), ("sph", "r_def", 2), ("sph", "r_hp", 2)],
+              "rn_pro": [("sph", "r_crit", 2), ("sph", "r_cpow", 2), ("sph", "r_aspd", 2), ("sph", "r_spd", 2)],
+              "rn_war": [("sph", "r_war", 2)], "rn_bastion": [("sph", "r_bastion", 2)],
+              "rn_storm": [("sph", "r_storm", 2)], "rn_fortune": [("sph", "r_fortune", 2)]}
 
 
 async def mint_pack(s, owner, pack):

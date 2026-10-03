@@ -48,6 +48,18 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 body.dbg-ok .h2-av{pointer-events:auto;cursor:pointer}
 #dbgPanel{position:absolute;left:8px;top:120px;z-index:30;font:600 10.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#CFE8D0;background:rgba(6,10,14,.8);border:1px solid #2F3D4B;border-radius:8px;padding:6px 9px;pointer-events:none;white-space:pre}
 #dbgPanel[hidden]{display:none}
+/* руны: точка на ячейке вещи и гнёзда в карточке */
+.cell .rn-dot{position:absolute;right:4px;bottom:4px;width:7px;height:7px;border-radius:2px;transform:rotate(45deg);box-shadow:0 0 0 1px #141A21}
+.rn-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.rn-row>small{color:var(--muted);font-size:12px;margin-right:2px}
+.rn-sock{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 140px;border:1px dashed var(--line);border-radius:10px;background:rgba(0,0,0,.04);padding:5px 8px;font-size:12px;text-align:left;color:inherit}
+.rn-sock.on{border-style:solid}
+.rn-sock svg{width:26px;height:26px;flex:none}
+.rn-sock span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rn-pick{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+.rn-pick button{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--panel);color:inherit;text-align:left;font-size:12px}
+.rn-pick button svg{width:28px;height:28px;flex:none}
+.rn-pick small{display:block;color:var(--muted)}
 .hud-card{background:rgba(20,27,34,.82);border:1px solid #34414E;border-radius:12px;padding:7px 10px}
 .hud-top{display:flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap}
 .hud-top b{font:14px 'Russo One',sans-serif}
@@ -1253,6 +1265,43 @@ const ITEMS = {
   plate:{name:"Бронепластина", type:"mat", sell:4, desc:"Материал для крафта"},
   chip:{name:"Микросхема", type:"mat", sell:8, desc:"Материал для крафта"},
 };
+// ===================== РУНЫ =====================
+// У каждой вещи 2 гнезда. Руну можно вставить и вынуть бесплатно; одинаковые руны в одну вещь не ставятся.
+// Прокачки нет: руны отличаются видом. Бонус работает, пока вещь надета.
+// src "craft" — собирается в Мастерской (такие же руны бывают и в паках); src "gram" — только из паков магазина GRAM.
+// b: atk/def/hp/spd/rate/xp/scrap — доли (0.04 = +4%), crit — пункты крита, cpow — к силе крита, regen — прочность в секунду.
+// За GRAM на маркете продаются только руны, учтённые сервером (из паков и купленные на маркете). Вставленная руна
+// становится привязанной: вынуть можно, продать за GRAM — нет. Паки рун дублируются в gram.py и items.py (rn_*).
+const RUNES = {
+  r_atk:    {name:"Руна ярости",    src:"craft", lvl:10, col:"#E0694A", gl:"blade",  b:{atk:0.04},           need:{scrap:8000, cores:30, chip:4}},
+  r_def:    {name:"Руна брони",     src:"craft", lvl:10, col:"#A7B0B8", gl:"shield", b:{def:0.05},           need:{scrap:8000, cores:30, plate:6}},
+  r_hp:     {name:"Руна корпуса",   src:"craft", lvl:10, col:"#7BC98A", gl:"cross",  b:{hp:0.05},            need:{scrap:8000, cores:30, plate:4, wire:4}},
+  r_crit:   {name:"Руна точности",  src:"craft", lvl:15, col:"#F2C14B", gl:"eye",    b:{crit:2},             need:{scrap:15000, cores:60, chip:8}},
+  r_spd:    {name:"Руна скорости",  src:"craft", lvl:15, col:"#5FD4E8", gl:"chev",   b:{spd:0.03},           need:{scrap:15000, cores:60, wire:10}},
+  r_aspd:   {name:"Руна разгона",   src:"craft", lvl:20, col:"#4EA8F5", gl:"bolt",   b:{rate:0.04},          need:{scrap:25000, cores:100, chip:10, wire:6}},
+  r_cpow:   {name:"Руна пробоя",    src:"craft", lvl:20, col:"#FF8A7A", gl:"star",   b:{cpow:0.10},          need:{scrap:25000, cores:100, chip:10, plate:6}},
+  r_regen:  {name:"Руна ремонта",   src:"craft", lvl:25, col:"#3FB56B", gl:"gear",   b:{regen:1},            need:{scrap:40000, cores:150, plate:12, wire:12}},
+  r_war:    {name:"Руна войны",     src:"gram", col:"#FF4A3A", gl:"blade",  b:{atk:0.07, crit:3}},
+  r_bastion:{name:"Руна бастиона",  src:"gram", col:"#F2A93B", gl:"shield", b:{hp:0.08, def:0.08}},
+  r_storm:  {name:"Руна бури",      src:"gram", col:"#9B7BFF", gl:"bolt",   b:{rate:0.06, spd:0.05}},
+  r_fortune:{name:"Руна удачи",     src:"gram", col:"#FFD700", gl:"star",   b:{xp:0.10, scrap:0.10}}
+};
+const RUNE_IDS = Object.keys(RUNES), RUNE_SLOTS = 2;
+const RUNE_STAT = {atk:"атаки", def:"брони", hp:"прочности", crit:"крита", spd:"скорости", rate:"скорости атаки", cpow:"силы крита", regen:"прочности/сек", xp:"опыта", scrap:"лома"};
+const runeText = R => Object.entries(R.b).map(([k, v]) => k === "regen" ? "+" + v + " " + RUNE_STAT[k] : "+" + (k === "crit" ? v : Math.round(v*100)) + "% " + RUNE_STAT[k]).join(" · ");
+for(const id of RUNE_IDS){ const R = RUNES[id]; ITEMS[id] = {name:R.name, type:"rune", sell:R.src === "gram" ? 2000 : 400, desc:runeText(R) + " · вставляется в гнездо вещи"}; }
+// сумма бонусов рун со всех надетых вещей
+function runeTotals(){
+  const t = {};
+  for(const e of Object.values(S.eq || {})) if(e && e.r) for(const id of e.r){ const R = id && RUNES[id]; if(R) for(const [k, v] of Object.entries(R.b)) t[k] = (t[k] || 0) + v; }
+  return t;
+}
+// вещь ушла (продана, вложена, разрушена) — руны из неё возвращаются в сумку или на склад
+function runesBack(x){
+  if(!x || !x.r) return;
+  for(const id of x.r) if(id && RUNES[id]){ if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)) toast("Нет места: руна «" + RUNES[id].name + "» потеряна"); }
+  delete x.r;
+}
 // ===================== СНАРЯЖЕНИЕ: 10 поколений × 9 видов = 90 вещей, каждая в 4 грейдах =====================
 // Новое поколение каждые 5 уровней. Оружие своё у каждого класса.
 // Комплект: 3 вещи одного поколения — +атака, 6 вещей — +прочность и крит.
@@ -1564,17 +1613,23 @@ function stat(){
   if(DB.hp) maxhp = Math.round(maxhp*(1 + DB.hp));
   if(DB.def) def = Math.round(def*(1 + DB.def));
   crit += DB.crit || 0; spd += DB.spd || 0;
+  // руны в надетых вещах
+  const RB = runeTotals();
+  if(RB.atk) atk = Math.round(atk*(1 + RB.atk));
+  if(RB.hp) maxhp = Math.round(maxhp*(1 + RB.hp));
+  if(RB.def) def = Math.round(def*(1 + RB.def));
+  crit += RB.crit || 0; spd += RB.spd || 0;
   crit += 2*pasLv("eagle");
   spd += 0.02*pasLv("servo");
   return {atk, def, maxhp, spd, crit, maxcp:maxhp*10 + 200*(U.cpup || 0),
-    critPow:2 + 0.003*(U.cpow || 0) + 0.04*pasLv("fury"),
-    rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift"),
-    regen:1*(U.regen || 0) + 0.2*pasLv("selfrepair"),
-    xpUp:0.001*(U.xpup || 0) + (DB.xp || 0), dropUp:0.001*(U.dropup || 0),
+    critPow:2 + 0.003*(U.cpow || 0) + 0.04*pasLv("fury") + (RB.cpow || 0),
+    rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift") + (RB.rate || 0),
+    regen:1*(U.regen || 0) + 0.2*pasLv("selfrepair") + (RB.regen || 0),
+    xpUp:0.001*(U.xpup || 0) + (DB.xp || 0) + (RB.xp || 0), dropUp:0.001*(U.dropup || 0),
     dmgRed:Math.min(0.45, 0.03*pasLv("steelskin")),
     thorns:0.04*pasLv("retaliate"), steal:0.02*pasLv("hunger"), execute:0.06*pasLv("execute"),
     range:12*pasLv("longshot"), skillDmg:0.04*pasLv("overload"),
-    cdr:Math.min(0.5, 0.02*pasLv("cold") + 0.025*pasLv("cyclotron")), loot:0.03*pasLv("looter") + (DB.scrap || 0)};
+    cdr:Math.min(0.5, 0.02*pasLv("cold") + 0.025*pasLv("cyclotron")), loot:0.03*pasLv("looter") + (DB.scrap || 0) + (RB.scrap || 0)};
 }
 
 // Боевая мощь (БМ): одно число для сравнения пилотов и рейтинга
@@ -2737,7 +2792,7 @@ function sortItems(list){
   });
   list.splice(0, list.length, ...merged);
 }
-const cellHtml = (x, attrs, extra) => x ? `<button class="cell ${extra || ""}" type="button" ${attrs} aria-label="${ITEMS[x.id].name}" ${gStyle(x)}>${icon(x.id, x.g)}${encBadge(x)}${x.n > 1 ? `<b>${x.n}</b>` : ""}</button>` : "";
+const cellHtml = (x, attrs, extra) => x ? `<button class="cell ${extra || ""}" type="button" ${attrs} aria-label="${ITEMS[x.id].name}" ${gStyle(x)}>${icon(x.id, x.g)}${encBadge(x)}${x.r && x.r.some(Boolean) ? `<i class="rn-dot" style="background:${RUNES[x.r.find(Boolean)].col}"></i>` : ""}${x.n > 1 ? `<b>${x.n}</b>` : ""}</button>` : "";
 function renderStorage(){
   const from = stTab === "inv" ? S.inv : S.store, max = stTab === "inv" ? INV_MAX : STORE_MAX;
   let h = `<div class="tabs"><button type="button" data-st="inv" aria-pressed="${stTab === "inv"}">Сумка (${S.inv.length}/${INV_MAX})</button><button type="button" data-st="store" aria-pressed="${stTab === "store"}">Склад (${S.store.length}/${STORE_MAX})</button></div>`;
@@ -2775,7 +2830,7 @@ function transferItem(i, k){
 
 // ---- мастерская ----
 function renderCraft(){
-  let h = invLine() + droneCraftHtml() + `<h3 class="bag-h" style="margin-top:12px">Снаряжение</h3><div class="list">`;
+  let h = invLine() + droneCraftHtml() + runeCraftHtml() + `<h3 class="bag-h" style="margin-top:12px">Снаряжение</h3><div class="list">`;
   for(const r of RECIPES){
     const it = ITEMS[r.id], lvlOk = !it.lvl || S.level >= it.lvl;
     const parts = Object.entries(r.need).map(([k, n]) => {
@@ -2890,9 +2945,9 @@ $("shBody").addEventListener("click", e => {
   }
   else if(d.sell !== undefined){
     const x = S.inv[+d.sell]; if(!x || ITEMS[x.id].nosell) return; const n = Math.min(+d.n, x.n);
-    if(typeof regGone === "function"){ if(x.uid) regGone([x.uid]); else if(x.id === "sph_cu" || x.id === "sph_ti") regUseSph(x.id, n); }
-    S.scrap += sellPrice(x)*n; toast("Продано за " + sellPrice(x)*n + " лома");
-    if(ITEMS[x.id].type === "gear") S.inv.splice(+d.sell, 1); else removeItem(S.inv, x.id, n);
+    if(typeof regGone === "function"){ if(x.uid) regGone([x.uid]); else if(REG_IDS.includes(x.id)) regUseSph(x.id, n); }
+    S.scrap += sellPrice(x)*n; toast("Продано за " + sellPrice(x)*n + " лома" + (x.r && x.r.some(Boolean) ? ". Руны вернулись в сумку" : ""));
+    if(ITEMS[x.id].type === "gear"){ runesBack(x); S.inv.splice(+d.sell, 1); } else removeItem(S.inv, x.id, n);
   }
   else if(d.st){ stTab = d.st; stQty = null; }
   else if(d.move !== undefined){
@@ -2904,6 +2959,14 @@ $("shBody").addEventListener("click", e => {
   else if(d.stqcancel){ stQty = null; }
   else if(d.stmove !== undefined){ transferItem(+d.stmove, parseInt(($("stQtyNum") || {}).value) || 1); stQty = null; }
   else if(d.sortlist){ sortItems(d.sortlist === "inv" ? S.inv : S.store); stQty = null; bagSel = null; bagMove = null; toast("Предметы отсортированы"); }
+  else if(d.rcraft){
+    const R = RUNES[d.rcraft]; if(!R || R.src !== "craft") return;
+    if(S.level < R.lvl){ toast("Нужен " + R.lvl + " уровень"); return; }
+    if(!Object.entries(R.need).every(([k, n]) => have(k) >= n)){ toast("Не хватает материалов"); return; }
+    if(!addItem(S.inv, d.rcraft, 1, INV_MAX)){ toast("Освободи место в сумке"); return; }
+    for(const [k, n] of Object.entries(R.need)){ if(k === "scrap" || k === "cores") S[k] -= n; else removeItem(S.inv, k, n); }
+    toast("Собрано: " + R.name + ". Вставь её в вещь: Персонаж → вещь → гнездо"); Sfx.play("pick");
+  }
   else if(d.dcraft){
     const D = DRONES[d.dcraft]; if(!D || D.src !== "craft") return;
     if((S.drones || []).includes(d.dcraft)){ toast("Этот дрон уже есть"); return; }
@@ -2948,7 +3011,7 @@ $("shBody").addEventListener("click", e => {
 const UI = {
   trader: () => openSheet("Торговец", "Расходники и скупка", renderTrader),
   storage: () => { stTab = "inv"; stQty = null; openSheet("Склад", "Хранение предметов", renderStorage); },
-  craft: () => openSheet("Мастерская", "Дроны и снаряжение из материалов", renderCraft),
+  craft: () => openSheet("Мастерская", "Дроны, руны и снаряжение", renderCraft),
   portal: () => openSheet("Портал", "Выбери локацию по уровню", renderPortal),
   back: () => travel("lobby")
 };
@@ -2993,12 +3056,12 @@ function renderGearTab(){
     const it = ITEMS[invSel.id], gc = gradeColor(invSel.g), lock = it.lvl && S.level < it.lvl;
     h += `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${gc}">${icon(invSel.id, invSel.g)}</div>
       <div class="tx"><span style="color:${gc}">${invSel.e ? "+" + invSel.e + " " : ""}${it.name}</span><small>${GRADES[invSel.g].name} · ${itemDesc(invSel.id, invSel.g, invSel.e)}${it.lvl ? " · с " + it.lvl + " ур." : ""}</small><div class="cmp">${cmpHtml(invSel.id, invSel.g, invSel.e)}</div></div>
-      <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-cequip="${cSel}" ${lock ? "disabled" : ""}>${lock ? "Ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${cSel}">Заточить</button></div></div></section>`;
+      <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-cequip="${cSel}" ${lock ? "disabled" : ""}>${lock ? "Ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${cSel}">Заточить</button></div></div>${runeRow("inv:" + cSel)}</section>`;
   } else if(eqSel){
     const it = ITEMS[eqSel.id], gc = gradeColor(eqSel.g);
     h += `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${gc}">${icon(eqSel.id, eqSel.g)}</div>
       <div class="tx"><span style="color:${gc}">${eqSel.e ? "+" + eqSel.e + " " : ""}${it.name}</span><small>Надето · ${GRADES[eqSel.g].name} · ${itemDesc(eqSel.id, eqSel.g, eqSel.e)}</small></div>
-      <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-ench-eq="${cSlot}">Заточить</button><button class="act alt" type="button" data-cun="${cSlot}">Снять</button></div></div></section>`;
+      <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-ench-eq="${cSlot}">Заточить</button><button class="act alt" type="button" data-cun="${cSlot}">Снять</button></div></div>${runeRow("eq:" + cSlot)}</section>`;
   }
 
   // сумка прямо в Персонаже: все предметы сеткой, нажатие открывает карточку предмета
@@ -4975,6 +5038,9 @@ $("scrChar").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return;
   const d = b.dataset;
   if(d.ctab){ cTab = d.ctab; Sfx.play("ui"); }
+  else if(d.rsock){ runeSocketClick(d.rsock); }
+  else if(d.rins){ runeInsert(d.rins); }
+  else if(d.rclose){ RS.ref = null; }
   else if(d.dset){ if((S.drones || []).includes(d.dset)){ S.drone = d.dset; Sfx.play("pick"); toast("Дрон «" + DRONES[d.dset].name + "» в деле"); save(); } }
   else if(d.doff){ S.drone = ""; Sfx.play("ui"); toast("Дрон отправлен в ангар"); save(); }
   else if(d.dshop){ shopTab = "drones"; openShop(); return; }
@@ -6030,6 +6096,7 @@ function itemIconURL(id, g){
 // замена прежних векторных иконок: тот же вызов icon(id, g)
 function icon(id, g){
   if(!ITEMS[id]) return "";
+  if(ITEMS[id].type === "rune") return runeIcon(id);
   return `<svg viewBox="0 0 32 32" aria-hidden="true" style="overflow:visible"><image href="${itemIconURL(id, g)}" x="-4" y="-4" width="40" height="40" style="image-rendering:pixelated"/></svg>`;
 }
 
@@ -6440,6 +6507,7 @@ function doEnchant(forced){
       enchResult = `<span style="color:var(--amber)">Неудача: предмет цел, заточка снизилась до +${x.e}</span>`; Sfx.play("hit");
     } else {
       const scrap = Math.max(5, Math.round(sellPrice(x)*0.5));
+      runesBack(x);                                                          // руны из разрушенной вещи не пропадают
       if(enchRef.where === "inv") S.inv.splice(enchRef.i, 1); else S.eq[enchRef.slot] = null;
       S.scrap += scrap; S.hp = Math.min(S.hp, stat().maxhp);
       enchResult = `<span style="color:var(--rust)">Неудача: предмет разрушен. Из обломков получено ${scrap} лома</span>`; Sfx.play("hit");
@@ -6922,10 +6990,17 @@ const PACKS = [
   // дроны: по полной цене, покупаются один раз
   ...DRONE_IDS.filter(id => DRONES[id].src === "gram").map(id => { const D = DRONES[id];
     return {id:"dr_" + id.slice(2), name:"Дрон «" + D.name + "»", base:D.price, price:D.price, tab:"drones", color:D.col, once:"dr_" + id.slice(2), drone:id,
-      rew:[{id:"drone", d:id}], desc:droneBonusText(D) + " · сбор лута " + D.r}; })
+      rew:[{id:"drone", d:id}], desc:droneBonusText(D) + " · сбор лута " + D.r}; }),
+  // руны: по полной цене, можно покупать сколько угодно; сервер учитывает их (items.py → PACK_ITEMS)
+  SP("rn_base", "Руны: базовые", 8, "#7BC98A", [{id:"r_atk", n:2}, {id:"r_def", n:2}, {id:"r_hp", n:2}], "runes"),
+  SP("rn_pro", "Руны: боевые", 15, "#4EA8F5", [{id:"r_crit", n:2}, {id:"r_cpow", n:2}, {id:"r_aspd", n:2}, {id:"r_spd", n:2}], "runes"),
+  SP("rn_war", "Руна войны ×2", 20, "#FF4A3A", [{id:"r_war", n:2}], "runes"),
+  SP("rn_bastion", "Руна бастиона ×2", 20, "#F2A93B", [{id:"r_bastion", n:2}], "runes"),
+  SP("rn_storm", "Руна бури ×2", 20, "#9B7BFF", [{id:"r_storm", n:2}], "runes"),
+  SP("rn_fortune", "Руна удачи ×2", 25, "#FFD700", [{id:"r_fortune", n:2}], "runes")
 ];
 // цена со скидкой (сервер считает так же — см. gram.py)
-for(const pk of PACKS) if(pk.price == null) pk.price = pk.tab === "boost" || pk.tab === "drones" ? pk.base : Math.round(pk.base*SHOP_SALE*100)/100;
+for(const pk of PACKS) if(pk.price == null) pk.price = pk.tab === "boost" || pk.tab === "drones" || pk.tab === "runes" ? pk.base : Math.round(pk.base*SHOP_SALE*100)/100;
 const saleEnd = () => { const e = new Date(); e.setMonth(e.getMonth() + 1, 1); e.setHours(0, 0, 0, 0); return e.getTime(); };
 // набор брони тира t: шлем, корпус, ходовая, модуль, реактор
 const gsetIds = t => ["head", "armor", "legs", "module", "core"].map(sl => GEAR_IDS.find(id => ITEMS[id].slot === sl && ITEMS[id].tier === t)).filter(Boolean);
@@ -6969,11 +7044,11 @@ function saleLeft(){
 }
 function renderShop(){
   const bal = gramBal();
-  const tabs = [["packs", "Паки"], ["dops", "Допы"], ["boost", "Усиление"], ["drones", "Дроны"]];
+  const tabs = [["packs", "Паки"], ["dops", "Допы"], ["boost", "Усиление"], ["drones", "Дроны"], ["runes", "Руны"]];
   const list = PACKS.filter(pk => pk.tab === shopTab);
   body().innerHTML = `<div class="seg shop-tabs">${tabs.map(([k, n]) => `<button type="button" data-shtab="${k}" aria-pressed="${shopTab === k}">${n}</button>`).join("")}</div>
     <div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
-    ${shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
+    ${shopTab === "runes" ? `<p class="hint">Руны из паков учтены сервером: их можно продать на маркете за GRAM, пока они не вставлены в вещь</p>` : shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : shopTab !== "boost" ? `<div class="sale-bar"><span class="sale-tag">−30%</span> Скидка до конца сезона: <b id="saleCd">${saleLeft()}</b></div>` : `<p class="hint">Наборы усиления — по обычной цене</p>`}
     ${list.map(pk => { const done = (pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")]) || (pk.drone && (S.drones || []).includes(pk.drone)), low = bal < pk.price;
       return `<section class="packcard shopcard" style="--c:${pk.color}"><div class="pk-top"><div><b>${pk.name}</b>
         <em>${pk.base !== pk.price ? `<s>${gramF(pk.base)}</s> ` : ""}${gramF(pk.price)} GRAM${pk.base !== pk.price ? ` <span class="sale-tag">−30%</span>` : ""}</em></div>
@@ -7198,7 +7273,7 @@ function codexSlot(cid, i){
   if(idx < 0){ toast("Нужен предмет: " + ITEMS[s.id].name + " (" + GRADES[c.g].name.toLowerCase() + (s.e ? ", +" + s.e : "") + ") в сумке"); cxArm = null; renderCodex(); return; }
   if(cxArm !== cid + ":" + i){ cxArm = cid + ":" + i; toast("Нажми ещё раз, чтобы вложить предмет навсегда"); renderCodex(); return; }
   if(S.inv[idx].uid && typeof regGone === "function") regGone([S.inv[idx].uid]);
-  S.inv.splice(idx, 1); f[i] = true; cxArm = null; Sfx.play("pick"); cxBonusCache = null;
+  runesBack(S.inv[idx]); S.inv.splice(idx, 1); f[i] = true; cxArm = null; Sfx.play("pick"); cxBonusCache = null;
   if(codexDone(c)){ toast("Набор завершён: " + Object.entries(c.bon).map(([k, v]) => "+" + v + " " + STAT_RU[k]).join(", ")); Sfx.play("level"); }
   save(); renderCodex();
 }
@@ -7288,16 +7363,17 @@ function mkForm(i){
 }
 async function mkCreate(i){
   const x = S.inv[i]; if(!x) return;
+  if(x.r && x.r.some(Boolean)){ toast("Сначала вынь руны из вещи: Персонаж → вещь → гнёзда"); return; }
   const lim = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n;
   const n = Math.max(1, Math.min(lim, parseInt(($("mkN") || {}).value) || lim)), price = Math.round(Math.max(0.01, Math.min(100000, parseFloat($("mkP").value) || 0))*100)/100;
   const item = {id:x.id, g:x.g || 0, e:x.e || 0, n, ...(x.uid ? {uid:x.uid} : {})};
   if(ITEMS[x.id].type === "gear") S.inv.splice(i, 1); else removeItem(S.inv, x.id, n);
-  if(mkOnline() && !x.uid && typeof regAddSph === "function" && (x.id === "sph_cu" || x.id === "sph_ti")) regAddSph(x.id, -n);
+  if(mkOnline() && !x.uid && typeof regAddSph === "function" && REG_IDS.includes(x.id)) regAddSph(x.id, -n);
   try{
     if(mkOnline()) await mkApi("create", {item, price});
     else { mkLocal().mine.unshift({id:"m" + Date.now(), seller:S.name, item, price, ts:Date.now()}); }
     save(); toast("Лот выставлен"); mkTab = "mine"; openMarket();
-  }catch(e){ addItem(S.inv, item.id, item.n, INV_MAX, item.g, item.e, item.uid); if(mkOnline() && !item.uid && typeof regAddSph === "function" && (item.id === "sph_cu" || item.id === "sph_ti")) regAddSph(item.id, item.n); save(); toast(e.message); }
+  }catch(e){ addItem(S.inv, item.id, item.n, INV_MAX, item.g, item.e, item.uid); if(mkOnline() && !item.uid && typeof regAddSph === "function" && REG_IDS.includes(item.id)) regAddSph(item.id, item.n); save(); toast(e.message); }
 }
 async function mkBuy(id){
   const lot = (mkData.lots || []).find(l => String(l.id) === String(id)); if(!lot || gramBal() < lot.price) return;
@@ -8924,6 +9000,8 @@ function drawCrimsonWarden(x, y, t, atk){
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
 const REG = {on:false, sph:{sph_cu:0, sph_ti:0}, uids:new Set()};
+// учтённые сервером расходники: сферы и руны (их можно продать за GRAM). Сервер — items.py → REG_IDS
+const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS];
 const regOnline = () => typeof NET !== "undefined" && NET.on && NET.id && NET.ws && NET.ws.readyState === 1;
 const regApi = (op, body) => NET.api("/api/items/" + op, body || {});
 
@@ -8932,7 +9010,7 @@ async function regSync(){
   if(!(typeof NET !== "undefined" && NET.on && NET.id)) return;
   try{
     const r = await regApi("state"); if(!r || !r.ok) return;
-    REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = {sph_cu:r.sph.sph_cu || 0, sph_ti:r.sph.sph_ti || 0};
+    REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = Object.fromEntries(REG_IDS.map(id => [id, +(r.sph || {})[id] || 0]));
     const byUid = Object.fromEntries(r.items.map(x => [x.uid, x]));
     const fix = x => { if(!x || !x.uid) return; const s = byUid[x.uid]; if(!s || s.id !== x.id){ delete x.uid; return; } x.g = s.g; x.e = s.e; };
     [...S.inv, ...S.store, ...Object.values(S.eq)].forEach(fix);
@@ -8969,7 +9047,7 @@ function regAddSph(id, n){ REG.sph[id] = Math.max(0, (REG.sph[id] || 0) + n); }
 // учтённых сфер не может быть больше, чем их лежит в сумке: лишние списываются и на сервере
 function regClampSph(){
   if(!REG.on) return;
-  for(const id of ["sph_cu", "sph_ti"]){
+  for(const id of REG_IDS){
     const extra = (REG.sph[id] || 0) - have(id);
     if(extra > 0){ REG.sph[id] -= extra; regApi("gone", {sph:{[id]:extra}}); }
   }
@@ -8979,7 +9057,7 @@ function regGone(uids){ uids = uids.filter(Boolean); if(!REG.on || !uids.length)
 // сколько штук этого предмета можно продать за GRAM
 function regTradable(x){
   if(ITEMS[x.id].type === "gear") return x.uid ? 1 : 0;
-  if(x.id === "sph_cu" || x.id === "sph_ti") return Math.min(x.n, REG.sph[x.id] || 0);
+  if(REG_IDS.includes(x.id)) return Math.min(x.n, REG.sph[x.id] || 0);
   return 0;
 }
 
@@ -9008,7 +9086,7 @@ function regBadge(x){
   if(!REG.on || !x) return "";
   const t = regTradable(x);
   if(ITEMS[x.id].type === "gear") return t ? `<span class="regb ok">⇄ можно продать за GRAM</span>` : `<span class="regb">🔒 привязана: нельзя продать за GRAM</span>`;
-  if(x.id === "sph_cu" || x.id === "sph_ti") return `<span class="regb ${t ? "ok" : ""}">${t ? "⇄ за GRAM можно продать " + t + " шт." : "🔒 нельзя продать за GRAM"}</span>`;
+  if(REG_IDS.includes(x.id)) return `<span class="regb ${t ? "ok" : ""}">${t ? "⇄ за GRAM можно продать " + t + " шт." : "🔒 нельзя продать за GRAM"}</span>`;
   return "";
 }
 new MutationObserver(() => {
@@ -10120,6 +10198,78 @@ const Music = (() => {
   document.addEventListener("visibilitychange", () => { if(!ac) return; if(document.hidden) ac.suspend(); else if(S.settings.music) ac.resume(); });
   return {apply, start};
 })();
+// ===================== РУНЫ: ИКОНКИ, ГНЁЗДА, КРАФТ =====================
+// иконка: шестигранный камень цвета руны с символом
+const RUNE_GLYPH = {
+  blade:"M11 22l9-12 2 2-12 9zM10 20l2 2-2 2-2-2z", shield:"M16 9l6 2v4c0 4-3 7-6 8-3-1-6-4-6-8v-4z",
+  cross:"M14 9h4v5h5v4h-5v5h-4v-5H9v-4h5z", eye:"M8 16c3-5 13-5 16 0-3 5-13 5-16 0zM16 13.5a2.5 2.5 0 1 0 .01 0z",
+  chev:"M9 10l5 6-5 6h3l5-6-5-6zM15 10l5 6-5 6h3l5-6-5-6z", bolt:"M18 7l-8 11h5l-2 8 8-11h-5z",
+  star:"M16 8l2.2 5 5.3.4-4 3.5 1.3 5.2L16 19.3l-4.8 2.8 1.3-5.2-4-3.5 5.3-.4z", gear:"M14.5 8h3l.5 2.5 2.2 1 2.1-1.4 2.1 2.1-1.4 2.1 1 2.2 2.5.5v3l-2.5.5-1 2.2 1.4 2.1-2.1 2.1-2.1-1.4-2.2 1-.5 2.5h-3l-.5-2.5-2.2-1-2.1 1.4-2.1-2.1 1.4-2.1-1-2.2L8 17.5v-3l2.5-.5 1-2.2-1.4-2.1 2.1-2.1 2.1 1.4 2.2-1zM16 13a3 3 0 1 0 .01 0z"
+};
+function runeIcon(id){
+  const R = RUNES[id]; if(!R) return "";
+  const prem = R.src === "gram";
+  return `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l12 7v14l-12 7-12-7V9z" fill="#1B232C" stroke="${R.col}" stroke-width="${prem ? 2.4 : 1.6}"/>
+    <path d="M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z" fill="${R.col}" opacity=".18"/><path d="${RUNE_GLYPH[R.gl]}" fill="${R.col}" fill-rule="evenodd"/>
+    ${prem ? `<circle cx="25" cy="7" r="2.2" fill="#FFF1B8"/>` : ""}</svg>`;
+}
+// вещь по ссылке «inv:номер» или «eq:слот»
+const runeItem = ref => { if(!ref) return null; const [w, k] = ref.split(":"); const x = w === "inv" ? S.inv[+k] : S.eq[k]; return x && ITEMS[x.id] && ITEMS[x.id].type === "gear" ? x : null; };
+const RS = {ref:null, k:0};          // открытый выбор руны для гнезда
+function runeRow(ref){
+  const x = runeItem(ref); if(!x) return "";
+  const r = x.r || [];
+  let h = `<div class="rn-row"><small>Руны</small>`;
+  for(let k = 0; k < RUNE_SLOTS; k++){
+    const id = r[k], R = id && RUNES[id];
+    h += R ? `<button type="button" class="rn-sock on" style="border-color:${R.col}" data-rsock="${ref}|${k}" aria-label="${R.name}: вынуть">${runeIcon(id)}<span>${runeText(R)}</span></button>`
+           : `<button type="button" class="rn-sock" data-rsock="${ref}|${k}" aria-label="Пустое гнездо">${`<svg viewBox="0 0 32 32"><path d="M16 3l11 6.5v13L16 29 5 22.5v-13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/><path d="M16 11v10M11 16h10" stroke="currentColor" stroke-width="2" opacity=".6"/></svg>`}<span>Пустое гнездо</span></button>`;
+  }
+  h += `</div>`;
+  if(RS.ref === ref){
+    const used = new Set(r.filter(Boolean)), list = RUNE_IDS.filter(id => have(id) > 0);
+    h += `<div class="rn-pick">${list.length ? list.map(id => { const R = RUNES[id], dup = used.has(id);
+      return `<button type="button" data-rins="${id}" ${dup ? "disabled style=\"opacity:.45\"" : ""}>${runeIcon(id)}<div><b style="color:${R.col}">${R.name} ×${have(id)}</b><small>${dup ? "Такая руна уже стоит в этой вещи" : runeText(R)}</small></div></button>`; }).join("")
+      : `<div class="hint">В сумке нет рун. Собери их в Мастерской или купи в магазине GRAM на вкладке «Руны»</div>`}
+      <button type="button" data-rclose="1" style="justify-content:center">Закрыть</button></div>`;
+  }
+  return h;
+}
+function runeSocketClick(v){
+  const [ref, k] = v.split("|"), x = runeItem(ref); if(!x) return;
+  const id = (x.r || [])[+k];
+  if(id){
+    // вынуть: руна возвращается в сумку (уже привязанной)
+    if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)){ toast("Нет места для руны"); return; }
+    x.r[+k] = null; if(!x.r.some(Boolean)) delete x.r;
+    toast("Руна «" + RUNES[id].name + "» вынута"); Sfx.play("ui"); RS.ref = null; save(); return;
+  }
+  RS.ref = RS.ref === ref && RS.k === +k ? null : ref; RS.k = +k; Sfx.play("ui");
+}
+function runeInsert(id){
+  const x = runeItem(RS.ref), R = RUNES[id]; if(!x || !R) return;
+  if(have(id) < 1){ toast("Этой руны нет в сумке"); return; }
+  x.r = x.r || []; while(x.r.length < RUNE_SLOTS) x.r.push(null);
+  if(x.r.includes(id)){ toast("Такая руна уже стоит в этой вещи"); return; }
+  let k = RS.k; if(x.r[k]) k = x.r.indexOf(null); if(k < 0) return;
+  removeItem(S.inv, id, 1); x.r[k] = id;
+  if(typeof regClampSph === "function") regClampSph();      // вставленная руна больше не продаётся за GRAM
+  toast("Вставлена: " + R.name + " (" + runeText(R) + ")"); Sfx.play("pick"); RS.ref = null; save();
+}
+// раздел рун в Мастерской
+function runeCraftHtml(){
+  let h = `<h3 class="bag-h" style="margin-top:12px">Руны</h3><div class="list">`;
+  for(const id of RUNE_IDS){
+    const R = RUNES[id]; if(R.src !== "craft") continue;
+    const lvlOk = S.level >= R.lvl;
+    const parts = Object.entries(R.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
+      return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
+    const can = lvlOk && Object.entries(R.need).every(([k, n]) => have(k) >= n);
+    h += `<div class="li"><div class="ic">${runeIcon(id)}</div><div class="tx"><span style="color:${R.col}">${R.name}${have(id) ? " · есть " + have(id) : ""}</span><small>${runeText(R)} · с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
+      <button class="act" type="button" data-rcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + R.lvl}</button></div>`;
+  }
+  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM</p>`;
+}
 // ===================== ДРОНЫ-КОМПАНЬОНЫ: ПОЛЁТ, СБОР ЛУТА, ОТРИСОВКА, ОКНА =====================
 function droneGive(id, announce){
   const D = DRONES[id]; if(!D) return;
