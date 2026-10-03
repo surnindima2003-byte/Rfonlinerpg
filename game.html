@@ -5414,59 +5414,48 @@ function buildSprite(kind, P, anim, f){
   }
 
   else if(kind === "ghost"){
-    // ---- Призрак: тонкий корпус, развевающийся шарф-кабель, узкий визор и фазовые клинки в обеих руках ----
+    // ---- Призрак: силуэт в капюшоне-плаще из оптоволокна, один большой глаз-линза, клинки-крылья за спиной ----
     const wave = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
-    // шарф-кабель за спиной
-    for(let j = 0; j < 11; j++){ const y = 17 + B + (j >> 1) + (j > 5 ? wave : 0); rect(16 - j, y, 2, 1, j % 3 === 0 ? P.glow : P.dk, j % 3 === 0); }
-    put(5, 23 + B + wave, P.glowHi, true);
-    // тонкие ноги
-    const sleg = (x, dx, lift, front) => {
-      const c = front ? M : [P.dk, P.md, P.dd, P.lt];
-      block(x + dx, 31 - lift, 3, 5, c[0], c[1], c[2], c[3]);
-      line(x + dx + 1, 36 - lift, x + dx, 40 - lift, c[2]); put(x + dx + 1, 33 - lift, P.glow, true);
-      rect(x + dx - 1, 41 - lift, 5, 1, P.dd);
-    };
-    sleg(17, legB, liftB, false); sleg(22, legF, liftF, true);
-    rect(17, 30 + B, 9, 2, P.dd);
-    // задняя рука с клинком вниз
-    line(16, 21 + B, 13, 27 + B, P.dk); line(13, 27 + B, 9, 35 + B, P.glow, true); put(9, 36 + B, P.glowHi, true);
-    // узкий корпус со светящейся фазовой линией
-    block(16, 19 + B, 11, 11, P.dk, P.md, P.dd, P.lt);
-    line(21, 20 + B, 21, 28 + B, P.glow, true); put(20, 24 + B, P.glowHi, true); put(22, 24 + B, P.glowHi, true);
-    rect(17, 29 + B, 9, 1, P.arm);
-    // голова-капюшон с узким визором и гребнем
-    block(17, 10 + B, 9, 8, P.dk, P.md, P.dd, P.lt);
-    rect(19, 13 + B, 7, 2, "#0B0F13"); rect(20, 13 + B, 6, 1, P.eye, true);
-    line(18, 10 + B, 15, 6 + B, P.md); line(19, 10 + B, 17, 5 + B, P.lt); put(15, 5 + B, P.glow, true);
-    // передняя рука и клинок: замах вверх / разрез вперёд / клинок у бедра
-    if(anim === "attack" && f === 0){ line(26, 20 + B, 29, 15 + B, P.md); line(29, 15 + B, 36, 4 + B, P.glow, true); put(37, 3 + B, P.glowHi, true); }
-    else if(anim === "attack"){ line(26, 21 + B, 31, 22 + B, P.md); line(31, 22 + B, 45, 25 + B, P.glow, true); put(46, 25 + B, P.glowHi, true); for(const [x, y] of [[40, 21], [43, 28], [37, 27]]) put(x, y + B, P.glowHi, true); }
-    else { line(26, 21 + B, 28, 26 + B, P.md); line(28, 26 + B, 35, 33 + B, P.glow, true); put(36, 34 + B, P.glowHi, true); }
+    // клинки-крылья за спиной (парящие фазовые лезвия)
+    for(const [x0, y0, x1, y1] of [[17, 18, 6, 8], [17, 21, 4, 16], [17, 24, 7, 26]]){ line(x0, y0 + B, x1, y1 + B + wave, P.glow, true); put(x1, y1 + B + wave, P.glowHi, true); }
+    // плащ: трапеция с рваным подолом
+    for(let y = 16; y <= 36; y++){ const half = 4 + Math.floor((y - 16)*0.45), cx = 21;
+      for(let x = cx - half; x <= cx + half; x++){ if(y > 32 && (x + y + wave) % 3 === 0) continue; put(x, y + B, y < 20 ? P.md : (x === cx - half || x === cx + half) ? P.dd : P.dk); } }
+    for(let y = 20; y <= 34; y += 2) put(21, y + B, P.glow, true);                       // светящийся шов плаща
+    // тонкие ноги из-под плаща
+    rect(18 + Math.round(legB/2), 37 - liftB, 2, 4, P.dd); rect(23 + Math.round(legF/2), 37 - liftF, 2, 4, M[1]);
+    rect(17 + Math.round(legB/2), 41 - liftB, 4, 1, P.dd); rect(22 + Math.round(legF/2), 41 - liftF, 4, 1, M[2]);
+    // капюшон и глаз-линза
+    for(let y = 7; y <= 16; y++){ const half = Math.min(5, 2 + Math.floor((y - 7)*0.6)); for(let x = 21 - half; x <= 21 + half; x++) put(x, y + B, y < 9 ? P.lt : P.md); }
+    rect(18, 11 + B, 7, 4, "#07090C"); disc(22, 13 + B, 2, P.eye, true); put(22, 12 + B, "#FFFFFF", true);
+    put(21, 6 + B, P.glow, true);
+    // клинок в руке
+    if(anim === "attack" && f === 0){ line(25, 19 + B, 29, 14 + B, P.md); line(29, 14 + B, 37, 3 + B, P.glow, true); put(38, 2 + B, P.glowHi, true); }
+    else if(anim === "attack"){ line(25, 21 + B, 31, 22 + B, P.md); line(31, 22 + B, 45, 24 + B, P.glow, true); for(const [x, yy] of [[40, 20], [43, 27], [37, 26], [46, 24]]) put(x, yy + B, P.glowHi, true); }
+    else { line(25, 21 + B, 27, 25 + B, P.md); line(27, 25 + B, 34, 33 + B, P.glow, true); put(35, 34 + B, P.glowHi, true); }
   }
   else if(kind === "glyph"){
-    // ---- Глифоносец: броня с золотыми глифами, кольцо-глиф на груди, гребень и глефа с полумесяцем ----
-    legPair(5, 15, 21);
-    rect(15, 30 + B, 12, 2, P.dd);
-    // парящий глиф за спиной
-    for(const [x, y] of [[8, 13], [7, 14], [9, 14], [8, 15], [8, 12]]) put(x, y + B, P.glow, true);
-    put(8, 14 + B, P.glowHi, true);
-    // корпус с кольцом-глифом
-    block(13, 18 + B, 16, 12, P.md, P.lt, P.dk, P.hi);
-    for(let a = 0; a < 12; a++){ const x = 21 + Math.round(Math.cos(a/12*Math.PI*2)*3), y = 24 + B + Math.round(Math.sin(a/12*Math.PI*2)*3); put(x, y, P.glow, true); }
-    put(21, 24 + B, P.core, true); put(21, 23 + B, "#fff", true);
-    line(14, 28 + B, 28, 28 + B, P.arm);
-    // наплечники с метками
-    block(10, 16 + B, 6, 5, P.md, P.lt, P.dk, P.hi); put(12, 18 + B, P.glow, true); put(13, 18 + B, P.glow, true);
-    block(27, 16 + B, 6, 5, P.md, P.lt, P.dk, P.hi); put(29, 18 + B, P.glow, true); put(30, 18 + B, P.glow, true);
-    // голова с гребнем
-    block(17, 10 + B, 9, 8, P.md, P.lt, P.dk, P.hi);
-    rect(20, 13 + B, 5, 2, "#0B0F13"); rect(21, 13 + B, 3, 1, P.eye, true);
-    line(21, 9 + B, 21, 6 + B, P.trim); put(21, 5 + B, P.glow, true);
-    // глефа: древко и светящийся полумесяц
-    const crescent = (cx, cy, dir) => { for(const [dx, dy] of [[0, -3], [1, -3], [2, -2], [3, -1], [3, 0], [3, 1], [2, 2], [1, 3], [0, 3]]) put(cx + dx*dir, cy + dy, P.wpn, true); put(cx + 2*dir, cy, P.glowHi, true); };
-    if(anim === "attack" && f === 0){ line(28, 26 + B, 40, 6 + B, P.gunHi); crescent(40, 6 + B, 1); }
-    else if(anim === "attack"){ line(27, 23 + B, 40, 25 + B, P.gunHi); crescent(40, 25 + B, 1); for(const [x, y] of [[36, 19], [38, 31], [44, 25]]) put(x, y + B, P.glowHi, true); }
-    else { line(32, 35 + B, 32, 8 + B, P.gunHi); crescent(33, 7 + B, 1); block(29, 21 + B, 4, 4, P.dk, P.md, P.dd); }
+    // ---- Глифоносец: массивный корпус-монолит, нимб из глифов над головой, парящие руны-пилоны у плеч, глефа ----
+    legPair(6, 14, 22);
+    rect(14, 30 + B, 14, 2, P.dd);
+    // нимб из глифов
+    for(let a = 0; a < 16; a++){ const x = 21 + Math.round(Math.cos(a/16*Math.PI*2)*7), y = 4 + B + Math.round(Math.sin(a/16*Math.PI*2)*2); put(x, y, a % 4 === (f % 4) ? P.glowHi : P.glow, true); }
+    // парящие руны-пилоны по бокам
+    for(const [px, py] of [[8, 18], [34, 18]]){ const fl = (f % 2) && anim !== "walk" ? 1 : 0;
+      rect(px, py + B - fl, 3, 7, P.dk); put(px + 1, py + 2 + B - fl, P.glow, true); put(px + 1, py + 4 + B - fl, P.glow, true); put(px + 1, py - 1 + B - fl, P.glowHi, true); }
+    // корпус-монолит с ромбовидным глифом
+    block(12, 17 + B, 18, 14, P.md, P.lt, P.dk, P.hi);
+    for(const [dx, dy] of [[0, -4], [1, -3], [2, -2], [3, -1], [4, 0], [3, 1], [2, 2], [1, 3], [0, 4], [-1, 3], [-2, 2], [-3, 1], [-4, 0], [-3, -1], [-2, -2], [-1, -3]]) put(21 + dx, 24 + dy + B, P.glow, true);
+    put(21, 24 + B, P.core, true); put(21, 23 + B, "#FFFFFF", true);
+    line(13, 29 + B, 29, 29 + B, P.arm);
+    // голова-шлем с узкой прорезью и гребнем
+    block(17, 9 + B, 9, 8, P.md, P.lt, P.dk, P.hi);
+    rect(18, 12 + B, 7, 2, "#0B0F13"); rect(19, 12 + B, 5, 1, P.eye, true);
+    // глефа
+    const cres = (cx, cy) => { for(const [dx, dy] of [[0, -3], [1, -4], [2, -3], [3, -2], [4, -1], [4, 0], [4, 1], [3, 2], [2, 3], [1, 4], [0, 3]]) put(cx + dx, cy + dy, P.wpn, true); put(cx + 3, cy, P.glowHi, true); };
+    if(anim === "attack" && f === 0){ line(29, 26 + B, 39, 7 + B, P.gunHi); cres(39, 6 + B); }
+    else if(anim === "attack"){ line(28, 23 + B, 40, 25 + B, P.gunHi); cres(40, 25 + B); for(const [x, yy] of [[36, 19], [38, 31], [45, 25]]) put(x, yy + B, P.glowHi, true); }
+    else { line(32, 36 + B, 32, 9 + B, P.gunHi); cres(32, 8 + B); }
   }
   else if(kind === "techno"){
     // ---- кибер-колдун: острый капюшон, тёмный плащ со светящимися схемами, рваная накидка, посох с кристаллом ----
@@ -8436,7 +8425,7 @@ function wbGive(it){
     const g = ctx.createRadialGradient(bx, by - 40, 10, bx, by - 40, 190); g.addColorStop(0, `rgba(255,60,40,${.35 + pulse*.15})`); g.addColorStop(1, "rgba(255,60,40,0)");
     ctx.fillStyle = g; ctx.fillRect(bx - 190, by - 230, 380, 380); ctx.restore();
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(bx, by + 6, 80, 22, 0, 0, Math.PI*2); ctx.fill();
-    drawMech(ctx, bx, by, {cls:"guard", fac:"core", eq:{head:3, armor:3, weapon:3, legs:3, module:3, core:3}, aim:Math.atan2(p.y - by, p.x - bx), moving:false, t, ps:4.2, atk:(t % 2.2) < .3 ? 1 : 0});
+    drawRustLord(bx, by, t, (t % 2.2) < .3);
     ctx.save(); ctx.globalCompositeOperation = "source-atop"; ctx.restore();
     const w = 150, k = Math.max(0, B.hp/B.max);
     label("⚠ БОСС · " + B.name, bx, by - 200, "#FF6A5A");
@@ -8581,7 +8570,7 @@ setInterval(() => {
       ctx.globalCompositeOperation = "lighter"; const g = ctx.createRadialGradient(B.x, B.y - 40, 10, B.x, B.y - 40, 200);
       g.addColorStop(0, `rgba(255,30,30,${.4 + pulse*.15})`); g.addColorStop(1, "rgba(255,30,30,0)"); ctx.fillStyle = g; ctx.fillRect(B.x - 200, B.y - 240, 400, 400);
       ctx.globalCompositeOperation = "source-over";
-      drawMech(ctx, B.x, B.y, {cls:"reaper", fac:"core", eq:{head:3, armor:3, weapon:3, legs:3, module:3, core:3}, aim:Math.atan2(p.y - B.y, p.x - B.x), t, ps:4.4, atk:(t % 1.8) < .3 ? 1 : 0});
+      drawCrimsonWarden(B.x, B.y, t, (t % 1.8) < .3);
       label("⚠ БОСС · " + (TW.st.name || "Багровый Страж"), B.x, B.y - 205, "#FF6A5A"); }
     ctx.restore();
   };
@@ -8629,6 +8618,81 @@ function openTower(){ openSheet("Кровавая башня", "Забег че�
       toast(txt); if(TW.st){ TW.st.phase = "done"; TW.st.hp = 0; } setTimeout(() => { if(locKey === "tower") travel("lobby"); }, 5000); return; }
     prevTW(d);
   };
+}
+// ===================== УНИКАЛЬНЫЕ МОДЕЛИ БОССОВ =====================
+// Владыка Ржавчины: гигантский ржавый шагоход-краб с котлом-реактором, клешнями и трубами, из которых валит дым.
+function drawRustLord(x, y, t, atk){
+  const g = ctx, s = 1, b = Math.sin(t*2)*3, sw = atk ? Math.sin(t*20)*0.4 : Math.sin(t*1.5)*0.12;
+  g.save(); g.translate(x, y);
+  g.fillStyle = "rgba(0,0,0,.5)"; g.beginPath(); g.ellipse(0, 6, 110, 26, 0, 0, Math.PI*2); g.fill();
+  // ноги-опоры (6 штук, переставляются)
+  for(let i = 0; i < 3; i++) for(const side of [-1, 1]){
+    const ph = t*2 + i*2.1 + (side > 0 ? 1 : 0), kx = side*(40 + i*24), lift = Math.max(0, Math.sin(ph))*6;
+    g.strokeStyle = "#3A2A20"; g.lineWidth = 12; g.lineCap = "round";
+    g.beginPath(); g.moveTo(side*24, -50 + b); g.lineTo(kx + side*20, -80 + b); g.lineTo(kx + side*34, -lift); g.stroke();
+    g.strokeStyle = "#8A5A30"; g.lineWidth = 6; g.beginPath(); g.moveTo(side*24, -50 + b); g.lineTo(kx + side*20, -80 + b); g.lineTo(kx + side*34, -lift); g.stroke();
+  }
+  // корпус-котёл
+  g.translate(0, b);
+  const body = g.createLinearGradient(0, -130, 0, -30); body.addColorStop(0, "#A8683A"); body.addColorStop(1, "#4A2A18");
+  g.fillStyle = body; g.beginPath(); g.ellipse(0, -80, 78, 52, 0, 0, Math.PI*2); g.fill();
+  g.strokeStyle = "#2A1810"; g.lineWidth = 4; g.stroke();
+  for(let i = -3; i <= 3; i++){ g.fillStyle = "#C88A4A"; g.beginPath(); g.arc(i*20, -120 + Math.abs(i)*5, 3, 0, Math.PI*2); g.fill(); }   // заклёпки
+  g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(-70, -64, 140, 8);
+  // реакторное «сердце»
+  const pulse = (Math.sin(t*4) + 1)/2, core = g.createRadialGradient(0, -82, 2, 0, -82, 30);
+  core.addColorStop(0, "#FFF2C0"); core.addColorStop(.4, `rgba(255,120,40,${.9})`); core.addColorStop(1, "rgba(255,60,20,0)");
+  g.fillStyle = "#1A0E08"; g.beginPath(); g.arc(0, -82, 24, 0, Math.PI*2); g.fill();
+  g.fillStyle = core; g.beginPath(); g.arc(0, -82, 18 + pulse*6, 0, Math.PI*2); g.fill();
+  g.strokeStyle = "#E0A060"; g.lineWidth = 3; for(let k = 0; k < 6; k++){ const a = k*Math.PI/3 + t; g.beginPath(); g.moveTo(Math.cos(a)*24, -82 + Math.sin(a)*24); g.lineTo(Math.cos(a)*30, -82 + Math.sin(a)*30); g.stroke(); }
+  // глаза-прожекторы
+  for(const ex of [-34, 34]){ g.fillStyle = "#1A0E08"; g.fillRect(ex - 9, -118, 18, 10); g.fillStyle = `rgba(255,80,40,${.7 + pulse*.3})`; g.fillRect(ex - 7, -116, 14, 6); }
+  // трубы и дым
+  for(const px of [-44, 44]){ g.fillStyle = "#5A3A24"; g.fillRect(px - 7, -158, 14, 34); g.fillStyle = "#2A1810"; g.fillRect(px - 9, -162, 18, 6); }
+  if(Math.random() < .3 && typeof steam !== "undefined") steam.push({x:x + (Math.random() < .5 ? -44 : 44), y:y - 165 + b, vx:Math.random()*14 - 7, r:7, life:2, max:2});
+  // клешни
+  for(const side of [-1, 1]){ g.save(); g.translate(side*78, -84); g.rotate(side*(0.5 + sw));
+    g.fillStyle = "#6A4024"; g.fillRect(0, -8, side*44, 16);
+    g.fillStyle = "#B87A44"; g.beginPath(); g.moveTo(side*44, -16); g.lineTo(side*74, -24); g.lineTo(side*60, 0); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(side*44, 16); g.lineTo(side*74, 22); g.lineTo(side*60, 2); g.closePath(); g.fill(); g.restore(); }
+  g.restore();
+}
+// Багровый Страж: парящий демонический мех-жнец — рваный плащ из кабелей, рогатый шлем, коса и кольцо рун.
+function drawCrimsonWarden(x, y, t, atk){
+  const g = ctx, hov = Math.sin(t*1.8)*6, pulse = (Math.sin(t*3) + 1)/2;
+  g.save(); g.translate(x, y);
+  g.fillStyle = "rgba(0,0,0,.45)"; g.beginPath(); g.ellipse(0, 6, 70 - hov, 18, 0, 0, Math.PI*2); g.fill();
+  // кольцо рун под ногами
+  g.save(); g.globalCompositeOperation = "lighter"; g.strokeStyle = `rgba(255,40,40,${.5 + pulse*.3})`; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(0, 0, 80, 24, 0, 0, Math.PI*2); g.stroke();
+  for(let k = 0; k < 10; k++){ const a = k/10*Math.PI*2 + t*.6; g.fillStyle = "#FF5A4A"; g.fillRect(Math.cos(a)*80 - 3, Math.sin(a)*24 - 3, 6, 6); }
+  g.restore();
+  g.translate(0, -20 + hov);
+  // рваный плащ из кабелей
+  g.fillStyle = "#2A0A10";
+  g.beginPath(); g.moveTo(-40, -110); g.lineTo(40, -110);
+  for(let i = 6; i >= -6; i--){ g.lineTo(i*8, -10 + Math.sin(t*4 + i)*8 + (i % 2 ? 14 : 0)); }
+  g.closePath(); g.fill();
+  g.strokeStyle = "#5A1420"; g.lineWidth = 2; for(let i = -4; i <= 4; i++){ g.beginPath(); g.moveTo(i*8, -100); g.lineTo(i*9, -20 + Math.sin(t*4 + i)*8); g.stroke(); }
+  // грудь с пылающим ядром
+  g.fillStyle = "#4A1A22"; g.beginPath(); g.moveTo(-34, -120); g.lineTo(34, -120); g.lineTo(24, -70); g.lineTo(-24, -70); g.closePath(); g.fill();
+  const c = g.createRadialGradient(0, -98, 1, 0, -98, 20); c.addColorStop(0, "#FFD0C0"); c.addColorStop(.5, "#FF3A2A"); c.addColorStop(1, "rgba(255,30,20,0)");
+  g.fillStyle = c; g.beginPath(); g.arc(0, -98, 14 + pulse*5, 0, Math.PI*2); g.fill();
+  // наплечники-шипы
+  for(const side of [-1, 1]){ g.fillStyle = "#6A2030"; g.beginPath(); g.moveTo(side*30, -124); g.lineTo(side*58, -132); g.lineTo(side*48, -108); g.closePath(); g.fill();
+    g.fillStyle = "#A83040"; g.beginPath(); g.moveTo(side*46, -130); g.lineTo(side*62, -150); g.lineTo(side*52, -126); g.closePath(); g.fill(); }
+  // голова-шлем с рогами
+  g.fillStyle = "#3A1218"; g.beginPath(); g.moveTo(-18, -150); g.lineTo(18, -150); g.lineTo(14, -124); g.lineTo(-14, -124); g.closePath(); g.fill();
+  for(const side of [-1, 1]){ g.strokeStyle = "#C84050"; g.lineWidth = 5; g.lineCap = "round"; g.beginPath(); g.moveTo(side*14, -148); g.quadraticCurveTo(side*34, -164, side*30, -184); g.stroke(); }
+  g.fillStyle = `rgba(255,60,40,${.8 + pulse*.2})`; g.fillRect(-11, -140, 8, 4); g.fillRect(3, -140, 8, 4);
+  // коса
+  const a = atk ? -0.9 + Math.sin(t*14)*0.9 : -0.35 + Math.sin(t*1.4)*0.1;
+  g.save(); g.translate(40, -104); g.rotate(a);
+  g.strokeStyle = "#2A1A1A"; g.lineWidth = 6; g.beginPath(); g.moveTo(0, 40); g.lineTo(0, -90); g.stroke();
+  g.save(); g.globalCompositeOperation = "lighter"; g.fillStyle = `rgba(255,60,50,${.6 + pulse*.3})`;
+  g.beginPath(); g.moveTo(0, -90); g.quadraticCurveTo(70, -96, 84, -50); g.quadraticCurveTo(54, -78, 0, -74); g.closePath(); g.fill(); g.restore();
+  g.restore();
+  g.restore();
 }
 // ===================== РЕЕСТР ВЕЩЕЙ (защита маркета) =====================
 // В игре через бота снаряжение и сферы заточки выпадают по решению сервера и получают номер uid.
