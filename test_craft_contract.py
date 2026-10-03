@@ -22,7 +22,7 @@ GAME = (Path(__file__).resolve().parent / "game.html").read_text(encoding="utf-8
 
 def client_recipes():
     out = {}
-    for block in ("RUNES", "DRONES"):
+    for block in ("RUNES", "DRONES", "ARTS"):
         body = re.search(rf"const {block} = \{{(.*?)\n\}};", GAME, re.S).group(1)
         for m in re.finditer(r'(\w+):\s*\{name:"[^"]*",\s*src:"craft", lvl:(\d+)[^\n]*?(?:\n[^\n]*?)?need:\{([^}]*)\}', body):
             need = {k: int(v) for k, v in re.findall(r"(\w+):(\d+)", m.group(3))}
@@ -37,8 +37,13 @@ class CraftContract(unittest.TestCase):
     def test_all_tradeable_ids_known_to_client(self):
         for rid in items.RUNES:
             self.assertIn(f"{rid}:", GAME)
-        for did in items.DRONES:
+        for did in items.DRONES + items.ARTIFACTS:
             self.assertIn(f"{did}:", GAME)
+
+    def test_artifact_packs_minted_by_server(self):
+        for pid in ("ar_crown", "ar_eye", "ar_heart", "ar_relic"):
+            self.assertIn(pid, items.PACK_ITEMS)
+            self.assertIn(items.PACK_ITEMS[pid][0][1], items.ARTIFACTS)
 
     def test_craft_spends_and_adds(self):
         S = {"level": 12, "scrap": 9000, "cores": 40, "inv": [{"id": "chip", "n": 5}]}

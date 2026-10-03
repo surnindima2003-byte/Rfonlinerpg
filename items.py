@@ -119,7 +119,9 @@ SPHERES = ("sph_cu", "sph_ti")
 RUNES = ("r_atk", "r_def", "r_hp", "r_crit", "r_spd", "r_aspd", "r_cpow", "r_regen", "r_war", "r_bastion", "r_storm", "r_fortune")
 # дроны-компаньоны (как в game.html → DRONES): тоже предметы, учтённые сервером
 DRONES = ("d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phantom", "d_sol")
-REG_IDS = SPHERES + RUNES + DRONES      # всё, что учитывается штуками (без номера)
+# артефакты (как в game.html → ARTS): надевается один, продаются на маркете
+ARTIFACTS = ("a_reactor", "a_lens", "a_servo", "a_plate", "a_crown", "a_eye", "a_heart", "a_relic")
+REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS      # всё, что учитывается штуками (без номера)
 
 # Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
 # Зеркало game.html → RUNES/DRONES (src "craft"); совпадение проверяет test_craft_contract.py.
@@ -136,6 +138,10 @@ CRAFT = {
     "d_bolt":  (10, {"scrap": 15000, "cores": 50, "wire": 10, "plate": 10}),
     "d_hawk":  (20, {"scrap": 40000, "cores": 150, "wire": 15, "chip": 15}),
     "d_titan": (30, {"scrap": 120000, "cores": 400, "plate": 30, "chip": 20}),
+    "a_reactor": (25, {"scrap": 60000, "cores": 200, "plate": 20, "wire": 20}),
+    "a_lens":    (30, {"scrap": 90000, "cores": 300, "chip": 30}),
+    "a_servo":   (35, {"scrap": 140000, "cores": 450, "wire": 40, "chip": 20}),
+    "a_plate":   (40, {"scrap": 200000, "cores": 600, "plate": 60}),
 }
 INV_MAX_SRV = 60
 
@@ -391,7 +397,7 @@ async def api_items(request):
                 return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
             await add_spheres(s, uid, item_id, 1)
             await s.commit()
-            metrics.inc("craft." + ("drone" if item_id in DRONES else "rune"))
+            metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "rune"))
             return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0)})
 
         if op == "kill":
@@ -460,10 +466,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "рун"
+            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы с мобов, руны и дронов"
+    return None, "За GRAM можно продавать только снаряжение, сферы с мобов, руны, дронов и артефакты"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -566,7 +572,10 @@ PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "sphe
               "rn_storm": [("sph", "r_storm", 2)], "rn_fortune": [("sph", "r_fortune", 2)],
               # дроны из магазина тоже учитываются сервером — их можно перепродать на маркете
               "dr_nova": [("sph", "d_nova", 1)], "dr_aegis": [("sph", "d_aegis", 1)],
-              "dr_phantom": [("sph", "d_phantom", 1)], "dr_sol": [("sph", "d_sol", 1)]}
+              "dr_phantom": [("sph", "d_phantom", 1)], "dr_sol": [("sph", "d_sol", 1)],
+              # артефакты из магазина
+              "ar_crown": [("sph", "a_crown", 1)], "ar_eye": [("sph", "a_eye", 1)],
+              "ar_heart": [("sph", "a_heart", 1)], "ar_relic": [("sph", "a_relic", 1)]}
 
 
 async def mint_pack(s, owner, pack):

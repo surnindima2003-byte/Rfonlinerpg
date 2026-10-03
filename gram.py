@@ -34,6 +34,8 @@ PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots
 PACK_PRICES.update({"dr_nova": 15, "dr_aegis": 30, "dr_phantom": 60, "dr_sol": 120})
 # руны: по полной цене, без ограничения на число покупок (состав паков — items.py → PACK_ITEMS)
 PACK_PRICES.update({"rn_base": 8, "rn_pro": 15, "rn_war": 20, "rn_bastion": 20, "rn_storm": 20, "rn_fortune": 25})
+# артефакты: по полной цене (состав — items.py → PACK_ITEMS)
+PACK_PRICES.update({"ar_crown": 40, "ar_eye": 60, "ar_heart": 60, "ar_relic": 100})
 
 
 def g(nano):

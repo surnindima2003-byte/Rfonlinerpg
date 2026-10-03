@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-FULL_PRICE_TABS = {"boost", "drones", "runes"}      # без скидки сезона
+FULL_PRICE_TABS = {"boost", "drones", "runes", "artifacts"}      # без скидки сезона
 
 
 class ShopPricesTest(unittest.TestCase):
