@@ -12,6 +12,7 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import time
 from collections import deque
@@ -30,9 +31,57 @@ CLOSE_REPLACED = 4003    # слишком много вкладок одного
 CLOSE_RESTART = 1012     # сервер перезапускается — клиенту переподключиться
 
 
+# ---- разбор входящего JSON ----
+# Стандартный json.loads принимает NaN, Infinity и 1e999 (это уже бесконечность). Такое число, попав в данные
+# игрока, уходит другим в снимке мира, и JSON.parse у них падает: весь мир в локации «замирает».
+# Честный клиент таких чисел не шлёт никогда (JSON.stringify превращает NaN/Infinity в null),
+# поэтому сообщение с ними просто отбрасываем.
+MAX_INT_DIGITS = 30           # больше — мусор: float() от такого числа ещё конечен, а int в 300+ цифр уже нет
+
+
+def _reject_constant(name):
+    raise ValueError(f"non-finite number: {name}")
+
+
+def _finite_float(text):
+    v = float(text)
+    if not math.isfinite(v):
+        raise ValueError("non-finite number")
+    return v
+
+
+def _small_int(text):
+    if len(text.lstrip("-")) > MAX_INT_DIGITS:
+        raise ValueError("number too long")
+    return int(text)
+
+
+def loads(text):
+    """json.loads без NaN, Infinity и чисел-гигантов. Ошибка — ValueError (как у обычного json.loads)."""
+    return json.loads(text, parse_constant=_reject_constant, parse_float=_finite_float, parse_int=_small_int)
+
+
+def _finite(v):
+    """Копия данных, где NaN и бесконечности заменены нулём (запасной путь для encode)."""
+    if isinstance(v, float):
+        return v if math.isfinite(v) else 0
+    if isinstance(v, dict):
+        return {k: _finite(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_finite(x) for x in v]
+    return v
+
+
 def encode(payload):
-    """Один раз превращаем сообщение в строку — дальше рассылаем готовую строку всем."""
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    """Один раз превращаем сообщение в строку — дальше рассылаем готовую строку всем.
+    NaN/Infinity в строку не попадают никогда: их не понимает JSON.parse в браузере."""
+    try:
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        metrics.inc("ws.encode_nonfinite")
+        log.warning("в исходящем сообщении NaN/Infinity, заменены нулём: t=%s",
+                    payload.get("t") if isinstance(payload, dict) else type(payload).__name__)
+        return json.dumps(_finite(payload), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 class Conn:

@@ -3869,7 +3869,9 @@ const G_ICONS = {
   claw:`<path d="M5 3c3 3 4 7 3 12l-3 6 6-4c2-5 1-10-6-14zm7 0c2 3 3 7 2 11l-1 5 4-4c1-4 0-8-5-12zm6 2c1 3 1 6 0 9l-1 3 3-3c1-3 1-6-2-9z"/>`,
   star:`<path d="M12 1l3.4 7 7.6 1-5.5 5.3 1.3 7.7L12 18.3 5.2 22l1.3-7.7L1 9l7.6-1z"/>`
 };
-function emblem(e, size){ size = size || 44; const c = (e && e.color) || "#F2A93B", ic = G_ICONS[e && e.icon] || G_ICONS.gear;
+// цвет и значок приходят из данных гильдии: в SVG попадает только #RRGGBB и известный значок (иначе — XSS)
+const embColor = c => typeof c === "string" && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : "#F2A93B";
+function emblem(e, size){ size = +size || 44; const c = embColor(e && e.color), ic = (e && Object.prototype.hasOwnProperty.call(G_ICONS, e.icon) && G_ICONS[e.icon]) || G_ICONS.gear;
   return `<svg viewBox="0 0 48 48" width="${size}" height="${size}" aria-hidden="true" style="flex:none"><path d="M24 2 43 13v22L24 46 5 35V13z" fill="#1B232C" stroke="${c}" stroke-width="3"/><g transform="translate(12 12)" fill="${c}">${ic}</g></svg>`; }
 
 // ---- хранилище: общее (db) или локальное для файла без Claude ----

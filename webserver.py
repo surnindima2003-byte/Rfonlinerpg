@@ -103,8 +103,10 @@ def auth(init_data: str):
 
 async def read_auth(request):
     try:
-        body = await request.json()
+        body = await request.json(loads=realtime.loads)      # без NaN/Infinity, как и в WebSocket
     except Exception:
+        raise web.HTTPBadRequest(text="bad json")
+    if not isinstance(body, dict):
         raise web.HTTPBadRequest(text="bad json")
     user = auth(body.get("initData", ""))
     if not user:
@@ -398,6 +400,36 @@ async def doc_put(s, path, data):
     row.data, row.updated = raw, int(time.time() * 1000)
 
 
+GUILD_ICONS = {"gear", "shield", "bolt", "crown", "claw", "star"}      # как G_ICONS в game.html
+HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
+
+
+def valid_emblem(e):
+    """Эмблема гильдии: только известный значок и цвет вида #RRGGBB.
+    Цвет вставляется в SVG у всех, кто смотрит список гильдий, поэтому произвольная строка здесь — XSS."""
+    return (isinstance(e, dict) and set(e) <= {"icon", "color"} and e.get("icon") in GUILD_ICONS
+            and isinstance(e.get("color"), str) and HEX_COLOR.fullmatch(e["color"]) is not None)
+
+
+async def clean_guild_emblems():
+    """При запуске: эмблемы, записанные до проверки, приводим к допустимым (иначе XSS остаётся в базе)."""
+    fixed = 0
+    async with SessionLocal() as s:
+        for row in (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all():
+            try:
+                data = json.loads(row.data)
+            except ValueError:
+                continue
+            if isinstance(data, dict) and "emblem" in data and not valid_emblem(data["emblem"]):
+                data["emblem"] = {"icon": "gear", "color": "#F2A93B"}
+                row.data = json.dumps(data, ensure_ascii=False)
+                fixed += 1
+        if fixed:
+            await s.commit()
+    if fixed:
+        log.warning("Гильдии: исправлено эмблем с недопустимыми данными: %s", fixed)
+
+
 def deny(msg="нет прав"):
     raise web.HTTPForbidden(text=msg)
 
@@ -414,6 +446,8 @@ async def check_write(s, op, path, data, uid):
     is_leader = bool(guild) and guild.get("leader") == uid
 
     if sub is None:  # сама гильдия
+        if op in ("set", "update") and "emblem" in data and not valid_emblem(data["emblem"]):
+            raise web.HTTPBadRequest(text="bad emblem")
         if op == "set":
             if guild:
                 deny()
@@ -1048,7 +1082,7 @@ def clean_pos(d, info):
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
         info["gc"] = d.get("gc") if isinstance(d.get("gc"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", d.get("gc")) else ""
         info["seen"] = time.time()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError, AttributeError):
         pass
     # пределы прочности/CP/брони по уровню, в бою — серверный учёт CP и прочности
     pvpguard.sanitize(info, progress.bm_cap(info.get("lvl", 1)))
@@ -1480,8 +1514,8 @@ async def ws_handler(request):
                     break
                 continue
             try:
-                d = json.loads(msg.data)
-            except ValueError:
+                d = realtime.loads(msg.data)                   # NaN/Infinity/гигантские числа — отбрасываем
+            except (ValueError, RecursionError):
                 continue
             if not isinstance(d, dict):
                 continue
@@ -1784,6 +1818,7 @@ async def start_web(port: int):
     STATE["tasks"]["season"] = asyncio.create_task(seasonpts.flush_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await load_mutes()
+    await clean_guild_emblems()
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
     await items.migrate_gear()
