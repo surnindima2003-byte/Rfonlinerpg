@@ -49,6 +49,9 @@ FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
 GEAR_IDS = items.GEAR_IDS | {"kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti"}
+# всё, что админ может выдать: снаряжение, книги (по шаблону ниже), расходники, зелья и учтённые сервером вещи —
+# сферы, руны, дроны, артефакты, крылья, плащи (их сервер ещё и записывает на счёт игрока, чтобы их можно было продать)
+ADMIN_ITEMS = GEAR_IDS | {"pot_hp", "pot_atk", "pot_xp"} | set(items.REG_IDS)
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
 
 log = logging.getLogger("web")
@@ -324,9 +327,13 @@ async def api_admin_grant(request):
     if kind == "item":
         item, grade = body.get("item"), body.get("grade", 0)
         is_book = isinstance(item, str) and re.fullmatch(r"b[kp]_[a-z]{2,20}", item)
-        if (item not in GEAR_IDS and not is_book) or grade not in (0, 1, 2, 3):
+        if (item not in ADMIN_ITEMS and not is_book) or grade not in (0, 1, 2, 3):
             return web.json_response({"ok": False, "error": "Неизвестный предмет или грейд"})
+        if item not in items.GEAR_IDS:
+            grade = 0                                            # грейд бывает только у снаряжения
         payload.update(item=item, grade=grade)
+        if item in items.REG_IDS:
+            payload["reg"] = True                                # учтённая вещь: телефон добавит её в учёт, сервер — на счёт ниже
 
     target = str(body.get("target", "")).strip().lstrip("@").lower()
     async with SessionLocal() as s:
@@ -339,6 +346,8 @@ async def api_admin_grant(request):
             tg_id, target_name = row.tg_id, row.username
         g = Grant(tg_id=tg_id, kind=kind, payload=json.dumps(payload), by_admin=user["username"], created=int(time.time()))
         s.add(g)
+        if kind == "item" and payload.get("reg"):
+            await items.add_spheres(s, tg_id, payload["item"], amount)   # учтённые вещи от админа можно продать на маркете
         if kind == "level":
             await progress.add_levels(s, tg_id, amount)          # выданные уровни сервер тоже засчитывает
         elif kind == "exp":

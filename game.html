@@ -4382,8 +4382,14 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     else if(g.kind === "exp"){ S.exp += a; levelUps(); toast("Администратор выдал " + a + " опыта"); }
     else if(g.kind === "level"){ for(let i = 0; i < a; i++){ S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; } S.hp = stat().maxhp; toast("Администратор поднял уровень до " + S.level); }
     else if(g.kind === "item" && ITEMS[g.payload.item]){
-      const it = ITEMS[g.payload.item];
-      let got = 0; for(let i = 0; i < a; i++){ if(addItem(S.inv, g.payload.item, 1, INV_MAX, g.payload.grade) || addItem(S.store, g.payload.item, 1, STORE_MAX, g.payload.grade)) got++; }
+      const id = g.payload.item, it = ITEMS[id], gr = it.type === "gear" ? g.payload.grade : undefined;
+      let got = 0; for(let i = 0; i < a; i++){ if(addItem(S.inv, id, 1, INV_MAX, gr) || addItem(S.store, id, 1, STORE_MAX, gr)) got++; }
+      if(got && g.payload.reg && typeof regAddSph === "function") regAddSph(id, got);          // сервер уже записал вещь на счёт
+      // дрон, артефакт, крылья, плащ: если слот пуст — сразу надеваем
+      if(got && DRONES[id] && !droneOn()) S.drone = id;
+      if(got && ARTS[id] && !artOn()) S.art = id;
+      if(got && typeof WINGS !== "undefined" && WINGS[id] && !wingOn()) S.wing = id;
+      if(got && typeof CLOAKS !== "undefined" && CLOAKS[id] && !cloakOn()) S.cloak = id;
       toast("Администратор выдал: " + it.name + (it.type === "gear" ? " (" + GRADES[g.payload.grade].name.toLowerCase() + ")" : "") + (got > 1 ? " ×" + got : "") + (got < a ? ". Не хватило места" : ""));
     }
     Sfx.play("level"); save(); push(true);
@@ -4496,7 +4502,18 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
 
   // ---- админ-панель ----
   let adm = {kind:"scrap", item:"g_rifle_10", grade:3};
-  const GEAR_OPTS = Object.keys(ITEMS).filter(k => !ITEMS[k].starter && ITEMS[k].type !== "drone");
+  // все предметы игры, по группам (список строится при открытии панели — к этому моменту описаны все предметы)
+  const ADM_GROUPS = [["gear:weapon", "Оружие"], ["gear:head", "Сенсоры"], ["gear:armor", "Корпуса"], ["gear:module", "Модули"], ["gear:core", "Реакторы"], ["gear:legs", "Ходовые"],
+    ["wings", "Крылья"], ["cloak", "Плащи"], ["artifact", "Артефакты"], ["drone", "Дроны"], ["rune", "Руны"], ["ench", "Сферы заточки"], ["book", "Книги"],
+    ["pot", "Зелья"], ["use", "Ремкомплекты"], ["mat", "Материалы"]];
+  function admItemOptions(){
+    const groups = new Map(ADM_GROUPS.map(([k]) => [k, []])), other = [];
+    for(const [k, it] of Object.entries(ITEMS)){ if(it.starter) continue;
+      const key = it.type === "gear" ? "gear:" + it.slot : it.type; (groups.get(key) || other).push(k); }
+    const opt = k => `<option value="${k}" ${adm.item === k ? "selected" : ""}>${ITEMS[k].name}${ITEMS[k].lvl ? " · " + ITEMS[k].lvl + " ур." : ""}</option>`;
+    return ADM_GROUPS.map(([k, n]) => groups.get(k).length ? `<optgroup label="${n}">${groups.get(k).map(opt).join("")}</optgroup>` : "").join("")
+      + (other.length ? `<optgroup label="Прочее">${other.map(opt).join("")}</optgroup>` : "");
+  }
   function adminSheet(){
     openSheet("Админ-панель", "Права подтверждены сервером", () => {
       body().innerHTML = `
@@ -4506,9 +4523,10 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         <div class="seg">${[["scrap","Лом"],["cores","Ядра"],["exp","Опыт"],["level","Уровни"]].map(([k, n]) => `<button type="button" data-adm="kind" data-v="${k}" aria-pressed="${adm.kind === k}">${n}</button>`).join("")}</div>
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admAmt" type="number" min="1" value="${adm.kind === "level" ? 5 : 10000}" style="margin:0"><button class="act" type="button" data-adm="give">Выдать</button></div>
         <div class="flabel">Предмет</div>
-        <select class="field" id="admItem">${GEAR_OPTS.map(k => `<option value="${k}" ${adm.item === k ? "selected" : ""}>${ITEMS[k].name}</option>`).join("")}</select>
+        <select class="field" id="admItem">${admItemOptions()}</select>
         <div class="pick">${GRADES.map((g, i) => `<button type="button" data-adm="grade" data-v="${i}" aria-pressed="${adm.grade === i}" aria-label="${g.name}"><span class="sw2" style="background:${g.color}"></span></button>`).join("")}</div>
-        <button class="btn pri wide" type="button" data-adm="item">Выдать предмет</button>
+        <p class="hint" style="margin:2px 0 6px">Грейд действует только на снаряжение. Количество — от 1 до 50</p>
+        <div class="chatin" style="margin-bottom:6px"><input class="field" id="admItemN" type="number" min="1" max="50" value="${adm.n || 1}" style="margin:0"><button class="btn pri" type="button" data-adm="item">Выдать предмет</button></div>
         <div class="flabel" style="margin-top:10px">Сменить позывной игроку из поля «Кому»</div>
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="nick">Сменить</button></div>
         <div class="set" style="margin-top:8px"><div class="tx">Бессмертие<small>Только для тебя, пока открыта игра</small></div><button class="sw" type="button" role="switch" data-adm="god" aria-checked="${NET.god}" aria-label="Бессмертие"></button></div>
@@ -4532,9 +4550,9 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     const a = b.dataset.adm, v = b.dataset.v;
     const keep = {t:$("admTarget") && $("admTarget").value, n:$("admAmt") && $("admAmt").value};
     if(a === "kind"){ adm.kind = v; adminSheet(); $("admTarget").value = keep.t; }
-    else if(a === "grade"){ adm.item = $("admItem").value; adm.grade = +v; adminSheet(); $("admTarget").value = keep.t; $("admAmt").value = keep.n; }
+    else if(a === "grade"){ adm.item = $("admItem").value; adm.n = +$("admItemN").value || 1; adm.grade = +v; adminSheet(); $("admTarget").value = keep.t; $("admAmt").value = keep.n; }
     else if(a === "give") admGrant({kind:adm.kind, amount:parseInt($("admAmt").value) || 0});
-    else if(a === "item") admGrant({kind:"item", amount:1, item:$("admItem").value, grade:adm.grade});
+    else if(a === "item"){ adm.item = $("admItem").value; adm.n = Math.max(1, Math.min(50, parseInt($("admItemN").value) || 1)); admGrant({kind:"item", amount:adm.n, item:adm.item, grade:adm.grade}); }
     else if(a === "nick"){
       const name = ($("admNick").value || "").trim();
       if(name.length < 3 || name.length > 16){ toast("Позывной: 3–16 символов — буквы, цифры, пробел, _ или -"); return; }
