@@ -35,7 +35,7 @@ class AdminNicknameContract(unittest.TestCase):
     def test_validation_present(self):
         fn = WEB[WEB.index("async def admin_set_name"):]
         fn = fn[:fn.index("\nasync def ", 10)]
-        for part in ("valid_nick(name)", "RESERVED_NICKS", "func.lower(GameSave.nick) == name.lower()", '"rename"'):
+        for part in ("valid_nick(name)", "reserved_nick(name)", "func.lower(GameSave.nick) == name.lower()", '"rename"'):
             self.assertIn(part, fn)
 
 

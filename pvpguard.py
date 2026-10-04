@@ -69,6 +69,12 @@ def in_combat(uid):
     return bool(st) and _now() - st["t"] < COMBAT_SEC
 
 
+def combat_left(uid):
+    """Сколько секунд игрок ещё «в бою» после последнего удара по нему (0 — не в бою)."""
+    st = _state.get(uid)
+    return max(0.0, COMBAT_SEC - (_now() - st["t"])) if st else 0.0
+
+
 def _heal_budget(st, mhp):
     """Запас лечения: копится (20 + 5% прочности) в секунду, не больше 200 + 25% прочности."""
     now = _now()

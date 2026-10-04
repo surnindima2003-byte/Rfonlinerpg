@@ -12,6 +12,7 @@ from models import ServerProg, GameSave
 LEVEL_CAP = 50
 XP_SLACK = 12              # VIP 15 даёт +230% опыта, плюс гильдия и пати
 _cap = {}                       # tg_id -> допустимый уровень (кэш для живого мира)
+_floor = {}                     # tg_id -> уровень, ниже которого игрок точно не может быть (кэш для живого мира)
 
 
 def mob_exp(lv, boss=False):
@@ -45,9 +46,21 @@ def allowed(row):
     return min(LEVEL_CAP, max(row.base_lvl or 1, level_from_exp((row.exp or 0) * XP_SLACK)) + (row.bonus or 0))
 
 
+def floor_lvl(row):
+    """Нижний предел уровня: только подтверждённый сервером опыт, БЕЗ запаса XP_SLACK.
+    Честный игрок набирает опыта не меньше (бонусы VIP, пати и задания только добавляют), поэтому
+    его уровень никогда не ниже. Нужен, чтобы телефон не мог «прикинуться» новичком и уйти от PvP."""
+    return min(LEVEL_CAP, max(row.base_lvl or 1, level_from_exp(row.exp or 0)) + (row.bonus or 0))
+
+
+def _remember(uid, row):
+    _cap[uid] = allowed(row)
+    _floor[uid] = min(floor_lvl(row), _cap[uid])
+
+
 async def cap_of(s, uid):
     row = await prog_of(s, uid)
-    _cap[uid] = allowed(row)
+    _remember(uid, row)
     return _cap[uid]
 
 
@@ -55,17 +68,27 @@ def cached_cap(uid):
     return _cap.get(uid)
 
 
+def cached_floor(uid):
+    return _floor.get(uid)
+
+
+def forget(uid):
+    """Игрок вышел из игры — кэш не нужен (при входе он загружается заново)."""
+    _cap.pop(uid, None)
+    _floor.pop(uid, None)
+
+
 async def add_kill(s, uid, lv, boss=False):
     row = await prog_of(s, uid)
     row.exp = (row.exp or 0) + mob_exp(lv, boss)
-    _cap[uid] = allowed(row)
+    _remember(uid, row)
     return _cap[uid]
 
 
 async def add_levels(s, uid, n):
     row = await prog_of(s, uid)
     row.bonus = (row.bonus or 0) + int(n)
-    _cap[uid] = allowed(row)
+    _remember(uid, row)
 
 
 def bm_cap(lvl):

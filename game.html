@@ -2069,6 +2069,14 @@ function travel(key){
     if(typeof chatLocal === "function") chatLocal("Ты в локации: " + L.name);
   }, 350);
 }
+// в PvP-бою (10 с после своего удара или удара по тебе) локацию не покинуть — сервер такой переход всё равно отменит
+const travelRaw = travel;
+travel = function(key){
+  if(key !== locKey && typeof NET !== "undefined" && NET.on && !NET.admin && (NET.pvpUntil || 0) > now && p && !p.dead){
+    toast("В бою локацию не покинуть ещё " + Math.ceil(NET.pvpUntil - now) + " с"); return;
+  }
+  return travelRaw(key);
+};
 
 // ---- управление ----
 gameEl.addEventListener("pointerdown", e => {
@@ -8580,6 +8588,7 @@ renderTargetFrame = function(){
       return;
     }
     if(d.t === "pfx"){
+      if(d.a === NET.id || d.v === NET.id) NET.pvpUntil = now + 10;      // я в PvP-бою: уйти из локации нельзя 10 с
       const o = NET.others.get(d.v);
       if(o){ o.hp = +d.hp || 0; o.cp = +d.cp || 0; }
       if(d.a !== NET.id) spawnPvpShot(d.a, d.v, String(d.k || ""), !!d.c, !!d.s, +d.d || 0, d.v !== NET.id);
@@ -8588,6 +8597,16 @@ renderTargetFrame = function(){
     if(d.t === "pvp_force_dead"){
       // сервер насчитал смерть раньше телефона (например, после рассинхрона) — телефон подчиняется
       if(p && !p.dead){ S.cp = 0; p.inv = 0; hurtPlayer(1e9, String(d.nick || "Пилот").slice(0, 16)); }
+      return;
+    }
+    if(d.t === "loc_fix"){
+      // сервер не принял смену локации (бой) — возвращаемся туда, где он нас видит
+      const x = +d.x, y = +d.y;
+      if(d.text) toast(String(d.text).slice(0, 80));
+      if(d.loc && d.loc !== locKey && LOCS[d.loc]){
+        travelRaw(d.loc);
+        setTimeout(() => { if(p && isFinite(x) && isFinite(y)){ p.x = x; p.y = y; } }, 400);
+      }
       return;
     }
     if(d.t === "pos_fix"){

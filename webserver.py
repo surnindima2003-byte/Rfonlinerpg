@@ -280,14 +280,19 @@ async def api_save(request):
                 row.bm = max(0, min(10_000_000 if user["admin"] else progress.bm_cap(row.lvl), int(data.get("bm", 0))))
             except (TypeError, ValueError, OverflowError):
                 pass
-            new_nick = str(s_.get("name", ""))[:16]
-            if new_nick and new_nick != row.nick:
-                clash = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == new_nick.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
+            new_nick = str(s_.get("name", "")).strip()[:16]
+            # раньше ник из сохранения не проверялся вовсе: через него проходили «admin», пробелы и любые символы
+            nick_changed = False
+            if new_nick and new_nick != row.nick and valid_nick(new_nick) and not reserved_nick(new_nick):
+                clash = (await s.execute(select(GameSave.tg_id).where(func.lower(GameSave.nick) == new_nick.lower(),
+                                                                      GameSave.tg_id != user["id"]).limit(1))).first()
                 if not clash:
-                    row.nick = new_nick
+                    row.nick, nick_changed = new_nick, True
             row.cls = s_.get("cls") if s_.get("cls") in CLASSES and s_.get("cls") else ""
             row.guild_id = str(s_.get("guildId", ""))[:64]
             await s.commit()
+    if nick_changed:
+        set_online_nick(user["id"], row.nick)
     return web.json_response({"ok": True})
 
 
@@ -307,7 +312,7 @@ async def admin_set_name(user, body):
     name = str(body.get("name", "")).strip()
     if not valid_nick(name):
         return web.json_response({"ok": False, "error": "Позывной: 3–16 символов — буквы, цифры, пробел, _ или -"})
-    if name.lower() in RESERVED_NICKS:
+    if reserved_nick(name):
         return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
     target = str(body.get("target", "")).strip().lstrip("@").lower()
     async with SessionLocal() as s:
@@ -608,12 +613,33 @@ async def api_db(request):
             else:
                 await doc_put(s, path, data)
             await s.commit()
+            p_ = parse_path(path)
+            if p_ and p_[1] in (None, "members"):
+                gid, sub, did = p_
+                affected = [int(did)] if sub == "members" and did.isdigit() else \
+                    [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
+                await refresh_guild(affected)              # тег над головой и «союзник или нет» — сразу
             return web.json_response({"ok": True, "id": path.rsplit("/", 1)[1]})
     raise web.HTTPBadRequest(text="bad op")
 
 
 # ---------- позывной: проверка, что имя свободно ----------
 RESERVED_NICKS = {"пилот", "pilot", "admin", "админ", "administrator", "администратор", "moderator", "модератор", "system", "система"}
+# кириллица, похожая на латиницу (и цифры, похожие на буквы): «Аdmin» с русской А — тот же «admin»
+_LOOKALIKE = str.maketrans({"а": "a", "е": "e", "ё": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "к": "k",
+                            "м": "m", "т": "t", "в": "b", "н": "h", "і": "i", "ї": "i", "ј": "j", "ѕ": "s", "ԁ": "d",
+                            "0": "o", "1": "i", "l": "i", "3": "e", "4": "a", "5": "s", "_": "", "-": "", " ": ""})
+
+
+def nick_skeleton(name):
+    return str(name).lower().translate(_LOOKALIKE)
+
+
+_RESERVED_SKELETONS = {nick_skeleton(n) for n in RESERVED_NICKS}
+
+
+def reserved_nick(name):
+    return nick_skeleton(name) in _RESERVED_SKELETONS
 
 
 def valid_nick(name):
@@ -625,7 +651,7 @@ async def api_name(request):
     name = str(body.get("name", "")).strip()
     if not valid_nick(name):
         return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
-    if name.lower() in RESERVED_NICKS:
+    if reserved_nick(name):
         return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
     async with SessionLocal() as s:
         taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
@@ -637,6 +663,7 @@ async def api_name(request):
             s.add(row)
         row.nick = name
         await s.commit()
+    set_online_nick(user["id"], name)
     return web.json_response({"ok": True})
 
 
@@ -893,6 +920,65 @@ def online(uid):
     return hub.info_of(uid)
 
 
+def set_online_nick(uid, nick):
+    """Ник над головой и в чате задаёт сервер (из сохранения), а не каждое сообщение телефона."""
+    for c in list(hub.by_uid.get(uid, [])):
+        c.info["nick"] = nick or c.info["name"][:16]
+
+
+async def guild_of(s, uid):
+    """Гильдия игрока по документам гильдий на сервере: (id, тег, название, значок, цвет) или None."""
+    rows = (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members"), Doc.path.like(f"guilds/%/members/{uid}"))
+                            .order_by(Doc.updated.desc()))).all()
+    for (path,) in rows:
+        parts = path.split("/")
+        if len(parts) != 4 or parts[3] != str(uid):
+            continue
+        _, g = await doc_get(s, f"guilds/{parts[1]}")
+        if not isinstance(g, dict):
+            continue                                        # гильдию удалили, а запись участника осталась
+        e = g.get("emblem") if valid_emblem(g.get("emblem")) else {}
+        return parts[1], str(g.get("tag", ""))[:4], str(g.get("name", ""))[:20], e.get("icon", ""), e.get("color", "")
+    return None
+
+
+def apply_guild(uid, g):
+    for c in list(hub.by_uid.get(uid, [])):
+        i = c.info
+        i["gid"], i["gt"], i["gn"], i["gi"], i["gc"] = g if g else ("", "", "", "", "")
+
+
+async def refresh_guild(uids):
+    """Перечитать гильдию игроков в сети (после вступления, выхода, исключения, правки гильдии)."""
+    uids = [u for u in set(uids) if hub.is_online(u)]
+    if not uids:
+        return
+    try:
+        async with SessionLocal() as s:
+            for uid in uids:
+                apply_guild(uid, await guild_of(s, uid))
+    except Exception:
+        log.exception("гильдия: не удалось обновить %s", uids)
+
+
+PVP_COMBAT_SEC = 10          # столько секунд после своего удара или удара по тебе нельзя сменить локацию
+
+
+def pvp_combat_left(info):
+    left = max(info.get("pvp_last", 0) + PVP_COMBAT_SEC - time.time(), pvpguard.combat_left(info["id"]))
+    return max(0, int(left + 0.999))
+
+
+def in_pvp_combat(info):
+    """Игрок недавно бил другого игрока или его били (админов не держим)."""
+    return not info.get("admin") and pvp_combat_left(info) > 0
+
+
+def same_guild(a, b):
+    """Союзники по гильдии — по id гильдии, который знает сервер (тег присылал телефон, его можно было подделать)."""
+    return bool(a.get("gid")) and a.get("gid") == b.get("gid")
+
+
 def party_payload(pid):
     pt = parties.get(pid)
     if not pt:
@@ -991,7 +1077,7 @@ async def handle_party(d, info):
             return
         if tgt is not info:
             pid = member_party.get(uid)
-            friend = (pid and member_party.get(other) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt"))
+            friend = (pid and member_party.get(other) == pid) or same_guild(info, tgt)
             if not friend or tgt["loc"] != info["loc"]:
                 return
             if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > MED_RANGE:
@@ -1091,13 +1177,15 @@ def clean_pos(d, info):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
         info["dead"] = bool(d.get("dead"))
-        nick = str(d.get("nick", ""))[:16].strip()
-        info["nick"] = nick or info["name"][:16]
+        # ник задаёт сервер (set_online_nick): раньше его брали из каждого pos — можно было писать в чат как «Админ»
         info["fac"] = info.get("fac_srv") or ""                                    # фракцию задаёт сервер, а не сообщение
         cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
         if info.get("loadtest"):
             cap = 60
-        info["lvl"] = max(1, min(999 if info.get("admin") else cap, int(d.get("lvl", 1))))
+        # не выше серверного предела и не ниже подтверждённого сервером уровня:
+        # иначе телефон присылал lvl 1 и уходил от PvP как «новичок»
+        floor = 1 if info.get("admin") or info.get("loadtest") else min(progress.cached_floor(info["id"]) or 1, cap)
+        info["lvl"] = max(floor, min(999 if info.get("admin") else cap, int(d.get("lvl", 1))))
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
@@ -1113,10 +1201,7 @@ def clean_pos(d, info):
         info["dr"] = d.get("dr") if d.get("dr") in DRONE_IDS else ""                  # дрон-компаньон рядом с роботом
         info["wg"] = d.get("wg") if d.get("wg") in WING_IDS else ""                   # крылья за спиной
         info["ck"] = d.get("ck") if d.get("ck") in CLOAK_IDS else ""                  # плащ
-        info["gt"] = str(d.get("gt", ""))[:4]
-        info["gn"] = str(d.get("gn", ""))[:20]
-        info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
-        info["gc"] = d.get("gc") if isinstance(d.get("gc"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", d.get("gc")) else ""
+        # гильдия над головой (gt/gn/gi/gc) — от сервера (apply_guild), а не из сообщения
         info["seen"] = time.time()
     except (TypeError, ValueError, OverflowError, AttributeError):
         pass
@@ -1376,7 +1461,7 @@ async def handle_pvp(d, info):
     if info.get("srv_dead_until", 0) > time.time() or tgt.get("srv_dead_until", 0) > time.time():
         return                                   # сервер уже засчитал смерть одного из них
     pid = member_party.get(info["id"])
-    if (pid and member_party.get(to) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt")):
+    if (pid and member_party.get(to) == pid) or same_guild(info, tgt):
         return                                   # союзников не бьём
     if not pvp.can_fight(info, tgt):
         return                                   # защита новичков: до 10-го уровня PvP нет
@@ -1572,7 +1657,7 @@ async def ws_handler(request):
                     proto = 1
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
                         "nick": user["name"][:16], "fac": "", "fac_srv": "", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
-                        "proto": proto}
+                        "proto": proto, "gid": "", "gt": "", "gn": "", "gi": "", "gc": ""}
                 if LOADTEST and user["id"] >= LOADTEST_UID_BASE:
                     info["loadtest"] = True
                 try:
@@ -1580,8 +1665,14 @@ async def ws_handler(request):
                     async with SessionLocal() as s_:
                         info["lvl_cap"] = await progress.cap_of(s_, user["id"])
                         fac = (await s_.execute(select(Player.faction).where(Player.tg_id == user["id"]))).scalar()
+                        nick = (await s_.execute(select(GameSave.nick).where(GameSave.tg_id == user["id"]))).scalar()
+                        g = await guild_of(s_, user["id"])
                         await s_.commit()
                     info["fac_srv"] = info["fac"] = fac if fac in FACTIONS else ""
+                    if nick:
+                        info["nick"] = nick[:16]
+                    if g:
+                        info["gid"], info["gt"], info["gn"], info["gi"], info["gc"] = g
                 except Exception:
                     # база медленная или недоступна — игрок всё равно входит, чат и мир работают
                     log.exception("не удалось загрузить карму/предел уровня uid=%s", user["id"])
@@ -1598,6 +1689,15 @@ async def ws_handler(request):
                 continue
             if t == "pos":
                 old_loc = info["loc"]
+                new_loc = d.get("loc")
+                if new_loc in LOCS and new_loc != old_loc and in_pvp_combat(info) and not d.get("dead") and not info.get("dead"):
+                    # раньше в бою можно было просто прислать loc «lobby» и оказаться в безопасной зоне
+                    d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+                    metrics.inc("pvp.flee_blocked")
+                    if time.time() - info.get("lf_t", 0) > 1:
+                        info["lf_t"] = time.time()
+                        conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
+                                                   "text": f"В бою локацию не покинуть ещё {pvp_combat_left(info)} с"}))
                 if d.get("loc") == SEASON_LOC and old_loc != SEASON_LOC and not info.get("admin"):
                     if not await seasonpts.has_ticket(info["id"]):           # без билета в сезонную зону не пускаем
                         d = {**d, "loc": old_loc}
@@ -1687,6 +1787,7 @@ async def ws_handler(request):
         if info:
             last_seen[info["id"]] = time.time()
         if info and not online(info["id"]):
+            progress.forget(info["id"])
             try:
                 await party_leave(info["id"])
             except Exception:
