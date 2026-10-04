@@ -320,11 +320,12 @@ async def api_gram(request):
         if op == "ref":
             direct = (await s.execute(select(Referral).where(Referral.inviter_id == uid).order_by(Referral.created.desc()))).scalars().all()
             ids = [r.tg_id for r in direct]
-            second = (await s.execute(select(func.count()).select_from(Referral).where(Referral.inviter_id.in_(ids)))).scalar() if ids else 0
-            earned = (await s.execute(select(func.coalesce(func.sum(RefEarn.amount), 0)).where(RefEarn.inviter_id == uid))).scalar()
+            second = int((await s.execute(select(func.count()).select_from(Referral).where(Referral.inviter_id.in_(ids)))).scalar() or 0) if ids else 0
+            # в PostgreSQL SUM(bigint) приходит как Decimal — его не умеет JSON, поэтому сразу в int
+            earned = int((await s.execute(select(func.coalesce(func.sum(RefEarn.amount), 0)).where(RefEarn.inviter_id == uid))).scalar() or 0)
             per = {}
             for fid, lvl_, amt in (await s.execute(select(RefEarn.friend_id, RefEarn.level, func.sum(RefEarn.amount)).where(RefEarn.inviter_id == uid).group_by(RefEarn.friend_id, RefEarn.level))).all():
-                per[fid] = per.get(fid, 0) + (amt or 0)
+                per[fid] = per.get(fid, 0) + int(amt or 0)
             saves = {r.tg_id: r for r in (await s.execute(select(GameSave).where(GameSave.tg_id.in_(ids)))).scalars().all()} if ids else {}
             friends = [{"nick": (saves[f].nick if f in saves and saves[f].nick else "Пилот"), "lvl": (saves[f].lvl if f in saves else 1),
                         "earned": g(per.get(f, 0)), "ts": r.created * 1000} for f, r in zip(ids, direct)]
@@ -345,7 +346,7 @@ async def api_gram_admin(request):
         if op == "list":
             wds = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.status == "pending").order_by(GramWithdrawal.created))).scalars().all()
             um = (await s.execute(select(GramTx).where(GramTx.kind == "unmatched").order_by(GramTx.ts.desc()).limit(20))).scalars().all()
-            total = (await s.execute(select(func.coalesce(func.sum(GramWallet.balance), 0)))).scalar()
+            total = int((await s.execute(select(func.coalesce(func.sum(GramWallet.balance), 0)))).scalar() or 0)   # Decimal → int для JSON
             return web.json_response({"ok": True, "network": TON_NETWORK, "address": GAME_WALLET, "total": g(total),
                                       "wds": [{"id": x.id, "nick": x.nick, "address": x.address, "amount": g(x.amount), "payout": g(x.payout), "ts": x.created * 1000} for x in wds],
                                       "unmatched": [{"amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in um]})

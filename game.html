@@ -8086,17 +8086,19 @@ $("shBody").addEventListener("click", async e => {
 });
 
 // ---- реферальная система: вкладка «Друзья» ----
-let REF = null, refLoading = false;
+let REF = null, refLoading = false, refErr = false;
 async function refLoad(){
   if(!gramOnline() || refLoading) return;
   refLoading = true;
-  try{ const r = await NET.api("/api/gram/ref", {}); if(r && r.ok) REF = r; }catch(e){}
+  try{ const r = await NET.api("/api/gram/ref", {}); if(r && r.ok){ REF = r; refErr = false; } else refErr = true; }catch(e){ refErr = true; }
   refLoading = false;
   if(!$("scrProfile").hidden && typeof renderProfile === "function" && !document.activeElement?.matches("input")) renderProfile();
 }
 const _friendsTab = friendsTab;
 friendsTab = function(){
   if(!gramOnline()) return _friendsTab();
+  // ошибка сервера больше не оставляет вечную «Загрузку…»: показываем причину и кнопку повтора
+  if(!REF && refErr && !refLoading) return `<section class="pcard"><div class="empty">Не удалось загрузить друзей<small>Проверь связь и попробуй ещё раз</small></div><button class="btn wide" type="button" data-ref="retry">Повторить</button></section>`;
   if(!REF){ refLoad(); return `<section class="pcard"><div class="empty">Загрузка…</div></section>`; }
   const link = REF.link || "";
   return `
@@ -8112,7 +8114,9 @@ friendsTab = function(){
   </section>`;
 };
 $("pBody").addEventListener("click", e => {
-  const b = e.target.closest("button[data-ref]"); if(!b || b.disabled || !REF || !REF.link) return;
+  const b = e.target.closest("button[data-ref]"); if(!b || b.disabled) return;
+  if(b.dataset.ref === "retry"){ refErr = false; renderProfile(); return; }
+  if(!REF || !REF.link) return;
   if(b.dataset.ref === "copy") copyText(REF.link, "Ссылка скопирована");
   else {
     const url = "https://t.me/share/url?url=" + encodeURIComponent(REF.link) + "&text=" + encodeURIComponent("Залетай в MetalWar — боевые роботы, подземелья и гильдии!");
