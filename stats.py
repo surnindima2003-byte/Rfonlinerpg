@@ -14,10 +14,12 @@ NANO = 10 ** 9
 
 
 async def mark_seen(uid):
-    """Запомнить первый вход игрока (вызывается при загрузке сохранения)."""
+    """Запомнить первый вход игрока (вызывается при загрузке сохранения).
+    «Вставить, если нет»: две вкладки, открытые одновременно, раньше давали ошибку 500 при загрузке."""
+    from db_atomic import insert_ignore
     async with SessionLocal() as s:
-        if not (await s.execute(select(FirstSeen).where(FirstSeen.tg_id == uid))).scalar_one_or_none():
-            s.add(FirstSeen(tg_id=uid, ts=int(time.time())))
+        if not (await s.execute(select(FirstSeen.tg_id).where(FirstSeen.tg_id == uid))).first():
+            await s.execute(insert_ignore(FirstSeen.__table__, tg_id=uid, ts=int(time.time())))
             await s.commit()
 
 
@@ -41,14 +43,16 @@ async def api_err(request):
     key = hashlib.sha1((msg + stack.split("\n")[1:2].__str__()).encode()).hexdigest()[:40]
     users = _err_users.setdefault(key, set())
     users.add(uid)
+    from db_atomic import insert_ignore
+    from sqlalchemy import update, case
     async with SessionLocal() as s:
-        row = (await s.execute(select(ClientError).where(ClientError.key == key))).scalar_one_or_none()
-        if not row:
-            row = ClientError(key=key, msg=msg, stack=stack, ua=str(body.get("ua", ""))[:200], count=0, users=0, first=int(now))
-            s.add(row)
-        row.count = (row.count or 0) + 1
-        row.users = max(row.users or 0, len(users))
-        row.last = int(now)
+        # одинаковая ошибка у многих игроков сразу: «вставить, если нет» + атомарный счётчик, без гонок
+        await s.execute(insert_ignore(ClientError.__table__, key=key, msg=msg, stack=stack, ua=str(body.get("ua", ""))[:200],
+                                      count=0, users=0, first=int(now), last=int(now)))
+        await s.execute(update(ClientError).where(ClientError.key == key)
+                        .values(count=ClientError.count + 1, last=int(now),
+                                users=case((ClientError.users < len(users), len(users)), else_=ClientError.users))
+                        .execution_options(synchronize_session=False))
         await s.commit()
     return web.json_response({"ok": True})
 

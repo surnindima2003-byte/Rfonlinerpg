@@ -110,3 +110,59 @@ class PrizeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FlushTest(unittest.TestCase):
+    """Параллельные flush идут по очереди; при ошибке базы очки не теряются (игрок остаётся в списке на запись)."""
+    def setUp(self):
+        sp._st.clear(); sp._dirty.clear()
+        self.saved, self.fail = [], False
+        test = self
+
+        class Sess:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def execute(self, q):
+                await asyncio.sleep(0.01)
+                if test.fail:
+                    raise RuntimeError("db down")
+                test.saved.append(q)
+            async def commit(self): pass
+
+        class Upd:
+            def where(self, *a): return self
+            def values(self, **k): self.k = k; return self
+            def execution_options(self, **k): return self
+
+        sa = types.ModuleType("sqlalchemy"); sa.update = lambda *a: Upd(); sa.select = None
+        dba = types.ModuleType("db_atomic"); dba.insert_ignore = lambda *a, **k: ("ins", k)
+        self._mods = {k: sys.modules.get(k) for k in ("sqlalchemy", "db_atomic")}
+        sys.modules["sqlalchemy"], sys.modules["db_atomic"] = sa, dba
+        self._sess, self._model = sp.SessionLocal, sp.SeasonPts
+        sp.SessionLocal = Sess
+        sp.SeasonPts = types.SimpleNamespace(__table__=None, tg_id=0, season=0)
+        sp._st[1] = {"season": "2026-10", "pts": 5, "data": {}}
+
+    def tearDown(self):
+        for k, v in self._mods.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+        sp.SessionLocal, sp.SeasonPts = self._sess, self._model
+
+    def test_failed_flush_keeps_dirty(self):
+        sp._dirty.add(1); self.fail = True
+        with self.assertRaises(RuntimeError):
+            asyncio.run(sp.flush())
+        self.assertIn(1, sp._dirty)
+
+    def test_parallel_flushes_serialized(self):
+        sp._dirty.add(1)
+
+        async def two():
+            sp._flush_lock = asyncio.Lock()               # новый цикл событий — новый замок
+            await asyncio.gather(sp.flush(), sp.flush())
+        asyncio.run(two())
+        self.assertEqual(len(self.saved), 2)              # одна пачка: вставка + обновление, второй flush пустой
+        self.assertEqual(sp._dirty, set())

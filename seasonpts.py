@@ -164,23 +164,38 @@ def kill_counter(loc):
     return "kill_f1" if loc == "sector1" else "kill_f2" if loc == "sector2" else "kill_farm" if loc in FIELDS else None
 
 
+_flush_lock = asyncio.Lock()
+
+
 async def flush():
-    if not _dirty:
-        return
-    batch = list(_dirty)
-    _dirty.clear()
-    now = int(time.time())
-    async with SessionLocal() as s:
-        for uid in batch:
-            st = _st.get(uid)
-            if not st:
-                continue
-            row = (await s.execute(select(SeasonPts).where(SeasonPts.tg_id == uid, SeasonPts.season == st["season"]))).scalar_one_or_none()
-            if not row:
-                row = SeasonPts(tg_id=uid, season=st["season"])
-                s.add(row)
-            row.pts, row.data, row.updated = st["pts"], json.dumps(st["data"]), now
-        await s.commit()
+    """Записать изменившиеся очки в базу.
+
+    Раньше flush вызывался параллельно (каждый запрос рейтинга + фоновый цикл раз в 20 с): два вызова
+    вставляли одну и ту же новую строку, второй падал целиком, а список изменённых уже был очищен —
+    очки этой пачки не попадали в базу и терялись при перезапуске. Теперь вызовы идут по очереди,
+    строка создаётся через «вставить, если нет», а при ошибке игроки возвращаются в список на запись."""
+    from sqlalchemy import update
+    from db_atomic import insert_ignore
+    async with _flush_lock:
+        if not _dirty:
+            return
+        batch = list(_dirty)
+        _dirty.clear()
+        now = int(time.time())
+        try:
+            async with SessionLocal() as s:
+                for uid in batch:
+                    st = _st.get(uid)
+                    if not st:
+                        continue
+                    await s.execute(insert_ignore(SeasonPts.__table__, tg_id=uid, season=st["season"], pts=0, data="{}", updated=now))
+                    await s.execute(update(SeasonPts).where(SeasonPts.tg_id == uid, SeasonPts.season == st["season"])
+                                    .values(pts=st["pts"], data=json.dumps(st["data"]), updated=now)
+                                    .execution_options(synchronize_session=False))
+                await s.commit()
+        except Exception:
+            _dirty.update(batch)                         # не записали — запишем в следующий раз
+            raise
 
 
 async def flush_loop():

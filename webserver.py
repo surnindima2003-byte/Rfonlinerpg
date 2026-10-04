@@ -319,10 +319,10 @@ async def admin_set_name(user, body):
         if target in ("", "me"):
             row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
         else:
-            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
+            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target).order_by(GameSave.updated.desc()).limit(1))).scalars().first()
         if not row:
             return web.json_response({"ok": False, "error": ("Игрок @" + target if target not in ("", "me") else "Ты") + " ещё не заходил в игру"})
-        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != row.tg_id))).scalar_one_or_none()
+        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != row.tg_id).limit(1))).scalars().first()
         if taken:
             return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
         old = row.nick or ""
@@ -383,7 +383,7 @@ async def api_admin_grant(request):
         if target in ("", "me"):
             tg_id, target_name = user["id"], user["username"] or user["name"]
         else:
-            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
+            row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target).order_by(GameSave.updated.desc()).limit(1))).scalars().first()
             if not row:
                 return web.json_response({"ok": False, "error": "Игрок @" + target + " ещё не заходил в игру"})
             tg_id, target_name = row.tg_id, row.username
@@ -394,8 +394,7 @@ async def api_admin_grant(request):
         if kind == "level":
             await progress.add_levels(s, tg_id, amount)          # выданные уровни сервер тоже засчитывает
         elif kind == "exp":
-            row_ = await progress.prog_of(s, tg_id)
-            row_.exp = (row_.exp or 0) + amount
+            await progress.add_exp(s, tg_id, amount)
         await s.commit()
         gd = grant_dict(g)
     log.info("Админ @%s выдал %s %s игроку %s", user["username"], kind, payload, target_name)
@@ -872,8 +871,8 @@ async def api_name(request):
         return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
     if reserved_nick(name):
         return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
-    async with SessionLocal() as s:
-        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
+    async with saveguard.player_lock(user["id"]), SessionLocal() as s:     # по очереди с сохранением: строка создаётся один раз
+        taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != user["id"]).limit(1))).scalars().first()
         if taken:
             return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
         row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
@@ -1131,7 +1130,7 @@ async def share_party_xp(info, base_exp):
     share = int(base_exp * PXP_SHARE)
     if share <= 0:
         return
-    for m in parties[pid]["members"]:
+    for m in list(parties[pid]["members"]):
         i = online(m)
         if m != info["id"] and i and not i.get("dead") and in_party_view(info, i):     # далеко или мёртв — опыта нет
             got = int(share * pxp_gap_mult(info.get("lvl"), i.get("lvl")))              # большая разница уровней — меньше или ноль
@@ -1279,6 +1278,9 @@ async def handle_party(d, info):
         if other in member_party:
             return await push_to_player(uid, {"t": "pinfo", "text": "Игрок уже в пати"})
         pid = member_party.get(uid)
+        if pid and pid not in parties:
+            member_party.pop(uid, None)
+            pid = None
         if pid and (parties[pid]["leader"] != uid):
             return await push_to_player(uid, {"t": "pinfo", "text": "Приглашать может только лидер пати"})
         if pid and len(parties[pid]["members"]) >= PARTY_MAX:
@@ -1290,15 +1292,25 @@ async def handle_party(d, info):
         ts = invites.get(uid, {}).pop(other, None)
         if not ts or time.time() - ts > 60 or not online(other):
             return await push_to_player(uid, {"t": "pinfo", "text": "Приглашение устарело"})
+        if member_party.get(uid) and member_party.get(uid) == member_party.get(other):
+            return                                     # уже в одной пати (встречные приглашения)
+        opid = member_party.get(other)
+        if opid and opid in parties and parties[opid]["leader"] != other:
+            # пригласивший с тех пор вступил в чужую пати и больше не лидер — так приглашать нельзя
+            return await push_to_player(uid, {"t": "pinfo", "text": "Приглашение устарело"})
+        if opid and opid in parties and len(parties[opid]["members"]) >= PARTY_MAX:
+            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        if uid in member_party:
+            # Выход из своей пати может её распустить — в том числе ту, куда нас зовут (встречные приглашения).
+            # Раньше после этого шёл parties[pid] по уже удалённой пати: KeyError и обрыв соединения.
+            await party_leave(uid)
         pid = member_party.get(other)
-        if not pid:
+        if not pid or pid not in parties:
             pid = f"p{other}-{int(time.time())}"
             parties[pid] = {"id": pid, "leader": other, "members": [other]}
             member_party[other] = pid
         if len(parties[pid]["members"]) >= PARTY_MAX:
             return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
-        if uid in member_party:
-            await party_leave(uid)
         parties[pid]["members"].append(uid)
         member_party[uid] = pid
         await send_party(pid)
@@ -1309,7 +1321,7 @@ async def handle_party(d, info):
         await party_leave(uid)
     elif t == "pkick":
         pid = member_party.get(uid)
-        if pid and parties[pid]["leader"] == uid and other in parties[pid]["members"] and other != uid:
+        if pid in parties and parties[pid]["leader"] == uid and other in parties[pid]["members"] and other != uid:
             await party_leave(other, kicked=True)
     elif t == "heal":
         # общий «Подхил» в пати отключён: лечить союзников может только Ремонтник (cheal)
@@ -1924,93 +1936,12 @@ async def ws_handler(request):
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
-            if t == "pos":
-                old_loc = info["loc"]
-                new_loc = d.get("loc")
-                if new_loc in LOCS and new_loc != old_loc and in_pvp_combat(info) and not d.get("dead") and not info.get("dead"):
-                    # раньше в бою можно было просто прислать loc «lobby» и оказаться в безопасной зоне
-                    d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
-                    metrics.inc("pvp.flee_blocked")
-                    if time.time() - info.get("lf_t", 0) > 1:
-                        info["lf_t"] = time.time()
-                        conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
-                                                   "text": f"В бою локацию не покинуть ещё {pvp_combat_left(info)} с"}))
-                if d.get("loc") == SEASON_LOC and old_loc != SEASON_LOC and not info.get("admin"):
-                    if not await seasonpts.has_ticket(info["id"]):           # без билета в сезонную зону не пускаем
-                        d = {**d, "loc": old_loc}
-                        if time.time() - info.get("sz_warn", 0) > 10:
-                            info["sz_warn"] = time.time()
-                            conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
-                clean_pos(d, info)
-                if info["loc"] != old_loc:
-                    hub.moved(conn, old_loc)
-                    conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
-                    if info["loc"] == worldboss.LOC:
-                        conn.push(realtime.encode(worldboss.view()))
-                        if worldboss.st["loot"]:
-                            conn.push(realtime.encode({"t": "wbloot", "items": list(worldboss.st["loot"].values())}))
-                if info.pop("pos_fix", False) and time.time() - info.get("fix_t", 0) > 1:
-                    info["fix_t"] = time.time()                      # вернуть телефон на последнюю честную точку
-                    conn.push(realtime.encode({"t": "pos_fix", "x": info["x"], "y": info["y"]}))
-                # удары по мобам и убийства едут в том же сообщении: сервер гарантированно видит удары раньше убийства
-                if d.get("mh"):
-                    mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
-                if d.get("mk"):
-                    await handle_kills(d, info, conn)
-            elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
-                await handle_party(d, info)
-            elif t == "pvp":
-                await handle_pvp(d, info)
-            elif t == "pvp_dead":
-                await handle_pvp_dead(d, info)
-            elif t == "card":
-                # карточка пилота для окна «Инфо»: характеристики и снаряжение (только показ, на бой не влияет)
-                if time.time() - info.get("card_t", 0) >= 4:
-                    info["card_t"] = time.time()
-                    info["card"] = clean_card(d.get("c"))
-            elif t == "card_get":
-                try:
-                    tid = int(d.get("id", 0))
-                except (TypeError, ValueError):
-                    tid = 0
-                ti = online(tid)
-                if ti and time.time() - info.get("cardq_t", 0) >= 0.5:
-                    info["cardq_t"] = time.time()
-                    conn.push(realtime.encode({"t": "card", "id": tid, "nick": ti.get("nick", ""), "lvl": ti.get("lvl", 1), "cls": ti.get("cls", ""),
-                                               "hp": ti.get("hp", 0), "mhp": ti.get("mhp", 1), "gt": ti.get("gt", ""), "gn": ti.get("gn", ""),
-                                               "c": ti.get("card") or {}}))
-            elif t == "emote":
-                eid = str(d.get("id", ""))[:10]
-                if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
-                    info["emo_t"] = time.time()
-                    hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
-            elif t == "mhit":
-                mobworld.on_hits(info, d, hub)
-            elif t == "wbhit":
-                await worldboss.on_hit(info, d, hub, seasonpts)
-            elif t == "twhit":
-                await tower.on_hit(info, d, hub, push_to_player)
-            elif t == "twdead":
-                tower.on_dead(info)
-            elif t == "wbpick":
-                worldboss.on_pick(info, d, hub)
-            elif t == "mpos":
-                mobworld.on_pos(info, d)
-            elif t == "mctl":
-                mobworld.on_claim(info, d, hub)
-            elif t == "mute":
-                await handle_mute(d, info)
-            elif t == "report":
-                await handle_report(d, info)
-            elif t in ("reports", "report_close"):
-                handle_reports(d, info)
-            elif t == "chat":
-                await handle_chat(d, info)
-            elif t == "ping":                                       # клиент может мерить задержку
-                pong = {"t": "pong", "c": d.get("c"), "s": int(time.time() * 1000)}
-                if info.get("admin") or info.get("mod"):           # панель отладки: состояние сервера видят только админы и модераторы
-                    pong["srv"] = metrics.brief(len(clients))
-                conn.push(realtime.encode(pong))
+            try:
+                await handle_ws_message(d, t, info, conn)
+            except Exception:
+                # раньше любая ошибка в обработчике одного сообщения закрывала всё соединение игрока
+                log.exception("ws: ошибка обработки t=%s uid=%s", t, info["id"])
+                metrics.inc("ws.msg_error")
             if t in WS_TYPES:
                 metrics.observe("ws.h." + t, (time.perf_counter() - t0) * 1000)
     except Exception:
@@ -2030,6 +1961,97 @@ async def ws_handler(request):
             except Exception:
                 log.exception("party_leave")
     return ws
+
+
+async def handle_ws_message(d, t, info, conn):
+    """Одно сообщение живого мира от вошедшего игрока. Ошибка здесь не рвёт соединение (см. ws_handler)."""
+    if t == "pos":
+        old_loc = info["loc"]
+        new_loc = d.get("loc")
+        if new_loc in LOCS and new_loc != old_loc and in_pvp_combat(info) and not d.get("dead") and not info.get("dead"):
+            # раньше в бою можно было просто прислать loc «lobby» и оказаться в безопасной зоне
+            d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+            metrics.inc("pvp.flee_blocked")
+            if time.time() - info.get("lf_t", 0) > 1:
+                info["lf_t"] = time.time()
+                conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
+                                           "text": f"В бою локацию не покинуть ещё {pvp_combat_left(info)} с"}))
+        if d.get("loc") == SEASON_LOC and old_loc != SEASON_LOC and not info.get("admin"):
+            if not await seasonpts.has_ticket(info["id"]):           # без билета в сезонную зону не пускаем
+                d = {**d, "loc": old_loc}
+                if time.time() - info.get("sz_warn", 0) > 10:
+                    info["sz_warn"] = time.time()
+                    conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
+        clean_pos(d, info)
+        if info["loc"] != old_loc:
+            hub.moved(conn, old_loc)
+            conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
+            if info["loc"] == worldboss.LOC:
+                conn.push(realtime.encode(worldboss.view()))
+                if worldboss.st["loot"]:
+                    conn.push(realtime.encode({"t": "wbloot", "items": list(worldboss.st["loot"].values())}))
+        if info.pop("pos_fix", False) and time.time() - info.get("fix_t", 0) > 1:
+            info["fix_t"] = time.time()                      # вернуть телефон на последнюю честную точку
+            conn.push(realtime.encode({"t": "pos_fix", "x": info["x"], "y": info["y"]}))
+        # удары по мобам и убийства едут в том же сообщении: сервер гарантированно видит удары раньше убийства
+        if d.get("mh"):
+            mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
+        if d.get("mk"):
+            await handle_kills(d, info, conn)
+    elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
+        await handle_party(d, info)
+    elif t == "pvp":
+        await handle_pvp(d, info)
+    elif t == "pvp_dead":
+        await handle_pvp_dead(d, info)
+    elif t == "card":
+        # карточка пилота для окна «Инфо»: характеристики и снаряжение (только показ, на бой не влияет)
+        if time.time() - info.get("card_t", 0) >= 4:
+            info["card_t"] = time.time()
+            info["card"] = clean_card(d.get("c"))
+    elif t == "card_get":
+        try:
+            tid = int(d.get("id", 0))
+        except (TypeError, ValueError):
+            tid = 0
+        ti = online(tid)
+        if ti and time.time() - info.get("cardq_t", 0) >= 0.5:
+            info["cardq_t"] = time.time()
+            conn.push(realtime.encode({"t": "card", "id": tid, "nick": ti.get("nick", ""), "lvl": ti.get("lvl", 1), "cls": ti.get("cls", ""),
+                                       "hp": ti.get("hp", 0), "mhp": ti.get("mhp", 1), "gt": ti.get("gt", ""), "gn": ti.get("gn", ""),
+                                       "c": ti.get("card") or {}}))
+    elif t == "emote":
+        eid = str(d.get("id", ""))[:10]
+        if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
+            info["emo_t"] = time.time()
+            hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
+    elif t == "mhit":
+        mobworld.on_hits(info, d, hub)
+    elif t == "wbhit":
+        await worldboss.on_hit(info, d, hub, seasonpts)
+    elif t == "twhit":
+        await tower.on_hit(info, d, hub, push_to_player)
+    elif t == "twdead":
+        tower.on_dead(info)
+    elif t == "wbpick":
+        worldboss.on_pick(info, d, hub)
+    elif t == "mpos":
+        mobworld.on_pos(info, d)
+    elif t == "mctl":
+        mobworld.on_claim(info, d, hub)
+    elif t == "mute":
+        await handle_mute(d, info)
+    elif t == "report":
+        await handle_report(d, info)
+    elif t in ("reports", "report_close"):
+        handle_reports(d, info)
+    elif t == "chat":
+        await handle_chat(d, info)
+    elif t == "ping":                                       # клиент может мерить задержку
+        pong = {"t": "pong", "c": d.get("c"), "s": int(time.time() * 1000)}
+        if info.get("admin") or info.get("mod"):           # панель отладки: состояние сервера видят только админы и модераторы
+            pong["srv"] = metrics.brief(len(clients))
+        conn.push(realtime.encode(pong))
 
 
 # ---------- рассылка мира ----------

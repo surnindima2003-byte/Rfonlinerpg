@@ -68,8 +68,10 @@ def cleanup(online_ids):
 async def stat_of(s, uid):
     row = (await s.execute(select(PvpStat).where(PvpStat.tg_id == uid))).scalar_one_or_none()
     if not row:
-        row = PvpStat(tg_id=uid, kills=0, deaths=0, pk=0, karma=0, rating=1000)
-        s.add(row)
+        # «вставить, если нет»: две смерти одного новичка одновременно раньше давали ошибку
+        from db_atomic import insert_ignore
+        await s.execute(insert_ignore(PvpStat.__table__, tg_id=uid, kills=0, deaths=0, pk=0, karma=0, rating=1000))
+        row = (await s.execute(select(PvpStat).where(PvpStat.tg_id == uid))).scalar_one()
     return row
 
 

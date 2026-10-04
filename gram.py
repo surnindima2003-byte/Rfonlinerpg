@@ -460,7 +460,7 @@ async def api_gram_admin(request):
             if target in ("", "me"):
                 uid = user["id"]
             else:
-                row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target))).scalar_one_or_none()
+                row = (await s.execute(select(GameSave).where(func.lower(GameSave.username) == target).order_by(GameSave.updated.desc()).limit(1))).scalars().first()
                 if not row:
                     return web.json_response({"ok": False, "error": "Игрок не найден"})
                 uid = row.tg_id
