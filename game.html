@@ -4317,6 +4317,8 @@ async function guildAction(a, b){
 }
 async function disband(){
   const gid = S.guildId; leftGuild();
+  // участников, заявки и журнал сервер удаляет сам вместе с гильдией
+  if(!gLocal){ await gRef(gid).delete(); toast("Гильдия распущена"); return; }
   for(const c of ["members","requests","log"]){ const s = await gCol(gid, c).get(); for(const d of s.docs) await gCol(gid, c).doc(d.id).delete(); }
   await gRef(gid).delete(); toast("Гильдия распущена");
 }

@@ -452,31 +452,134 @@ def valid_emblem(e):
             and isinstance(e.get("color"), str) and HEX_COLOR.fullmatch(e["color"]) is not None)
 
 
-async def clean_guild_emblems():
-    """При запуске: эмблемы, записанные до проверки, приводим к допустимым (иначе XSS остаётся в базе)."""
-    fixed = 0
+async def clean_guilds():
+    """При запуске: приводим старые данные гильдий в порядок.
+    * эмблемы, записанные до проверки, — к допустимым (иначе XSS остаётся в базе);
+    * участники, заявки и журнал удалённых гильдий — удаляем (раньше они оставались навсегда);
+    * число участников — пересчитываем (раньше его мог записать кто угодно)."""
+    fixed = orphans = 0
     async with SessionLocal() as s:
+        guilds = {}
         for row in (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all():
             try:
                 data = json.loads(row.data)
             except ValueError:
                 continue
+            gid = row.path.split("/", 1)[1]
+            guilds[gid] = row
             if isinstance(data, dict) and "emblem" in data and not valid_emblem(data["emblem"]):
                 data["emblem"] = {"icon": "gear", "color": "#F2A93B"}
                 row.data = json.dumps(data, ensure_ascii=False)
                 fixed += 1
-        if fixed:
-            await s.commit()
-    if fixed:
-        log.warning("Гильдии: исправлено эмблем с недопустимыми данными: %s", fixed)
+        for row in (await s.execute(select(Doc).where(Doc.col.like("guilds/%/%")))).scalars().all():
+            parts = row.col.split("/")
+            if len(parts) == 3 and parts[1] not in guilds:
+                await s.execute(Doc.__table__.delete().where(Doc.path == row.path))
+                orphans += 1
+        for gid in guilds:
+            await guild_recount(s, gid)
+        await s.commit()
+    if fixed or orphans:
+        log.warning("Гильдии: исправлено эмблем %s, удалено записей удалённых гильдий %s", fixed, orphans)
 
 
 def deny(msg="нет прав"):
     raise web.HTTPForbidden(text=msg)
 
 
+# ---- правила гильдий: зеркало game.html (GUILD_BASE_MAX, gMax, upCost, VALID_NAME, VALID_TAG) ----
+GUILD_BASE_MAX = 10
+ROLES = {"member", "officer", "leader"}
+
+
+def guild_max(g):
+    try:
+        return GUILD_BASE_MAX + (max(1, int(g.get("level") or 1)) - 1) * 5
+    except (TypeError, ValueError):
+        return GUILD_BASE_MAX
+
+
+def guild_up_cost(level):
+    return 500 * level
+
+
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _int_in(v, lo, hi):
+    return _num(v) and float(v).is_integer() and lo <= v <= hi
+
+
+def valid_guild_name(v):
+    return isinstance(v, str) and 3 <= len(v) <= 20 and v == v.strip() and all(ch.isalnum() or ch in " _-" for ch in v)
+
+
+def valid_guild_tag(v):
+    return isinstance(v, str) and 2 <= len(v) <= 4 and all(ch.isalnum() for ch in v)
+
+
+def _clean_fields(data, rules):
+    """Оставить только известные поля и проверить их. Неверное значение — 400 (честный клиент такого не шлёт)."""
+    out = {}
+    for k, v in data.items():
+        check = rules.get(k)
+        if check is None:
+            continue                                    # лишние поля молча отбрасываем
+        if not check(v):
+            raise web.HTTPBadRequest(text=f"bad field {k}")
+        out[k] = v
+    return out
+
+
+_short = lambda n: (lambda v: isinstance(v, str) and len(v) <= n)
+_nonneg = lambda v: _num(v) and 0 <= v <= 1e12
+GUILD_FIELDS = {"name": valid_guild_name, "tag": valid_guild_tag, "emblem": valid_emblem, "desc": _short(120),
+                "open": lambda v: isinstance(v, bool), "minLvl": lambda v: _int_in(v, 1, 30), "level": lambda v: _int_in(v, 1, 10_000),
+                # spent бывает меньше нуля: вклад ушедших остаётся в казне (казна = сумма вкладов − spent)
+                "spent": lambda v: _num(v) and abs(v) <= 1e12, "count": _nonneg,
+                "leader": _short(20), "leaderNick": _short(16), "created": _nonneg}
+MEMBER_FIELDS = {"uid": _short(20), "nick": _short(16), "lvl": lambda v: _int_in(v, 1, 999), "fac": _short(8),
+                 "role": lambda v: v in ROLES, "joined": _nonneg, "donated": _nonneg, "xp": _nonneg, "bm": _nonneg}
+REQUEST_FIELDS = {"uid": _short(20), "nick": _short(16), "lvl": lambda v: _int_in(v, 1, 999), "fac": _short(8),
+                  "ts": _nonneg, "bm": _nonneg}
+LOG_FIELDS = {"text": _short(200), "ts": _nonneg}
+
+
+async def guild_members(s, gid):
+    rows = (await s.execute(select(Doc).where(Doc.col == f"guilds/{gid}/members"))).scalars().all()
+    out = {}
+    for r in rows:
+        try:
+            out[r.path.rsplit("/", 1)[1]] = json.loads(r.data)
+        except ValueError:
+            continue
+    return out
+
+
+async def other_guild(s, uid, gid):
+    """Id другой существующей гильдии, где игрок уже состоит, или None. Состоять можно только в одной."""
+    rows = (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members"), Doc.path.like(f"guilds/%/members/{uid}")))).all()
+    for (path,) in rows:
+        parts = path.split("/")
+        if len(parts) == 4 and parts[3] == str(uid) and parts[1] != gid:
+            row, _ = await doc_get(s, f"guilds/{parts[1]}")
+            if row:
+                return parts[1]
+    return None
+
+
+async def player_lvl(s, uid):
+    """Уровень для порога гильдии — из сохранения (сервер ограничивает его подтверждённым уровнем)."""
+    try:
+        return int((await s.execute(select(GameSave.lvl).where(GameSave.tg_id == int(uid)))).scalar() or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 async def check_write(s, op, path, data, uid):
-    """Права ролей проверяет сервер: подделать их со страницы нельзя."""
+    """Права ролей и правила гильдии проверяет сервер: подделать их со страницы нельзя.
+    Возвращает очищенные данные для записи (лишние поля отброшены, серверные — подставлены)."""
     p = parse_path(path)
     if not p:
         raise web.HTTPBadRequest(text="bad path")
@@ -487,78 +590,147 @@ async def check_write(s, op, path, data, uid):
     is_leader = bool(guild) and guild.get("leader") == uid
 
     if sub is None:  # сама гильдия
-        if op in ("set", "update") and "emblem" in data and not valid_emblem(data["emblem"]):
-            raise web.HTTPBadRequest(text="bad emblem")
         if op == "set":
             if guild:
                 deny()
-            if data.get("leader") != uid:
+            data = _clean_fields(data, GUILD_FIELDS)
+            if data.get("leader") != uid or not valid_guild_name(data.get("name")) or not valid_guild_tag(data.get("tag")):
                 deny()
-            name, tag = str(data.get("name", "")).strip().lower(), str(data.get("tag", "")).strip().upper()
+            if await other_guild(s, uid, gid):
+                deny("ты уже в гильдии")
+            name, tag = data["name"].lower(), data["tag"].upper()
             others = (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all()
             for o in others:
                 od = json.loads(o.data)
                 if str(od.get("name", "")).lower() == name or str(od.get("tag", "")).upper() == tag:
                     deny("название или тег заняты")
-            return
+            data.update(level=1, spent=0, count=1)       # новая гильдия всегда с нуля, что бы ни прислал телефон
+            return data
         if not guild:
             deny()
         if op == "delete":
             if not is_leader:
                 deny()
-            return
+            return data
         if op == "update":
-            allowed = {"desc", "open", "minLvl", "emblem", "level", "spent", "leader", "leaderNick", "count"} if is_leader else ({"count", "spent"} if me else {"count"})
-            if set(data) - allowed:
+            data = _clean_fields(data, GUILD_FIELDS)
+            data.pop("count", None)                      # число участников считает сервер сам
+            if "level" in data or "spent" in data:
+                # казну меняет только улучшение гильдии лидером: уровень +1 и ровно его цена из казны.
+                # Остальные правки spent (выход, исключение) сервер делает сам при удалении участника.
+                if "level" not in data:
+                    data.pop("spent", None)
+                else:
+                    lvl, spent = int(guild.get("level") or 1), guild.get("spent") or 0
+                    cost = guild_up_cost(lvl)
+                    bank = sum((m.get("donated") or 0) for m in (await guild_members(s, gid)).values() if _num(m.get("donated"))) - spent
+                    if not is_leader or data["level"] != lvl + 1 or data.get("spent") != spent + cost or bank < cost:
+                        deny("улучшение не по правилам")
+            if "leader" in data:
+                if not is_leader:
+                    deny()
+                _, new_l = await doc_get(s, f"guilds/{gid}/members/{data['leader']}")
+                if not new_l:
+                    deny("новый лидер не состоит в гильдии")
+            if not data:
+                return data                              # например, старый «пересчёт» count — ничего не меняет
+            if not is_leader:
                 deny()
-            return
+            return data
         deny()
 
     if not guild:
         deny("гильдии нет")
     if sub == "members":
         if op == "set":
+            data = _clean_fields(data, MEMBER_FIELDS)
+            role = data.get("role")
+            _, existing = await doc_get(s, path)
+            # вклад и опыт участника сервер переносит сам: новый участник начинает с нуля,
+            # а перезапись своей записи не может «нарисовать» вклад в казну
+            data["donated"] = (existing or {}).get("donated", 0)
+            data["xp"] = (existing or {}).get("xp", 0)
+            data["uid"] = did
+            if not existing:
+                if await other_guild(s, did, gid):
+                    deny("пилот уже в другой гильдии")
+                if len(await guild_members(s, gid)) >= guild_max(guild):
+                    deny("в гильдии нет мест")
             if did == uid:
-                role = data.get("role")
                 if role == "leader" and is_leader:
-                    return
-                if role == "member" and (guild.get("open") or is_leader):
-                    return
+                    return data
+                if role == "member" and (existing or guild.get("open") or is_leader):
+                    if not existing and not is_leader and await player_lvl(s, uid) < int(guild.get("minLvl") or 1):
+                        deny("уровень ниже порога гильдии")
+                    if existing and existing.get("role") != "member" and not is_leader:
+                        deny()                           # офицер не «понижает» себя перезаписью — для этого есть update
+                    return data
                 deny("гильдия по заявкам")
-            if my_role in ("leader", "officer") and data.get("role") == "member":
+            if my_role in ("leader", "officer") and role == "member" and not existing:
                 _, req = await doc_get(s, f"guilds/{gid}/requests/{did}")
                 if req:
-                    return
+                    return data
             deny()
         if op == "update":
+            data = _clean_fields(data, MEMBER_FIELDS)
+            data.pop("uid", None)
             keys = set(data)
+            _, target = await doc_get(s, path)
+            if not target:
+                raise web.HTTPNotFound(text="no doc")
             if did == uid and keys <= {"donated", "xp", "lvl", "nick", "bm", "role"}:
                 if "role" in keys and not (is_leader or data.get("role") == my_role):
                     deny()
-                return
+                if "donated" in data and data["donated"] < (target.get("donated") or 0):
+                    deny("вклад не уменьшается")         # иначе казна росла бы за счёт «возврата» вклада
+                return data
             if is_leader and keys <= {"role"}:
-                return
+                return data
             deny()
         if op == "delete":
             if did == uid or is_leader:
-                return
+                return data
             _, target = await doc_get(s, path)
             if my_role == "officer" and target and target.get("role") == "member":
-                return
+                return data
             deny()
     if sub == "requests":
         if op == "set" and did == uid:
-            return
+            if await player_lvl(s, uid) < int(guild.get("minLvl") or 1):
+                deny("уровень ниже порога гильдии")
+            data = _clean_fields(data, REQUEST_FIELDS)
+            data["uid"] = did
+            return data
         if op == "delete" and (did == uid or my_role in ("leader", "officer")):
-            return
+            return data
         deny()
     if sub == "log":
         if op in ("set", "add") and me:
-            return
+            return _clean_fields(data, LOG_FIELDS)
         if op == "delete" and is_leader:
-            return
+            return data
         deny()
     deny()
+
+
+async def guild_delete_all(s, gid):
+    """Гильдия удалена — удаляем и её участников, заявки, журнал. Раньше они оставались, и при повторном
+    создании гильдии с тем же id старые участники снова получали свои роли (вплоть до офицера)."""
+    t = Doc.__table__
+    for sub in ("members", "requests", "log"):
+        await s.execute(t.delete().where(t.c.col == f"guilds/{gid}/{sub}"))
+    await s.execute(t.delete().where(t.c.path == f"guilds/{gid}"))
+
+
+async def guild_recount(s, gid):
+    """Число участников гильдии считает сервер (раньше его мог записать кто угодно)."""
+    row, g = await doc_get(s, f"guilds/{gid}")
+    if not row:
+        return
+    n = len(await guild_members(s, gid))
+    if g.get("count") != n:
+        g["count"] = n
+        row.data = json.dumps(g, ensure_ascii=False)
 
 
 def doc_view(path, data):
@@ -580,17 +752,43 @@ async def api_db(request):
             col = str(body.get("col", ""))
             if not parse_col(col):
                 raise web.HTTPBadRequest(text="bad col")
-            q = body.get("q") or {}
+            q = body.get("q") if isinstance(body.get("q"), dict) else {}
             rows = (await s.execute(select(Doc).where(Doc.col == col))).scalars().all()
-            docs = [doc_view(r.path, json.loads(r.data)) for r in rows]
-            for f, o, v in (q.get("where") or [])[:5]:
-                if o == "==":
-                    docs = [d for d in docs if d["data"].get(f) == v]
-            if q.get("order"):
-                f, direction = q["order"][0], q["order"][1] if len(q["order"]) > 1 else "asc"
-                docs.sort(key=lambda d: (d["data"].get(f) is None, d["data"].get(f, 0)), reverse=direction == "desc")
-            limit = int(q.get("limit") or 200)
-            return web.json_response({"ok": True, "docs": docs[:min(limit, 200)]})
+            docs = []
+            for r in rows:
+                try:
+                    d_ = json.loads(r.data)
+                except ValueError:
+                    continue
+                if isinstance(d_, dict):
+                    docs.append(doc_view(r.path, d_))
+            # кривой запрос (не тройки, не число, разные типы при сортировке) раньше давал ошибку 500
+            where = q.get("where") if isinstance(q.get("where"), list) else []
+            for w in where[:5]:
+                if isinstance(w, list) and len(w) == 3 and isinstance(w[0], str) and w[1] == "==":
+                    docs = [d for d in docs if d["data"].get(w[0]) == w[2]]
+            order = q.get("order")
+            if isinstance(order, list) and order and isinstance(order[0], str):
+                f = order[0]
+                desc = len(order) > 1 and order[1] == "desc"
+
+                def key(d, f=f):
+                    v = d["data"].get(f)
+                    if v is None:
+                        return (1, 0, 0, "")                   # без поля — в конце
+                    if _num(v):
+                        return (0, 0, -v if desc else v, "")
+                    return (0, 1, 0, str(v))
+                docs.sort(key=key)
+                if desc:                                       # строки тоже по убыванию, пустые — всё равно в конце
+                    nums = [d for d in docs if key(d)[:2] == (0, 0)]
+                    strs = sorted((d for d in docs if key(d)[:2] == (0, 1)), key=lambda d: str(d["data"].get(f)), reverse=True)
+                    docs = nums + strs + [d for d in docs if key(d)[0] == 1]
+            try:
+                limit = max(1, min(200, int(q.get("limit") or 200)))
+            except (TypeError, ValueError, OverflowError):
+                limit = 200
+            return web.json_response({"ok": True, "docs": docs[:limit]})
         if op in ("set", "update", "delete", "add"):
             data = body.get("data") if isinstance(body.get("data"), dict) else {}
             if op == "add":
@@ -600,24 +798,45 @@ async def api_db(request):
                 path = f"{col}/a{int(time.time()*1000):x}{secrets.token_hex(3)}"
             else:
                 path = str(body.get("path", ""))
-            await check_write(s, "add" if op == "add" else op, path, data, uid)
+            data = await check_write(s, "add" if op == "add" else op, path, data, uid)
+            gid, sub, did = parse_path(path)
             if op == "delete":
-                row, _ = await doc_get(s, path)
+                row, cur = await doc_get(s, path)
                 if row:
-                    await s.execute(Doc.__table__.delete().where(Doc.path == path))
+                    if sub is None:
+                        await guild_delete_all(s, gid)
+                    else:
+                        await s.execute(Doc.__table__.delete().where(Doc.path == path))
+                    if sub == "members":
+                        _, g = await doc_get(s, f"guilds/{gid}")
+                        if g and g.get("leader") == did:
+                            # лидер удалил свою запись (старый клиент так распускает гильдию): без лидера
+                            # гильдия не остаётся — распускаем её целиком
+                            await guild_delete_all(s, gid)
+                        elif g:
+                            # вклад ушедшего остаётся в казне: казна = сумма вкладов участников − spent
+                            donated = (cur or {}).get("donated") or 0
+                            if _num(donated) and donated:
+                                g["spent"] = (g.get("spent") or 0) - donated
+                                await doc_put(s, f"guilds/{gid}", g)
             elif op == "update":
                 row, cur = await doc_get(s, path)
                 if cur is None:
                     raise web.HTTPNotFound(text="no doc")
-                await doc_put(s, path, {**cur, **data})
+                if data:
+                    await doc_put(s, path, {**cur, **data})
             else:
+                if sub is None:
+                    await guild_delete_all(s, gid)       # на случай старых записей с тем же id
                 await doc_put(s, path, data)
+            if sub == "members":
+                await guild_recount(s, gid)
             await s.commit()
-            p_ = parse_path(path)
-            if p_ and p_[1] in (None, "members"):
-                gid, sub, did = p_
+            if sub in (None, "members"):
                 affected = [int(did)] if sub == "members" and did.isdigit() else \
                     [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
+                if sub == "members" or op == "delete":
+                    affected += [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
                 await refresh_guild(affected)              # тег над головой и «союзник или нет» — сразу
             return web.json_response({"ok": True, "id": path.rsplit("/", 1)[1]})
     raise web.HTTPBadRequest(text="bad op")
@@ -809,8 +1028,15 @@ async def api_top(request):
             my_rank = None
             if me and me.bm > 0:
                 my_rank = (await s.execute(select(func.count()).select_from(GameSave).where(GameSave.bm > me.bm))).scalar() + 1
+            # гильдия — по записям участников на сервере (guild_id в сохранении присылает телефон, его можно подделать)
+            gid_of = {}
+            ids = {str(r.tg_id) for r in rows}
+            for (path,) in (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members")))).all():
+                parts = path.split("/")
+                if len(parts) == 4 and parts[3] in ids and parts[1] in guilds:
+                    gid_of.setdefault(parts[3], parts[1])
             items = [{"id": str(r.tg_id), "nick": r.nick or r.name[:16], "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
-                      "tag": (guilds.get(r.guild_id) or {}).get("tag", "")} for r in rows]
+                      "tag": (guilds.get(gid_of.get(str(r.tg_id))) or {}).get("tag", "")} for r in rows]
             return web.json_response({"ok": True, "items": items, "me": {"rank": my_rank, "bm": me.bm if me else 0}})
         if kind == "guilds":
             member_rows = (await s.execute(select(Doc).where(Doc.col.like("guilds/%/members")))).scalars().all()
@@ -1968,7 +2194,7 @@ async def start_web(port: int):
     STATE["tasks"]["season"] = asyncio.create_task(seasonpts.flush_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await load_mutes()
-    await clean_guild_emblems()
+    await clean_guilds()
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
     await items.migrate_gear()
