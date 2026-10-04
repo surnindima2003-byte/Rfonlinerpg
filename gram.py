@@ -132,8 +132,11 @@ async def bind_referral(uid, inviter_id):
     return True
 
 
-async def pay_referrals(s, buyer, spent_nano):
-    """Бонус из выручки игры: 5% пригласившему, 2% пригласившему пригласившего."""
+async def pay_referrals(s, buyer, spent_nano, locked_nano=0):
+    """Бонус из выручки игры: 5% пригласившему, 2% пригласившему пригласившего.
+
+    locked_nano — сколько из покупки оплачено GRAM из звёзд. Та же доля бонуса тоже из звёзд: тратить в игре
+    можно, вывести нельзя. Иначе через второй аккаунт-«друга» звёзды превращались в выводимые GRAM."""
     from webserver import push_to_player
     notes = []
     cur, level = buyer, 1
@@ -144,6 +147,9 @@ async def pay_referrals(s, buyer, spent_nano):
         bonus = int(spent_nano * REF_RATES[level])
         if bonus > 0:
             await move(s, row.inviter_id, bonus, "ref", f"ref{level}:{buyer}:{time.time_ns()}", f"Реферальный бонус {int(REF_RATES[level]*100)}%")
+            locked_part = min(bonus, int(bonus * max(0, locked_nano) // spent_nano)) if spent_nano > 0 else 0
+            if locked_part > 0:
+                await adjust_locked(s, row.inviter_id, locked_part)
             s.add(RefEarn(inviter_id=row.inviter_id, friend_id=buyer, level=level, amount=bonus, ts=int(time.time())))
             notes.append((row.inviter_id, bonus))
         cur, level = row.inviter_id, level + 1
@@ -188,6 +194,67 @@ async def migrate_locked_column():
 
 
 # ---------- наблюдатель входящих переводов ----------
+DEP_PAGE = 40                 # транзакций за запрос
+DEP_MAX_PAGES = 25            # больше 1000 транзакций за раз не догоняем (пишем в лог — значит, долгий простой)
+DEP_CURSOR = "dep_last_lt"    # в meta: lt последней обработанной транзакции кошелька
+
+
+def _lt(tx):
+    try:
+        return int((tx.get("transaction_id") or {}).get("lt") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _get_cursor():
+    async with SessionLocal() as s:
+        row = (await s.execute(select(Meta).where(Meta.key == DEP_CURSOR))).scalar_one_or_none()
+    try:
+        return int(row.value) if row and row.value else 0
+    except ValueError:
+        return 0
+
+
+async def _set_cursor(lt):
+    from db_atomic import insert_ignore
+    async with SessionLocal() as s:
+        await s.execute(insert_ignore(Meta.__table__, key=DEP_CURSOR, value=str(lt)))
+        await s.execute(update(Meta).where(Meta.key == DEP_CURSOR).values(value=str(lt)).execution_options(synchronize_session=False))
+        await s.commit()
+
+
+async def fetch_new_transactions(http, last_lt):
+    """Все транзакции кошелька новее last_lt (от новых к старым), с листанием страниц.
+
+    Раньше читалась только последняя страница (40 штук): если за 15 секунд приходило больше
+    или toncenter какое-то время не отвечал, более старые переводы не зачислялись никогда."""
+    out, params, pages = [], {"address": GAME_WALLET, "limit": DEP_PAGE, "archival": "true"}, 0
+    while True:
+        async with http.get(API + "/getTransactions", params=params, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            data = await r.json(content_type=None)
+        if not data.get("ok"):
+            raise RuntimeError(f"toncenter: {str(data.get('error') or data)[:200]}")
+        page = data.get("result") or []
+        if pages:                                      # следующая страница начинается с последней транзакции прошлой
+            page = [tx for tx in page if (tx.get("transaction_id") or {}).get("hash") != params.get("hash")]
+        pages += 1
+        for tx in page:
+            if last_lt and _lt(tx) <= last_lt:
+                return out                             # дошли до уже обработанного
+            out.append(tx)
+        if not last_lt:
+            return out                                 # первый запуск: как раньше, только последняя страница
+        if len(page) < DEP_PAGE - 1 or not page:
+            return out                                 # история кончилась
+        if pages >= DEP_MAX_PAGES:
+            log.error("Приём GRAM: больше %s новых транзакций, старые догоним на следующем круге", DEP_PAGE * pages)
+            return out
+        last = page[-1].get("transaction_id") or {}
+        params = {**params, "lt": last.get("lt"), "hash": last.get("hash")}
+        if not TONCENTER_KEY:
+            await asyncio.sleep(1.1)                   # без ключа toncenter пускает 1 запрос в секунду
+
+
 async def deposit_watcher():
     if not GAME_WALLET:
         log.warning("GAME_WALLET не задан: приём GRAM выключен")
@@ -197,10 +264,15 @@ async def deposit_watcher():
     async with aiohttp.ClientSession(headers=headers) as http:
         while True:
             try:
-                async with http.get(API + "/getTransactions", params={"address": GAME_WALLET, "limit": 40, "archival": "true"}, timeout=aiohttp.ClientTimeout(total=20)) as r:
-                    data = await r.json(content_type=None)
-                if data.get("ok"):
-                    await process_transactions(data.get("result", []))
+                last_lt = await _get_cursor()
+                txs = await fetch_new_transactions(http, last_lt)
+                if txs:
+                    await process_transactions(txs)
+                    # курсор двигаем только после обработки: упали посередине — на следующем круге пройдём ещё раз,
+                    # повторно ничего не зачислится (ref «dep:<hash>» уникален)
+                    newest = max(_lt(tx) for tx in txs)
+                    if newest > last_lt:
+                        await _set_cursor(newest)
             except Exception as e:
                 log.warning("toncenter: %s", e)
             await asyncio.sleep(15)
@@ -262,13 +334,15 @@ async def api_gram(request):
                 import seasonpts
                 if await seasonpts.has_ticket(uid):
                     return web.json_response({"ok": False, "error": "Билет этого сезона уже куплен"})
+            locked_before = (await s.execute(select(GramWallet.locked).where(GramWallet.tg_id == uid))).scalar() or 0
             if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
                 return web.json_response({"ok": False, "error": "Не хватает GRAM"})
             await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
+            from_locked = min(locked_before, nano)            # столько покупки оплачено звёздами
             await s.execute(update(GramWallet).where(GramWallet.tg_id == uid).values(spent=GramWallet.spent + nano)
                             .execution_options(synchronize_session=False))
             set_committed_value(w, "spent", (w.spent or 0) + nano)
-            notes = await pay_referrals(s, uid, nano)
+            notes = await pay_referrals(s, uid, nano, from_locked)
             import items
             minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
             import saveguard

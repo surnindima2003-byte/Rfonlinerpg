@@ -1798,6 +1798,7 @@ async def cleanup_loop():
             for uid in [u for u, t in report_t.items() if now - t > 60]:
                 report_t.pop(uid, None)
             mobguard.cleanup(online_ids)
+            mobworld.cleanup(online_ids)
             saveguard.cleanup(online_ids)
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})

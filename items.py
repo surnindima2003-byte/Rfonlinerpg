@@ -220,10 +220,7 @@ def craft_in_save(S, item_id, level):
     else:
         inv.append({"id": item_id, "n": 1})
     return None
-BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
-LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1, "farm1": 21, "season1": 21}
-# фарм-зона и сезонная зона: мобы 21–30 вперемешку (как DUNGEONS в игре)
-DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40), "farm1": (21, 30), "season1": (21, 30)}
+from mobguard import BASE_MOBS, LOC_MIN, DUNGEON_RANGE, mob_level      # таблицы мобов — в mobguard (без базы)
 SEASON_DROP = {"season1": 1.5}                  # сезонная зона: +50% к ценному дропу
 ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5]   # как в игре
 P = lambda pct: pct / 100.0
@@ -242,17 +239,6 @@ def gear_per(lv):
 
 BOSS_LOOT, BOSS_GAP = 150, 40                   # главарь: шансы ×150, не чаще одного на игрока раз в 40 с
 _boss_t = {}
-
-
-def mob_level(mob, loc):
-    m = re.fullmatch(r"d[gb](\d{1,2})", mob or "")
-    if m:
-        lv = int(m.group(1))
-        lo, hi = DUNGEON_RANGE.get(loc, (0, -1))
-        return lv if lo <= lv <= hi else None
-    if mob in BASE_MOBS and loc in ("scrapfields", "reactor_ruins", "iron_canyon"):
-        return LOC_MIN[loc]
-    return None
 
 
 def roll(lv, mult=1):

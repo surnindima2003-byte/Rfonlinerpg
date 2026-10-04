@@ -64,6 +64,34 @@ class MobWorldTest(unittest.TestCase):
         self.assertEqual(self.hub.sent, [])
 
 
+class AbuseTest(MobWorldTest):
+    """Подделанные удары: главарь в поле, убийство за одно сообщение, отнять чужого моба сменой типа."""
+    def setUp(self):
+        super().setUp()
+        mobworld._budget.clear()
+
+    def test_dungeon_boss_in_field_ignored(self):
+        self.hit(self.a, 7, 10_000, typ="db40")
+        self.assertEqual(self.hub.sent, [])
+        self.assertNotIn(7, mobworld._mobs.get("iron_canyon", {}))
+
+    def test_damage_limited_by_budget(self):
+        # 60 главарей одним сообщением, каждому «полная прочность»: засчитывается не больше бюджета урона
+        a = {"id": 1, "loc": "sector2", "lvl_cap": 40}
+        hp = mobguard.mob_hp("db40")
+        mobworld.on_hits(a, {"loc": "sector2", "h": [[i, "db40", hp] for i in range(60)]}, self.hub)
+        kills = [p for p in self.hub.sent if p["t"] == "mdie"]
+        budget = mobguard.dps_cap(40) * mobguard.BUDGET_SECONDS
+        self.assertLessEqual(len(kills), budget // hp)
+        self.assertLess(len(kills), 60)
+
+    def test_type_swap_does_not_reset_mob(self):
+        self.hit(self.b, 5, 40)                                   # B почти убил стража
+        self.hit(self.a, 5, 1, typ="war_walker")                  # A шлёт другой тип под тем же номером
+        self.assertEqual(mobworld._mobs["iron_canyon"][5]["hp"], 15)
+        self.assertEqual(mobworld._mobs["iron_canyon"][5]["type"], "sentry_bot")
+
+
 class OwnershipTest(MobWorldTest):
     def test_first_claim_wins_and_positions_relay(self):
         mobworld.on_claim(self.a, {"loc": "iron_canyon", "i": [3]}, self.hub)

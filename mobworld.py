@@ -42,23 +42,51 @@ _moved = {}                          # loc -> set(номер) — позиция
 _iid = itertools.count(int(time.time()) % 100000 * 1000 + 7_000_000_000)
 
 
+_budget = {}                         # uid -> [запас урона, время] — бюджет урона по общим мобам
+LVL_GAP = 12                         # как в items.process_kills: моб сильнее предела уровня на 12+ не засчитывается
+
+
 def _mob(loc, i, typ):
+    """Состояние моба номер i. None — такого моба здесь быть не может, или под этим номером другой моб.
+
+    Тип присылает телефон, поэтому сервер проверяет, что такой моб вообще водится в этой локации
+    (иначе можно «призвать» главаря подземелья в поле). Раньше другой тип под тем же номером сбрасывал моба
+    на полную прочность — так можно было отнять чужого почти убитого моба. Теперь такие удары отбрасываются:
+    раскладка мобов у всех телефонов одинаковая, честный клиент другой тип не пришлёт."""
+    if mobguard.mob_level(typ, loc) is None:
+        return None
     m = _mobs.setdefault(loc, {}).get(i)
-    if m is None or m["type"] != typ:
-        hp = mobguard.mob_hp(typ)
-        if hp is None:
-            return None
-        m = _mobs[loc][i] = {"type": typ, "hp": hp, "max": hp, "dmg": {}, "dead_until": 0, "last": 0}
+    if m is not None:
+        return m if m["type"] == typ else None
+    hp = mobguard.mob_hp(typ)
+    if hp is None:
+        return None
+    m = _mobs[loc][i] = {"type": typ, "hp": hp, "max": hp, "dmg": {}, "dead_until": 0, "last": 0}
     return m
 
 
+def _take_budget(uid, lvl, dmg, now):
+    """Сколько урона из dmg засчитать: не больше, чем игрок его уровня может нанести (как mobguard.on_hits).
+    Без этого одно сообщение mhit убивало главаря целиком, а _kill ещё и записывал бой в mobguard как
+    «виденный» — то есть обходил даже MOB_GUARD=on."""
+    cap = mobguard.dps_cap(lvl)
+    tokens, t0 = _budget.get(uid, (cap * mobguard.BUDGET_SECONDS, now))
+    tokens = min(cap * mobguard.BUDGET_SECONDS, tokens + (now - t0) * cap)
+    take = min(dmg, tokens)
+    _budget[uid] = (tokens - take, now)
+    if take < dmg:
+        metrics.inc("mobs.budget_cut")
+    return take
+
+
 def on_hits(info, d, hub):
-    """Удары одного игрока. Возвращает список событий смерти для рассылки."""
+    """Удары одного игрока по общим мобам."""
     loc = d.get("loc")
     if loc != info.get("loc") or loc in ARENA or not isinstance(d.get("h"), list):
         return
     now = time.time()
     metrics.inc("mobs.hit_msgs")
+    lvl = info.get("lvl_cap") or info.get("lvl") or 1          # уровень, подтверждённый сервером
     for h in d["h"][:60]:
         try:
             i, typ, dmg = int(h[0]), str(h[1])[:24], int(h[2])
@@ -67,15 +95,30 @@ def on_hits(info, d, hub):
         if not 0 <= i < MAX_IDX or dmg <= 0:
             continue
         m = _mob(loc, i, typ)
-        if m is None or m["dead_until"] > now:
+        if m is None:
+            metrics.inc("mobs.bad_type")
             continue
+        if m["dead_until"] > now:
+            continue
+        if not info.get("admin") and mobguard.mob_level(typ, loc) > lvl + LVL_GAP:
+            continue                                          # слишком сильный моб — его убийство всё равно не засчитают
         dmg = min(dmg, m["max"])                              # один пакет не больше полной прочности
+        if not info.get("admin"):
+            dmg = _take_budget(info["id"], lvl, dmg, now)
+            if dmg <= 0:
+                continue
         m["hp"] -= dmg
         m["last"] = now
         m["dmg"][info["id"]] = m["dmg"].get(info["id"], 0) + dmg
         _dirty.setdefault(loc, set()).add(i)
         if m["hp"] <= 0:
             _kill(loc, i, m, hub, now)
+
+
+def cleanup(online_ids):
+    """Раз в минуту: бюджет ушедших игроков не нужен."""
+    for uid in [u for u in _budget if u not in online_ids]:
+        _budget.pop(uid, None)
 
 
 def on_claim(info, d, hub):
