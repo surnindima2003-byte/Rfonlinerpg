@@ -22,7 +22,7 @@ GAME = (Path(__file__).resolve().parent / "game.html").read_text(encoding="utf-8
 
 def client_recipes():
     out = {}
-    for block in ("RUNES", "DRONES", "ARTS"):
+    for block in ("RUNES", "DRONES", "ARTS", "WINGS"):
         body = re.search(rf"const {block} = \{{(.*?)\n\}};", GAME, re.S).group(1)
         for m in re.finditer(r'(\w+):\s*\{name:"[^"]*",\s*src:"craft", lvl:(\d+)[^\n]*?(?:\n[^\n]*?)?need:\{([^}]*)\}', body):
             need = {k: int(v) for k, v in re.findall(r"(\w+):(\d+)", m.group(3))}
@@ -37,7 +37,7 @@ class CraftContract(unittest.TestCase):
     def test_all_tradeable_ids_known_to_client(self):
         for rid in items.RUNES:
             self.assertIn(f"{rid}:", GAME)
-        for did in items.DRONES + items.ARTIFACTS:
+        for did in items.DRONES + items.ARTIFACTS + items.WINGS:
             self.assertIn(f"{did}:", GAME)
 
     def test_ids_fit_balance_column(self):
@@ -51,6 +51,16 @@ class CraftContract(unittest.TestCase):
         for pid in ("ar_crown", "ar_eye", "ar_heart", "ar_relic"):
             self.assertIn(pid, items.PACK_ITEMS)
             self.assertIn(items.PACK_ITEMS[pid][0][1], items.ARTIFACTS)
+
+    def test_wing_packs_minted_by_server(self):
+        # паки крыльев: есть цена в gram.py, сервер выдаёт крылья, и в игре тот же набор
+        gram_src = (Path(__file__).resolve().parent / "gram.py").read_text(encoding="utf-8")
+        for pid in ("wn_seraph", "wn_void", "wn_phoenix", "wn_storm"):
+            self.assertIn(pid, items.PACK_ITEMS)
+            self.assertIn(items.PACK_ITEMS[pid][0][1], items.WINGS)
+            self.assertRegex(gram_src, rf'"{pid}":\s*\d+')
+        body = re.search(r"const WINGS = \{(.*?)\n\};", GAME, re.S).group(1)
+        self.assertEqual(set(re.findall(r"^\s*(wg_\w+):", body, re.M)), set(items.WINGS))
 
     def test_craft_spends_and_adds(self):
         S = {"level": 12, "scrap": 9000, "cores": 40, "inv": [{"id": "chip", "n": 5}]}

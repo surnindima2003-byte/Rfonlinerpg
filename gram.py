@@ -36,6 +36,8 @@ PACK_PRICES.update({"dr_nova": 15, "dr_aegis": 30, "dr_phantom": 60, "dr_sol": 1
 PACK_PRICES.update({"rn_base": 8, "rn_pro": 15, "rn_war": 20, "rn_bastion": 20, "rn_storm": 20, "rn_fortune": 25})
 # артефакты: по полной цене (состав — items.py → PACK_ITEMS)
 PACK_PRICES.update({"ar_crown": 40, "ar_eye": 60, "ar_heart": 60, "ar_relic": 100})
+# крылья: по полной цене (состав — items.py → PACK_ITEMS, wn_*)
+PACK_PRICES.update({"wn_seraph": 45, "wn_void": 70, "wn_phoenix": 90, "wn_storm": 130})
 
 
 def g(nano):

@@ -22,6 +22,10 @@ class ShopPricesTest(unittest.TestCase):
         drones = game[game.index("const DRONES = {"):game.index("\n};", game.index("const DRONES = {"))]
         for did, price in re.findall(r'd_(\w+):\s*\{[^\n]*?src:"gram", price:(\d+)', drones):
             client["dr_" + did] = float(price)
+        # паки крыльев строятся из таблицы WINGS: «wn_» + имя без «wg_», цена — price (полная)
+        wings = game[game.index("const WINGS = {"):game.index("\n};", game.index("const WINGS = {"))]
+        for wid, price in re.findall(r'wg_(\w+):\s*\{[^\n]*?src:"gram", price:(\d+)', wings):
+            client["wn_" + wid] = float(price)
         src = (ROOT / "gram.py").read_text(encoding="utf-8")
         ns = {}
         a = src.index("SHOP_SALE =")
