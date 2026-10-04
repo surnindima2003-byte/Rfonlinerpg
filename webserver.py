@@ -893,6 +893,26 @@ def pxp_gap_mult(lvl_a, lvl_b):
     return round(1 - (gap - PXP_FULL_GAP) / (PXP_MAX_GAP - PXP_FULL_GAP + 1), 3)
 
 
+PXP_SHARE = 0.4             # союзникам рядом — 40% базового опыта за убийство
+
+
+async def share_party_xp(info, base_exp):
+    """Опыт пати за убийства, которые сервер засчитал (items.process_kills): союзникам на экране, живым,
+    с поправкой на разницу уровней. Базовый опыт моба — без бонусов VIP и событий убившего."""
+    pid = member_party.get(info["id"])
+    if not pid or pid not in parties:
+        return
+    share = int(base_exp * PXP_SHARE)
+    if share <= 0:
+        return
+    for m in parties[pid]["members"]:
+        i = online(m)
+        if m != info["id"] and i and not i.get("dead") and in_party_view(info, i):     # далеко или мёртв — опыта нет
+            got = int(share * pxp_gap_mult(info.get("lvl"), i.get("lvl")))              # большая разница уровней — меньше или ноль
+            if got > 0:
+                await push_to_player(m, {"t": "pxp", "amount": got, "from": info["nick"]})
+
+
 def in_party_view(a, b):
     """Союзник b виден на экране у a (одна локация, по прямоугольнику экрана, не по кругу)."""
     if a.get("loc") != b.get("loc"):
@@ -1111,22 +1131,10 @@ async def handle_party(d, info):
             if tgt is not info:
                 await push_to_player(tgt["id"], {"t": "cbuff", "k": "shield", "v": v, "dur": dur, "from": info["nick"]})
     elif t == "pxp":
-        pid = member_party.get(uid)
-        if not pid:
-            return
-        try:
-            amount = max(0, min(int(d.get("amount", 0)), 500))
-        except (TypeError, ValueError):
-            return
-        share = amount * 4 // 10
-        if share <= 0:
-            return
-        for m in parties[pid]["members"]:
-            i = online(m)
-            if m != uid and i and not i.get("dead") and in_party_view(info, i):     # далеко или мёртв — опыта нет
-                got = int(share * pxp_gap_mult(info.get("lvl"), i.get("lvl")))       # большая разница уровней — меньше или ноль
-                if got > 0:
-                    await push_to_player(m, {"t": "pxp", "amount": got, "from": info["nick"]})
+        # раньше сумму опыта присылал телефон (до 500, без ограничения частоты) — это был бесконечный опыт
+        # для пати. Теперь опыт пати начисляет сервер сам за подтверждённые убийства (share_party_xp).
+        metrics.inc("party.pxp_ignored")
+        return
 
 
 CARD_NUM = {"atk": 1e6, "def": 1e6, "mhp": 1e7, "rate": 50, "crit": 100, "cpow": 50, "regen": 1e5, "bm": 1e8}
@@ -1547,14 +1555,17 @@ async def handle_pvp_dead(d, info):
 
 async def handle_kills(d, info, conn):
     """Убийства мобов из сообщения pos. Ответ (выпавший лут) — сообщением kres с тем же номером пачки."""
+    exp = []
     try:
         async with SessionLocal() as s:
-            drops, cap, lf = await items.process_kills(s, info["id"], info, d.get("mk"))
+            drops, cap, lf = await items.process_kills(s, info["id"], info, d.get("mk"), exp)
     except Exception:
         log.exception("убийства uid=%s", info["id"])
         metrics.inc("kill.error")
-        drops, cap, lf = [], info.get("lvl_cap"), 1.0
+        drops, cap, lf, exp = [], info.get("lvl_cap"), 1.0, []
     conn.push(realtime.encode({"t": "kres", "n": d.get("kn"), "drops": drops, "lvlCap": cap}))
+    if exp:
+        await share_party_xp(info, sum(exp))
 
 
 async def api_faction(request):

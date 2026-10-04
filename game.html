@@ -5521,7 +5521,8 @@ function pxpShow(a){
     if(n > 0) addText(p.x, p.y - 56, "+" + n.toLocaleString("ru-RU") + " опыта (пати)", "#5FD4E8");
   }, 1500);
 }
-function partyShareXp(gain){ if(typeof NET !== "undefined" && NET.party && NET.party.members.length > 1) netSend({t:"pxp", amount:Math.round(gain)}); }
+// опыт пати теперь начисляет сервер за подтверждённые убийства — телефону ничего отправлять не нужно
+function partyShareXp(gain){}
 
 function renderPartyFrames(){
   const el = $("pframes"), pt = typeof NET !== "undefined" ? NET.party : null;

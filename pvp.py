@@ -20,6 +20,10 @@ HIT_WINDOW = 15          # смерть засчитывается, если у�
 DEATH_DEDUP = 5          # повторный pvp_dead той же жертвы в течение 5 с — дубль, игнорируем
 RATING_K = 24            # шаг Elo: за равный бой победитель получает 12
 RATING_MIN_GAIN = 4      # даже фаворит получает небольшую награду
+# Защита от фарма рейтинга на втором аккаунте: твинк бьёт тебя (получает флаг), ты его убиваешь — рейтинг.
+PAIR_DAILY = 2           # за одного и того же соперника рейтинг начисляется не больше 2 раз в сутки (UTC)
+WEAK_GAP = 400           # соперник слабее на 400+ рейтинга (уже «выфармленный» твинк) — рейтинга нет
+_pair_day = {}           # (убийца, жертва) -> [номер суток, сколько раз дали рейтинг]
 
 def record_hit(attacker_id, target_id, dmg):
     """Сервер запоминает подтверждённые удары: потом по ним проверяется заявка о смерти."""
@@ -56,6 +60,9 @@ def cleanup(online_ids):
         _deaths.pop(k, None)
     for k in [k for k in _mob_kills if k not in online_ids and not _mob_kills[k]]:
         _mob_kills.pop(k, None)
+    today = int(now // 86400)
+    for k in [k for k, v in _pair_day.items() if v[0] != today]:
+        _pair_day.pop(k, None)
 
 
 async def stat_of(s, uid):
@@ -91,6 +98,22 @@ def rating_change(winner_rating, loser_rating):
 
 
 
+def rating_allowed(killer_id, victim_id, killer_rating, victim_rating, now=None):
+    """Можно ли дать рейтинг за это убийство «виновного» (лимит на пару в сутки и слишком слабый соперник).
+    Засчитывает попытку, если True."""
+    if victim_rating < killer_rating - WEAK_GAP:
+        return False
+    day = int((now or time.time()) // 86400)
+    rec = _pair_day.get((killer_id, victim_id))
+    if rec and rec[0] == day:
+        if rec[1] >= PAIR_DAILY:
+            return False
+        rec[1] += 1
+    else:
+        _pair_day[(killer_id, victim_id)] = [day, 1]
+    return True
+
+
 def on_hit(attacker, target):
     """Нападение на «чистого» пилота (без кармы и флага) делает нападающего фиолетовым."""
     if not flagged(target) and not target.get("kr"):
@@ -109,7 +132,7 @@ async def on_death(victim, killer):
         k.kills += 1
         v.deaths += 1
         if guilty:
-            if fresh:
+            if fresh and rating_allowed(killer["id"], victim["id"], k.rating, v.rating, now):
                 gain = rating_change(k.rating, v.rating)
                 k.rating += gain
                 v.rating = max(0, v.rating - gain)

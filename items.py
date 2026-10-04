@@ -526,8 +526,9 @@ async def market_transfer(s, item, to_uid, status="inv"):
 
 
 # ---------- обработка убийств (WebSocket и HTTP) ----------
-async def process_kills(s, uid, me, kills):
+async def process_kills(s, uid, me, kills, exp_out=None):
     """Пачка убийств [{mob, loc, iid}]. Возвращает (выпавшие вещи, допустимый уровень, множитель лута).
+    exp_out — список: в него добавляется базовый опыт каждого засчитанного убийства (для опыта пати).
     Коммитит сессию сам."""
     import progress
     import pvp
@@ -556,6 +557,8 @@ async def process_kills(s, uid, me, kills):
             _boss_t[uid], mult = time.time(), BOSS_LOOT
         await pvp.mob_killed(uid, me)
         cap = await progress.add_kill(s, uid, lv, boss)
+        if exp_out is not None:
+            exp_out.append(progress.mob_exp(lv, boss))
         import seasonpts
         ctr = seasonpts.kill_counter(loc)
         if ctr:
