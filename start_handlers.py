@@ -3,7 +3,9 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from sqlalchemy import select
 
+from bot_utils import edit_or_send
 from db import SessionLocal
+from db_atomic import insert_ignore
 from models import Player
 from game_data import FACTIONS, STARTING_STATS
 from config import WEBAPP_URL
@@ -67,24 +69,22 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data.startswith("faction:"))
 async def choose_faction(callback: CallbackQuery):
     faction_key = callback.data.split(":", 1)[1]
+    if faction_key not in FACTIONS:
+        # данные кнопки присылает клиент: раньше чужое значение записывалось в базу, а /profile потом падал
+        await callback.answer("Такой фракции нет", show_alert=True)
+        return
 
     async with SessionLocal() as session:
-        result = await session.execute(select(Player).where(Player.tg_id == callback.from_user.id))
-        player = result.scalar_one_or_none()
-        if player:
-            await callback.answer("Ты уже выбрал фракцию раньше.", show_alert=True)
-            return
-
-        player = Player(
-            tg_id=callback.from_user.id,
-            name=callback.from_user.first_name or "Пилот",
-            faction=faction_key,
-            **STARTING_STATS,
-        )
-        session.add(player)
+        # «вставить, если нет»: двойное нажатие раньше давало ошибку уникальности
+        res = await session.execute(insert_ignore(Player.__table__, tg_id=callback.from_user.id,
+                                                  name=(callback.from_user.first_name or "Пилот")[:64], faction=faction_key,
+                                                  current_zone="scrapfields", **STARTING_STATS))
         await session.commit()
+    if not res.rowcount:
+        await callback.answer("Ты уже выбрал фракцию раньше.", show_alert=True)
+        return
 
-    await callback.message.edit_text(
+    await edit_or_send(callback,
         f"Робот собран и подключён к сети {FACTIONS[faction_key].split(' — ')[0]}.\n\n"
         "Жми «Играть», чтобы открыть ангар и управлять роботом.\n\n"
         "Команды:\n"

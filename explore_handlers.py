@@ -5,9 +5,12 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 
+from bot_utils import edit_or_send, too_fast
 from db import SessionLocal
 from models import Player
 from game_data import ZONES, NPCS, exp_to_next_level
+
+EXPLORE_GAP = 2.0          # не чаще раза в 2 секунды: раньше кнопку зоны можно было жать без остановки
 
 router = Router()
 
@@ -51,7 +54,13 @@ async def apply_level_ups(player: Player):
 @router.callback_query(F.data.startswith("zone:"))
 async def enter_zone(callback: CallbackQuery):
     zone_key = callback.data.split(":", 1)[1]
-    zone = ZONES[zone_key]
+    zone = ZONES.get(zone_key)
+    if not zone:
+        await callback.answer("Такой зоны нет", show_alert=True)
+        return
+    if too_fast("explore", callback.from_user.id, EXPLORE_GAP):
+        await callback.answer("Робот ещё в пути, подожди пару секунд")
+        return
 
     async with SessionLocal() as session:
         result = await session.execute(select(Player).where(Player.tg_id == callback.from_user.id))
@@ -76,7 +85,11 @@ async def enter_zone(callback: CallbackQuery):
             log, player_hp_left, npc_hp_left, won = simulate_fight(player, npc)
             report = "\n".join(log)
 
-            if won:
+            if won is None:
+                # 20 раундов — и никто не пал: раньше это засчитывалось как победа
+                player.hp = max(player_hp_left, 1)
+                report += f"\n\n↩️ «{npc['name']}» не сдаётся — робот отступил без добычи."
+            elif won:
                 scrap_gain = random.randint(*npc["scrap"])
                 player.scrap += scrap_gain
                 player.exp += npc["exp"]
@@ -88,25 +101,25 @@ async def enter_zone(callback: CallbackQuery):
                 if leveled:
                     report += f"\n🎉 Новый уровень: {player.level}!"
             else:
-                player.hp = 1
+                # раньше робот оставался с 1 HP навсегда (лечил только новый уровень), и каждый следующий
+                # бой был проигран заранее. Теперь экстренный ремонт за лом восстанавливает его полностью.
+                player.hp = player.max_hp
                 loss = min(player.scrap, random.randint(2, 6))
                 player.scrap -= loss
                 report += (
                     f"\n\n💥 Твой робот серьёзно повреждён и еле уцелел. "
-                    f"Потеряно {loss} металлолома при экстренном ремонте."
+                    f"Потеряно {loss} металлолома при экстренном ремонте, робот снова в строю."
                 )
 
             await session.commit()
-            await callback.message.edit_text(f"Зона: {zone['name']}\n\n{report}")
+            await edit_or_send(callback, f"Зона: {zone['name']}\n\n{report}")
         else:
             resource = zone["resource"]
             amount = random.randint(*zone["resource_amount"])
             setattr(player, resource, getattr(player, resource) + amount)
             resource_name = "металлолома" if resource == "scrap" else "энергоядер"
             await session.commit()
-            await callback.message.edit_text(
-                f"Зона: {zone['name']}\n\nТвой робот нашёл залежи ресурсов: +{amount} {resource_name}."
-            )
+            await edit_or_send(callback, f"Зона: {zone['name']}\n\nТвой робот нашёл залежи ресурсов: +{amount} {resource_name}.")
 
     await callback.answer()
 
@@ -127,4 +140,5 @@ def simulate_fight(player: Player, npc: dict):
         turn += 1
 
     log.append(f"Бой завершён за {turn} раунд(ов). Остаток HP робота: {max(p_hp, 0)}")
-    return log, p_hp, n_hp, p_hp > 0
+    won = True if n_hp <= 0 else False if p_hp <= 0 else None      # None — ничья по лимиту раундов
+    return log, p_hp, n_hp, won
