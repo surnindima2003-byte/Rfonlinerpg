@@ -37,7 +37,7 @@ TASKS = [
     ("w_boss", "week", "Ударить мирового босса 3 раза", 3, 200, "wboss"),
 ]
 SOON = set()                       # события ещё не открыты — задание видно, но пока недоступно
-FIELDS = {"scrapfields", "reactor_ruins", "iron_canyon"}
+FIELDS = {"scrapfields", "reactor_ruins", "iron_canyon", "farm1", "season1"}   # фарм-зоны (и сезонная) идут в «убить в полях»
 POT_GAP = 9 * 60                                # зелье действует 10 минут — засчитываем не чаще раза в 9 минут
 
 _st = {}                                         # uid -> состояние сезона (в памяти, сбрасывается в базу раз в 20 с)
@@ -132,6 +132,32 @@ async def add(uid, counter, amount=1):
                 await _push(uid, {"t": "spts", "pts": st["pts"], "gain": gained, "text": text})
             except Exception:
                 pass
+
+
+# Защита от «стирки» на маркете: два своих аккаунта гоняют один лот туда-обратно, платя только 5% комиссии,
+# и набирают очки в рейтинг с призами в USDT. В задания идёт не больше PAIR_CAP GRAM в день с одним и тем же
+# контрагентом (отдельно для покупки и продажи) — дневные задания «на 3 GRAM» выполняются как раньше.
+PAIR_CAP = 3.0
+
+
+async def add_trade(buyer, seller, amount):
+    """Сделка на маркете: покупателю — mbuy, продавцу — msell, с лимитом на пару в день."""
+    if not buyer or not seller or buyer == seller or amount <= 0:
+        return
+    for uid, other, ctr in ((buyer, seller, "mbuy"), (seller, buyer, "msell")):
+        try:
+            st = await _load(uid)
+        except Exception:
+            log.exception("сезон: не удалось загрузить очки uid=%s", uid)
+            continue
+        pairs = _period(st, "day").setdefault("pair", {})        # обнуляется вместе с днём
+        key = f"{ctr}:{other}"
+        used = pairs.get(key, 0)
+        take = round(max(0.0, min(amount, PAIR_CAP - used)), 4)
+        if take <= 0:
+            continue
+        pairs[key] = round(used + take, 4)
+        await add(uid, ctr, take)
 
 
 def kill_counter(loc):

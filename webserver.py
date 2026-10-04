@@ -42,7 +42,8 @@ from config import WEBAPP_URL
 GAME_FILE = Path(__file__).parent / "game.html"
 GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower"}
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1"}
+SEASON_LOC = "season1"                                   # сезонная зона: вход только с билетом сезона
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
@@ -663,8 +664,7 @@ async def api_market(request):
             funnel.mark(uid, "market")
             funnel.mark(lot.seller_id, "market")
             gram_amt = lot.price / gram.NANO                              # задания сезона: покупки и продажи на маркете
-            await seasonpts.add(uid, "mbuy", gram_amt)
-            await seasonpts.add(lot.seller_id, "msell", gram_amt)
+            await seasonpts.add_trade(uid, lot.seller_id, gram_amt)    # с лимитом на пару: без «стирки» между своими аккаунтами
     if op == "buy":
         await push_to_player(lot.seller_id, {"t": "gram", "text": f"Маркет: лот продан, +{gram.g(payout)} GRAM", "refresh": True})
         return web.json_response({"ok": True, "item": item})
@@ -765,6 +765,20 @@ med_bucket = {}              # tg_id Ремонтника -> [запас леч�
 med_shield = {}              # tg_id Ремонтника -> время последнего щита
 MED_RANGE = 460              # с запасом к дальности умений на телефоне (380) и задержке позиций
 MED_PVP = 0.6                # лечение по цели в PvP-бою слабее на 40%
+# Командный опыт — только тем, кто в пределах экрана от убившего. Мир рисуется 1:1 в CSS-пикселях, робот стоит
+# по центру: половина экрана телефона ≈ 195 × 420 px. Небольшой запас — на задержку позиций по сети.
+PXP_HALF_W = 220
+PXP_HALF_H = 440
+
+
+def in_party_view(a, b):
+    """Союзник b виден на экране у a (одна локация, по прямоугольнику экрана, не по кругу)."""
+    if a.get("loc") != b.get("loc"):
+        return False
+    try:
+        return abs(b["x"] - a["x"]) <= PXP_HALF_W and abs(b["y"] - a["y"]) <= PXP_HALF_H
+    except (KeyError, TypeError):
+        return False
 
 
 def med_budget(uid, lvl):
@@ -928,7 +942,7 @@ async def handle_party(d, info):
             return
         for m in parties[pid]["members"]:
             i = online(m)
-            if m != uid and i and i["loc"] == info["loc"]:
+            if m != uid and i and not i.get("dead") and in_party_view(info, i):     # далеко или мёртв — опыта нет
                 await push_to_player(m, {"t": "pxp", "amount": share, "from": info["nick"]})
 
 
@@ -1481,6 +1495,12 @@ async def ws_handler(request):
                 continue
             if t == "pos":
                 old_loc = info["loc"]
+                if d.get("loc") == SEASON_LOC and old_loc != SEASON_LOC and not info.get("admin"):
+                    if not await seasonpts.has_ticket(info["id"]):           # без билета в сезонную зону не пускаем
+                        d = {**d, "loc": old_loc}
+                        if time.time() - info.get("sz_warn", 0) > 10:
+                            info["sz_warn"] = time.time()
+                            conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
                 clean_pos(d, info)
                 if info["loc"] != old_loc:
                     hub.moved(conn, old_loc)

@@ -1901,7 +1901,8 @@ const NPC_INFO = {
   storage:{name:"Склад", talk:"Склад: открыть"},
   craft:{name:"Мастерская", talk:"Мастерская: крафт"},
   portal:{name:"Портал", talk:"Открыть портал"},
-  back:{name:"Портал в ангар", talk:"Вернуться в ангар"}
+  back:{name:"Портал в ангар", talk:"Вернуться в ангар"},
+  season:{name:"Сезон", talk:"Сезонная зона"}
 };
 
 function buildLoc(key){
@@ -2050,9 +2051,9 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
 function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
-  const tk = typeof ticketActive === "function" && ticketActive(), sroom = (e.room && e.room.seasonal) || locKey === "tower";
+  const tk = typeof ticketActive === "function" && ticketActive(), sroom = locKey === "season1" || locKey === "tower";
   const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (locKey === "tower" ? 4 : sroom ? 1.5 : 1) * (1 + (stat().xpUp || 0)));
-  if(typeof seasonAddXp === "function") seasonAddXp(3 + Math.floor((k.lvl || 1)/2));
+  if(typeof seasonAddXp === "function") seasonAddXp(k.boss ? 20 : 1);          // опыт сезона: 1 за врага, 20 за главаря — не зависит от уровня моба
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
   rollDrops(e);
@@ -2455,14 +2456,17 @@ function drawRocks(cx, cy){
 
 function drawNpc(n, t){
   ctx.save(); ctx.translate(n.x, n.y); ctx.scale(NPC_K, NPC_K);
-  if(n.kind === "portal" || n.kind === "back"){
-    const c1 = n.kind === "portal" ? "#5FD4E8" : "#F2A93B", c2 = n.kind === "portal" ? "#9B7BFF" : "#E0694A";
+  if(n.kind === "portal" || n.kind === "back" || n.kind === "season"){
+    const c1 = n.kind === "portal" ? "#5FD4E8" : n.kind === "season" ? "#F2C14B" : "#F2A93B", c2 = n.kind === "portal" ? "#9B7BFF" : n.kind === "season" ? "#E0694A" : "#E0694A";
     ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(0, 10, 58, 22, 0, 0, Math.PI*2); ctx.fill();
     const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 52); g.addColorStop(0, c1); g.addColorStop(.6, c2 + "88"); g.addColorStop(1, "transparent");
     ctx.fillStyle = g; ctx.globalAlpha = .55 + Math.sin(t*3)*.15; circle(0, 0, 52); ctx.fill(); ctx.globalAlpha = 1;
     ctx.lineWidth = 5; ctx.lineCap = "round";
     for(let i = 0; i < 3; i++){ ctx.strokeStyle = i % 2 ? c2 : c1; ctx.beginPath(); ctx.arc(0, 0, 40 - i*9, t*(2+i) + i*2, t*(2+i) + i*2 + Math.PI*1.1); ctx.stroke(); }
-    ctx.restore(); label(NPC_INFO[n.kind].name, n.x, n.y - 62*NPC_K, c1); return;
+    ctx.restore();
+    const nm = n.kind === "back" && LOCS[locKey] && LOCS[locKey].named ? "Город" : NPC_INFO[n.kind].name;
+    const lock = n.kind === "season" && !(typeof ticketActive === "function" && ticketActive()) && !window.NET_ADMIN;
+    label((lock ? "🔒 " : "") + nm, n.x, n.y - 62*NPC_K, lock ? "#E0694A" : c1); return;
   }
   ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(4, 22, 40, 14, 0, 0, Math.PI*2); ctx.fill();
   if(n.kind === "trader"){
@@ -2631,7 +2635,7 @@ function drawEnemy(e, t){
     if(!k.dungeon) label(k.name, e.x, e.y - rv - 20, "#E4DED1");
   }
   // у мобов подземелья всегда видны уровень и имя; цвет — насколько он опасен для тебя
-  if(k.dungeon && !k.boss && (p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
+  if(k.dungeon && !k.boss && ((LOCS[locKey] && LOCS[locKey].named) || p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
     const col = S.level >= k.lvl ? "#E4DED1" : S.level + 3 >= k.lvl ? "#F2A93B" : "#E0694A";
     nameText(T(k.name), e.x, e.y - rv - 20, col, "600 11px Rubik, sans-serif");
     nameText(T("Уровень") + " " + k.lvl, e.x, e.y - rv - 33, "#93A0AC", "10px Rubik, sans-serif");
@@ -2980,9 +2984,9 @@ function renderCraft(){
 function renderPortal(){
   let h = `<div class="list">`;
   for(const [k, L] of Object.entries(LOCS)){
-    if(L.safe || L.arena) continue;
+    if(L.safe || L.arena || L.hidden) continue;
     const ok = S.level >= L.min || window.NET_ADMIN;
-    const sub = L.dungeon ? "Уровни " + L.levels + " · 10 прямых проходов, в каждом малая и большая комната" : "Фарм-зона · с " + L.min + " уровня · " + L.npcs.map(n => NPCS[n].name).join(", ");
+    const sub = L.desc ? L.desc : L.dungeon ? "Уровни " + L.levels + " · 10 прямых проходов, в каждом малая и большая комната" : "Фарм-зона · с " + L.min + " уровня · " + L.npcs.map(n => NPCS[n].name).join(", ");
     h += `<div class="li"><div class="ic" style="background:${L.dungeon ? "#1E3A5C" : "#1B232C"}"><svg viewBox="0 0 24 24" fill="none" stroke="${L.dungeon ? "#5FD4E8" : "#F2A93B"}" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 1 1-6-6 3 3 0 1 0 3 3"/></svg></div><div class="tx">${L.name}<small>${sub}</small></div>
       <button class="act" type="button" data-go="${k}" ${ok ? "" : "disabled"}>${ok ? "Войти" : "Ур. " + L.min}</button></div>`;
   }
@@ -3130,7 +3134,11 @@ const UI = {
   storage: () => { stTab = "inv"; stQty = null; openSheet("Склад", "Хранение предметов", renderStorage); },
   craft: () => openSheet("Мастерская", "Артефакты, дроны, руны и снаряжение", renderCraft),
   portal: () => openSheet("Портал", "Выбери локацию по уровню", renderPortal),
-  back: () => travel("lobby")
+  back: () => travel("lobby"),
+  season: () => {
+    if((typeof ticketActive === "function" && ticketActive()) || window.NET_ADMIN){ travel("season1"); return; }
+    toast("🔒 Сезонная зона: вход с билетом сезона"); shopTab = "packs"; openShop();
+  }
 };
 $("bagBtn").addEventListener("click", () => { bagSel = null; bagMoveMode = false; bagMove = null; openSheet("Сумка", "Снаряжение и предметы", renderBag); });
 
@@ -5327,7 +5335,7 @@ function onNetExtra(d){
     if(!d.q){ toast(String(d.from || "Союзник").slice(0, 16) + " подлатал тебя: +" + a); Sfx.play("pick"); }
   } else if(d.t === "pxp"){
     const a = Math.max(0, Math.min(500, +d.amount || 0)); if(!a) return;
-    S.exp += a; addText(p.x, p.y - 56, "+" + a + " опыта (пати)", "#5FD4E8");
+    S.exp += a; pxpShow(a);                                   // опыт сразу, надпись — одна раз в 1,5 с
     if(levelUps()){ Sfx.play("level"); toast("Новый уровень: " + S.level + "!"); }
   } else if(d.t === "pinfo" && d.text){ toast(d.text); }
 }
@@ -5337,6 +5345,17 @@ $("pinvite").addEventListener("click", e => {
   netSend({t:b.dataset.pi === "yes" ? "pacc" : "pdec", from});
   box.hidden = true;
 });
+// командный опыт приходит на каждое убийство союзника — копим и показываем одной надписью раз в 1,5 с,
+// чтобы «+N опыта (пати)» не налезали на ник, урон и названия умений
+const PXP_UI = {sum:0, t:null};
+function pxpShow(a){
+  PXP_UI.sum += a;
+  if(PXP_UI.t) return;
+  PXP_UI.t = setTimeout(() => {
+    const n = PXP_UI.sum; PXP_UI.sum = 0; PXP_UI.t = null;
+    if(n > 0) addText(p.x, p.y - 56, "+" + n.toLocaleString("ru-RU") + " опыта (пати)", "#5FD4E8");
+  }, 1500);
+}
 function partyShareXp(gain){ if(typeof NET !== "undefined" && NET.party && NET.party.members.length > 1) netSend({t:"pxp", amount:Math.round(gain)}); }
 
 function renderPartyFrames(){
@@ -6824,7 +6843,7 @@ function doEnchant(forced){
       return;
     }
     enchBusy = false; save();
-    if(ok && typeof seasonAddXp === "function"){ seasonAddXp(5); toast("+5 очков сезона"); }
+    if(ok && typeof seasonAddXp === "function"){ seasonAddXp(5); toast("+5 опыта сезона"); }
     body().innerHTML = `<div class="ench-run done ${ok ? "ok" : "fail"}"><div class="ench-mark">${ok ? "✓" : "✕"}</div>
       <h3>${ok ? "+" + x.e + " Успех!" : "Неудача"}</h3><p>${ok ? it.name + " заточен до +" + x.e : "Титановая сфера сохранила предмет, но заточка снизилась: теперь +" + x.e + ". Было: остался +" + e}</p>
       <button class="btn pri wide" type="button" data-ench="cont">Продолжить</button></div>`;
@@ -6865,7 +6884,11 @@ function hurtByPlayer(dmg, by){
 // Проход N: вверх — уровень N, вниз — уровень N+1. По каждому пути чередуются
 // малая комната (5 мобов) и пара больших комнат рядом (по 12 мобов), цикл повторяется дважды.
 // «Нижние цеха»: проходы 1, 3 … 19 (мобы 1–20). «Глубинные цеха»: проходы 21, 23 … 39 (мобы 21–40).
-const DUNGEONS = {sector1:{first:1}, sector2:{first:21}};
+const DUNGEONS = {sector1:{first:1}, sector2:{first:21},
+  // фарм-зона и сезонная зона: крест из коридоров и 4 больших зала, мобы вперемешку 21–30 ур. (как в LIBERTY)
+  farm1:{shape:"cross", lo:21, hi:30, portals:["back", "season"]},
+  season1:{shape:"cross", lo:21, hi:30, portals:["back"]}};
+const CROSS = {C:1300, W:2600, H:2600, corr:130, gap:90, rw:760, rh:720, n:16, cols:4};
 const DG = {cols:10, colX:i => 470 + i*520, W:5500, H:2500, corrY:1250, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
 const DG_PREFIX = ["Ржавый","Слабый","Обычный","Стойкий","Закалённый","Хищный","Яростный","Бронированный","Кровожадный","Свирепый","Беспощадный","Древний","Элитный","Разъярённый","Грозный","Смертоносный","Титановый","Кошмарный","Апокалиптический","Легендарный",
   "Пылающий","Громовой","Призрачный","Кристальный","Ядерный","Мифриловый","Бездушный","Чумной","Теневой","Сверхновый","Квантовый","Адский","Небесный","Первородный","Бессмертный","Всепожирающий","Абсолютный","Хаотический","Вечный","Божественный"];
@@ -6931,8 +6954,8 @@ function mobDrops(type, loc){
 function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
   const vb0 = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
-  // билет сезона: +60% к дропу; сезонная комната: ещё +50%
-  const vb = {...vb0, drop:vb0.drop + (typeof ticketActive === "function" && ticketActive() ? 0.6 : 0) + (e.room && e.room.seasonal ? 0.5 : 0) + (st.dropUp || 0)};
+  // билет сезона: +60% к дропу; сезонная зона: ещё +50%
+  const vb = {...vb0, drop:vb0.drop + (typeof ticketActive === "function" && ticketActive() ? 0.6 : 0) + (locKey === "season1" ? 0.5 : 0) + (st.dropUp || 0)};
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   const srv = typeof regOnline === "function" && regOnline();
   if(srv) regKill(e);                                   // ценный лут решает сервер
@@ -6949,9 +6972,28 @@ function rollDrops(e){
 
 // ---- геометрия ----
 let dgRects = [], dgRooms = [], dgMarks = [], dgKey = "sector1";
+function crossLayout(cfg){
+  const {C, corr, gap, rw, rh} = CROSS, h = corr/2, lvs = [];
+  for(let lv = cfg.lo; lv <= cfg.hi; lv++) lvs.push(lv);
+  dgRects.push({x:C - 200, y:C - 170, w:400, h:340, hall:true});                       // центральный зал: спавн и порталы
+  dgRects.push({x:300, y:C - h, w:CROSS.W - 600, h:corr, corr:true});                 // коридор запад–восток
+  dgRects.push({x:C - h, y:300, w:corr, h:CROSS.H - 600, corr:true});                 // коридор север–юг
+  let i = 0;
+  for(const sy of [-1, 1]) for(const sx of [-1, 1]){
+    const x = sx < 0 ? C - h - gap - rw : C + h + gap, y = sy < 0 ? C - h - gap - rh : C + h + gap;
+    // в каждом зале все уровни зоны вперемешку, со своим сдвигом — у всех игроков одинаково
+    const types = Array.from({length:CROSS.n}, (_, j) => "dg" + lvs[(j*3 + i*4) % lvs.length]);
+    const rm = {x, y, w:rw, h:rh, room:true, lv:cfg.lo, n:CROSS.n, cols:CROSS.cols, cx:x + rw/2, cy:y + rh/2, kind:"big", types, noBoss:true};
+    dgRects.push(rm); dgRooms.push(rm);
+    dgRects.push({x:sx < 0 ? C - h - gap - 10 : C + h - 10, y:rm.cy - 80, w:gap + 20, h:160, corr:true, door:true});   // проём к коридору С–Ю
+    dgRects.push({x:rm.cx - 80, y:sy < 0 ? C - h - gap - 10 : C + h - 10, w:160, h:gap + 20, corr:true, door:true});   // проём к коридору З–В
+    i++;
+  }
+}
 function dgLayout(key){
   const cfg = DUNGEONS[key] || DUNGEONS.sector1, {corrY, corrH, small, big} = DG;
   dgKey = key; dgRects = []; dgRooms = []; dgMarks = [];
+  if(cfg.shape === "cross") return crossLayout(cfg);
   dgRects.push({x:60, y:corrY - 150, w:260, h:300, hall:true});                     // входной зал с порталом
   dgRects.push({x:280, y:corrY - corrH/2, w:DG.W - 360, h:corrH, corr:true});         // центральный коридор
   for(let i = 0; i < DG.cols; i++){
@@ -6969,7 +7011,7 @@ function dgLayout(key){
         const bc = corrY + side*(d + big.h/2);
         for(const sx of [-1, 1]){
           const x0 = sx < 0 ? cx - 20 - big.w : cx + 20;
-          const rb = {x:x0, y:bc - big.h/2, w:big.w, h:big.h, room:true, lv, n:12, cx:x0 + big.w/2, cy:bc, kind:"big", seasonal:c === DG.cycles - 1};
+          const rb = {x:x0, y:bc - big.h/2, w:big.w, h:big.h, room:true, lv, n:12, cx:x0 + big.w/2, cy:bc, kind:"big"};
           dgRects.push(rb); dgRooms.push(rb);
           // дверной проём: широкий проход между коридором и комнатой, чтобы робот свободно проходил
           dgRects.push({x:sx < 0 ? cx - 80 : cx - 38, y:bc - 45, w:118, h:90, corr:true, door:true});
@@ -7070,22 +7112,24 @@ function slide(o, ox, oy, r){
 function buildDungeon(key){
   dgLayout(key);
   const rngD = seeded(Object.keys(LOCS).indexOf(key)*1319 + 71);     // разброс мобов в комнате одинаков у всех игроков
-  W = DG.W; H = DG.H; rocks = [];
-  npcs = [{kind:"back", x:150, y:DG.corrY - 40}];
+  const cfg = DUNGEONS[key] || {}, cross = cfg.shape === "cross";
+  W = cross ? CROSS.W : DG.W; H = cross ? CROSS.H : DG.H; rocks = [];
+  // в кресте порталы стоят в центральном зале: «Город» слева, «Сезон» справа
+  npcs = cross ? cfg.portals.map((kind, j) => ({kind, x:CROSS.C + (j ? 120 : -120), y:CROSS.C - 70})) : [{kind:"back", x:150, y:DG.corrY - 40}];
   for(const rm of dgRooms){
-    const type = "dg" + rm.lv, cols = rm.kind === "big" ? 3 : 3;
+    const cols = rm.cols || 3;
     // главарь стоит в самой дальней от коридора комнате прохода (левая из последней пары больших)
     const far = dgRooms.filter(r => r.lv === rm.lv && r.kind === "big").sort((a, b) => Math.abs(b.cy - DG.corrY) - Math.abs(a.cy - DG.corrY) || a.cx - b.cx)[0];
-    if(far === rm){ const bk = NPCS["db" + rm.lv]; enemies.push({type:"db" + rm.lv, x:rm.cx, y:rm.cy, hx:rm.cx, hy:rm.cy, tx:rm.cx, ty:rm.cy, hp:bk.hp, max:bk.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:2, lunge:0, room:rm, boss:true}); }
+    if(far === rm && !rm.noBoss){ const bk = NPCS["db" + rm.lv]; enemies.push({type:"db" + rm.lv, x:rm.cx, y:rm.cy, hx:rm.cx, hy:rm.cy, tx:rm.cx, ty:rm.cy, hp:bk.hp, max:bk.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:2, lunge:0, room:rm, boss:true}); }
     for(let j = 0; j < rm.n; j++){
-      const k = NPCS[type], col = j % cols, row = Math.floor(j/cols), rows = Math.ceil(rm.n/cols);
+      const type = rm.types ? rm.types[j % rm.types.length] : "dg" + rm.lv, k = NPCS[type], col = j % cols, row = Math.floor(j/cols), rows = Math.ceil(rm.n/cols);
       const x = rm.x + rm.w*(col + 0.5)/cols + (rngD()*20 - 10);
       const y = rm.y + rm.h*(row + 0.5)/rows + (rngD()*20 - 10);
       enemies.push({type, x, y, hx:x, hy:y, tx:x, ty:y, hp:k.hp, max:k.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:Math.random()*3, lunge:0, room:rm});
     }
   }
   enemies.forEach((e, i) => e.idx = i);
-  return {x:210, y:DG.corrY};
+  return cross ? {x:CROSS.C, y:CROSS.C + 70} : {x:210, y:DG.corrY};
 }
 function respawnDungeon(e){
   const k = NPCS[e.type], rm = e.room;
@@ -7186,7 +7230,7 @@ function drawMapCanvas(){
     for(const r of dgRects){ g.fillStyle = r.room ? "#3A4757" : "#2A3542"; g.fillRect(X(r.x), Y(r.y), Math.max(1.5, r.w*scale), Math.max(1.5, r.h*scale)); }
     g.font = "700 9px Rubik, sans-serif"; g.textAlign = "center";
     for(const m of dgMarks){ g.fillStyle = S.level >= m.lv ? "#5FD4E8" : "#93A0AC"; g.fillText(m.lv, X(m.x) + 9, Y(m.y) + 3); }
-    for(const r of dgRooms){ g.fillStyle = "rgba(255,255,255,.45)"; g.font = "8px Rubik, sans-serif"; g.fillText(r.lv, X(r.cx), Y(r.cy) + 3); g.font = "700 9px Rubik, sans-serif"; }
+    for(const r of dgRooms){ const D = DUNGEONS[dgKey] || {}; g.fillStyle = "rgba(255,255,255,.45)"; g.font = "8px Rubik, sans-serif"; g.fillText(r.types ? D.lo + "–" + D.hi : r.lv, X(r.cx), Y(r.cy) + 3); g.font = "700 9px Rubik, sans-serif"; }
   } else if(locKey === "lobby"){
     g.fillStyle = "#26313D"; g.fillRect(X(60), Y(60), (W - 120)*scale, (H - 120)*scale);
     for(const r of rocks){ g.fillStyle = "#3A4757"; if(r.rw) g.fillRect(X(r.rx), Y(r.ry), r.rw*scale, r.rh*scale); else { g.beginPath(); g.arc(X(r.x), Y(r.y), Math.max(2, r.r*scale), 0, Math.PI*2); g.fill(); } }
@@ -7275,7 +7319,7 @@ const SHOP_SALE = 0.7;
 const SP = (id, name, base, color, rew, tab) => ({id, name, base, color, rew, tab: tab || "packs"});
 const POTS = n => [{id:"pot_hp", n}, {id:"pot_atk", n}, {id:"pot_xp", n}];
 const PACKS = [
-  {id:"season", name:"Билет сезона", base:15, price:15, once:"season", tab:"packs", color:"#F2C14B", rew:[], desc:"×2 опыт · +60% к дропу · ×2 ядер · сезонные комнаты · премиум-награды сезона"},
+  {id:"season", name:"Билет сезона", base:15, price:15, once:"season", tab:"packs", color:"#F2C14B", rew:[], desc:"×2 опыт · +60% к дропу · ×2 ядер · вход в сезонную зону · премиум-награды сезона"},
   SP("p_start", "Стартовый", 1, "#C8D0D8", [{id:"scrap", n:10000}, ...POTS(2), {id:"kit_s", n:2}, {id:"kit_l", n:2}]),
   SP("p_base", "Базовый", 5, "#7BD58A", [{id:"scrap", n:25000}, ...POTS(10), {id:"kit_l", n:10}, {id:"gset", t:2, g:1, e:0}, {id:"wcls", t:2, n:1, g:1}, {id:"bookcls", n:1}]),
   SP("p_std", "Стандарт", 20, "#7BD58A", [{id:"scrap", n:70000}, ...POTS(20), {id:"kit_l", n:20}, {id:"gset", t:4, g:1, e:5}, {id:"wcls", t:4, n:1, g:1, e:5}, {id:"pts", n:1}, {id:"cores", n:50}, {id:"bookcls", n:5}]),
@@ -7371,22 +7415,27 @@ function renderShop(){
 }
 
 // ===================== СЕЗОН =====================
-const SEASON_LV = 30, SEASON_XP = 150;
+const SEASON_LV = 30;
+// опыт на уровень растёт: 1-й — 300, каждый следующий +100 (весь пропуск ≈ 52 500 опыта ≈ 52 500 врагов)
+const seasonNeed = n => 300 + 100*(n - 1);
+const SEASON_MAX = Array.from({length:SEASON_LV}, (_, i) => seasonNeed(i + 1)).reduce((a, b) => a + b, 0);
+function seasonLv(xp){ let lv = 0, left = xp; while(lv < SEASON_LV && left >= seasonNeed(lv + 1)){ left -= seasonNeed(lv + 1); lv++; } return {lv, cur:left, need:lv < SEASON_LV ? seasonNeed(lv + 1) : 0}; }
 // сезон меняется 1-го числа в 18:00 МСК (как на сервере); id — «ГГГГ-М» (формат прежних сохранений)
 const seasonId = () => { const m = new Date(Date.now() + 3*3600e3 - 18*3600e3); return m.getUTCFullYear() + "-" + (m.getUTCMonth() + 1); };
 function seasonState(){ if(!S.season || S.season.id !== seasonId()) S.season = {id:seasonId(), xp:0, free:[], prem:[]}; return S.season; }
-function seasonAddXp(n){ const s = seasonState(), before = Math.floor(s.xp/SEASON_XP); s.xp = Math.min(SEASON_LV*SEASON_XP, s.xp + n); if(Math.floor(s.xp/SEASON_XP) > before) toast("Уровень сезона: " + Math.floor(s.xp/SEASON_XP)); }
+function seasonAddXp(n){ const s = seasonState(), before = seasonLv(s.xp).lv; s.xp = Math.min(SEASON_MAX, s.xp + n); const now = seasonLv(s.xp).lv; if(now > before) toast("Уровень сезона: " + now); }
 function seasonReward(lv, prem){
   if(!prem) return lv % 5 === 0 ? [{id:"sph_cu", n:1 + lv/10|0}] : lv % 3 === 0 ? [{id:"kit_l", n:2}] : lv % 4 === 0 ? [{id:"cores", n:5 + lv}] : [{id:"scrap", n:200*lv}];
   return lv === 30 ? [{id:"g_core_5", n:1, g:3}] : lv === 15 ? [{id:"wcls", t:3, n:1, g:2}] : lv % 5 === 0 ? [{id:"sph_ti", n:1}] : lv % 2 === 0 ? [{id:"bookcls", n:1}] : [{id:"cores", n:10 + lv}];
 }
 function openSeason(){
   openSheet("Сезон", "Опыт сезона дают любые победы над врагами", () => {
-    const s = seasonState(), lv = Math.floor(s.xp/SEASON_XP), prem = !!S.bought["season" + s.id] || (typeof ticketActive === "function" && ticketActive());
-    const days = Math.ceil(((typeof sptEnd === "function" ? sptEnd() : Date.now()) - Date.now())/86400000);
-    let h = `<div class="ss-head"><div><small>Уровень сезона</small><b>${lv} / ${SEASON_LV}</b></div><div><small>До конца</small><b>${days} дн.</b></div></div>
-      <div class="vbar"><i style="width:${lv >= SEASON_LV ? 100 : (s.xp % SEASON_XP)/SEASON_XP*100}%"></i></div><p class="hint" style="margin:4px 0 10px">${lv >= SEASON_LV ? "Максимальный уровень сезона" : (s.xp % SEASON_XP) + " / " + SEASON_XP + " опыта сезона до следующего уровня"}</p>
-      ${prem ? `<div class="ss-prem on">🎫 Сезонный билет активен</div>` : `<button class="btn wide ss-prem" type="button" data-shop="open">🎫 Купить сезонный билет · 10,5 GRAM</button>`}
+    const s = seasonState(), L = seasonLv(s.xp), lv = L.lv, prem = !!S.bought["season" + s.id] || (typeof ticketActive === "function" && ticketActive());
+    const tkPk = typeof PACKS !== "undefined" && PACKS.find(x => x.id === "season"), tkPrice = tkPk ? String(tkPk.price).replace(".", ",") : "15";
+    // срок сезона показывает общая шапка окна (таймер «д чч:мм:сс»), здесь только прогресс пропуска
+    let h = `<div class="ss-head"><div><small>Уровень сезона</small><b>${lv} / ${SEASON_LV}</b></div><div><small>Опыт сезона</small><b>${s.xp.toLocaleString("ru-RU")}</b></div></div>
+      <div class="vbar"><i style="width:${lv >= SEASON_LV ? 100 : L.cur/L.need*100}%"></i></div><p class="hint" style="margin:4px 0 10px">${lv >= SEASON_LV ? "Максимальный уровень сезона" : L.cur.toLocaleString("ru-RU") + " / " + L.need.toLocaleString("ru-RU") + " опыта до " + (lv + 1) + " уровня · 1 враг = 1 опыт, главарь = 20"}</p>
+      ${prem ? `<div class="ss-prem on">🎫 Сезонный билет активен</div>` : `<button class="btn wide ss-prem" type="button" data-shop="season">🎫 Купить сезонный билет · ${tkPrice} GRAM</button>`}
       <div class="ss-cols"><span>Ур.</span><span>Бесплатно</span><span>Премиум</span></div>`;
     for(let i = 1; i <= SEASON_LV; i++){
       const f = seasonReward(i, false), pr = seasonReward(i, true), reach = lv >= i;
@@ -7731,7 +7780,7 @@ function finishPack(pk, before){
 }
 
 // ===================== КНОПКИ МЕНЮ =====================
-const MENU_OPEN = {quests:openQuests, vip:openVip, market:openMarket, shop:openShop, events:openEvents, season:openSeason, codex:openCodex};
+const MENU_OPEN = {quests:openQuests, vip:openVip, market:openMarket, shop:openShop, events:openEvents, season:() => openSeason(), codex:openCodex};   // через стрелку: openSeason ниже переопределяется новым окном с вкладками
 $("gmList").addEventListener("click", e => {
   const b = e.target.closest("button[data-gm]"); if(!b || !MENU_OPEN[b.dataset.gm]) return;
   e.stopImmediatePropagation();
@@ -7756,7 +7805,8 @@ $("shBody").addEventListener("click", e => {
   else if(d.shtab){ shopTab = d.shtab; renderShop(); }
   else if(d.shop === "topup"){ if(G.on) depositSheet(); else { closeSheet(); showTab("profile"); } }
   else if(d.shop === "open") openShop();
-  else if(d.ss){ const [key, lv] = d.ss.split(":"), s = seasonState(), i = +lv; if(!s[key].includes(i) && Math.floor(s.xp/SEASON_XP) >= i){ s[key].push(i); giveReward(seasonReward(i, key === "prem")); toast("Награда сезона получена"); Sfx.play("pick"); openSeason(); } }
+  else if(d.shop === "season"){ shopTab = "packs"; openShop(); }
+  else if(d.ss){ const [key, lv] = d.ss.split(":"), s = seasonState(), i = +lv; if(!s[key].includes(i) && seasonLv(s.xp).lv >= i && (key !== "prem" || ticketActive())){ s[key].push(i); giveReward(seasonReward(i, key === "prem")); toast("Награда сезона получена"); Sfx.play("pick"); openSeason(); } }
   else if(d.ev === "boss" && typeof openWorldBoss === "function") openWorldBoss();
   else if(d.ev === "tower" && typeof openTower === "function") openTower();
   else if(d.ev) openEvent(d.ev);
@@ -8650,35 +8700,12 @@ async function sptApprove(){
   try{ const r = await NET.api("/api/season/approve", {}); toast(r && r.ok ? "Выплаты подтверждены: " + r.count + " призёров" : "Не удалось подтвердить"); }catch(e){ toast("Нет связи с сервером"); }
   SPT.top = null; sptTopLoad();
 }
-// ---- сезонные комнаты: дальние большие комнаты крыльев подземелья, вход только с билетом сезона ----
-{
-  const _gg = guardGate;
-  let sroomWarn = 0;
-  guardGate = function(){
-    _gg();
-    if(!(LOCS[locKey] && LOCS[locKey].dungeon) || ticketActive()){ p.sgx = p.x; p.sgy = p.y; return; }
-    const r = dgRooms.find(r => r.seasonal && p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h);
-    if(r){
-      if(p.sgx != null){ p.x = p.sgx; p.y = p.sgy; }
-      if(now > sroomWarn){ sroomWarn = now + 4; toast("★ Сезонная комната: вход с билетом сезона (Меню → Магазин)"); }
-    } else { p.sgx = p.x; p.sgy = p.y; }
-  };
-  const _dd = drawDungeon;
-  drawDungeon = function(cx, cy, t){
-    _dd(cx, cy, t);
-    const open = ticketActive();
-    for(const r of dgRooms){
-      if(!r.seasonal || r.x > cx + vw || r.x + r.w < cx || r.y > cy + vh || r.y + r.h < cy) continue;
-      ctx.save();
-      ctx.fillStyle = open ? "rgba(242,193,75,.06)" : "rgba(242,193,75,.12)"; ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = `rgba(242,193,75,${.55 + Math.sin(t*2)*.2})`; ctx.lineWidth = 3; ctx.setLineDash([14, 8]); ctx.lineDashOffset = -t*20;
-      ctx.strokeRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8); ctx.setLineDash([]);
-      ctx.font = "12px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#F2C14B";
-      ctx.fillText(open ? "★ Сезонная комната · ×1,5 опыта, +50% дропа" : "★ Сезонная комната · нужен билет сезона", r.x + r.w/2, r.y + 22);
-      ctx.restore();
-    }
-  };
-}
+// ---- сезонная зона: отдельная локация, портал «Сезон» в фарм-зоне; без билета не пускаем ----
+// (прежние «сезонные комнаты» внутри цехов убраны). Если билет закончился уже внутри — возвращаем в город.
+setInterval(() => {
+  if(typeof locKey === "undefined" || locKey !== "season1" || window.NET_ADMIN) return;
+  if(SPT.st && !ticketActive()){ toast("Билет сезона не активен — возврат в город"); travel("lobby"); }
+}, 5000);
 // ===================== БАЛАНС КЛАССОВ (4 сезон) =====================
 // Страж и Жнец: обычный удар замедляет цель на 10% (до 50%) на 10 сек, Жнец ещё с шансом 20% оглушает на 0,3 сек.
 // Техномант: ЭМИ-волна снимает 20% защиты на 5 сек; Силовое поле даёт и +30% атаки.
@@ -8894,12 +8921,22 @@ function ncSkill(i, s){
 //   Ржавые поля — пыльная буря; Руины реактора — зелёные радиоактивные огоньки; Железный каньон — ветер с песком и угли.
 const AMB = {
   sector1:{tint:"rgba(255,140,60,.07)", kind:"ember", n:40, c:["#FFB070", "#FF7A3A"]},
-  sector2:{tint:"rgba(80,170,255,.09)", kind:"mist", n:34, c:["#BFE8FF", "#7FC8FF"]},
+  sector2:{tint:"rgba(80,170,255,.07)", kind:"mist", n:14, c:["#BFE8FF", "#7FC8FF"]},
   scrapfields:{tint:"rgba(200,150,90,.06)", kind:"dust", n:46, c:["#C9A27A", "#9A7A58"]},
   reactor_ruins:{tint:"rgba(110,255,140,.06)", kind:"rad", n:36, c:["#9CFF9C", "#5AE07A"]},
   iron_canyon:{tint:"rgba(255,170,90,.05)", kind:"wind", n:44, c:["#E8C79A", "#FF9A4A"]}
 };
 const AMBP = {key:"", list:[]};
+// мягкий спрайт пара: радиальный градиент рисуется один раз на цвет, дальше только drawImage
+const MIST_SPR = {};
+function mistSprite(c){
+  if(MIST_SPR[c]) return MIST_SPR[c];
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  const g = cv.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, c); gr.addColorStop(.5, c + "66"); gr.addColorStop(1, c + "00");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return MIST_SPR[c] = cv;
+}
 function ambInit(){
   const A = AMB[locKey]; AMBP.key = locKey; AMBP.list = [];
   if(!A) return;
@@ -8922,7 +8959,9 @@ function drawAmbient(t, dt){
     if(q.x > 1.05) q.x -= 1.1; if(q.x < -.05) q.x += 1.1; if(q.y < -.05) q.y += 1.1; if(q.y > 1.05) q.y -= 1.1;
     const x = cx + q.x*vw, y = cy + q.y*vh, a = .35 + Math.sin(t*3 + q.p)*.25;
     ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = q.c;
-    if(A.kind === "mist"){ ctx.globalAlpha = .08*q.z; circle(x, y, 26*q.z); ctx.fill(); }
+    if(A.kind === "mist"){                                   // пар: мягкое пятно с размытым краем, без жёсткого круга
+      const r = 16*q.z; ctx.globalAlpha = (.05 + Math.sin(t*.7 + q.p)*.02)*q.z;
+      ctx.drawImage(mistSprite(q.c), x - r*1.6, y - r, r*3.2, r*2); }
     else if(A.kind === "wind"){ ctx.fillRect(x, y, 10*q.z, 1.5); }
     else if(A.kind === "rad"){ circle(x, y, 2.2*q.z); ctx.fill(); ctx.globalAlpha *= .3; circle(x, y, 7*q.z); ctx.fill(); }
     else ctx.fillRect(x, y, 2*q.z, 2*q.z);
@@ -9090,10 +9129,16 @@ function openWorldBoss(){ openSheet("Мировой босс", "Владыка �
 // 60 монстров 10 ур. → барьер → общий босс «Багровый Страж» (прочность общая, без дропа).
 // Побеждает нанёсший боссу больше урона. Смерть в коридоре — выбывание. Опыт с монстров башни ×4.
 LOCS.tower = {name:"Кровавая башня", min:10, arena:true, npcs:[], count:0, ground:"#1A0E10", ground2:"#24121A", rock:"#3A1A22"};
+// Фарм-зона — отдельный телепорт из ангара; из неё портал «Сезон» ведёт в сезонную зону (только с билетом)
+LOCS.farm1 = {name:"Фарм зона", min:20, dungeon:true, named:true, levels:"21–30", ground:"#0B1015", npcs:[], count:0,
+  desc:"Фарм-зона · с 20 уровня · мобы 21–30 · 4 зала · портал в сезонную зону"};
+LOCS.season1 = {name:"Сезонная зона", min:20, dungeon:true, named:true, hidden:true, levels:"21–30", ground:"#0B1015", npcs:[], count:0,
+  desc:"Только с билетом сезона · ×1,5 опыта · +50% дропа"};
 setTimeout(() => {      // таблицы оформления объявлены ниже по файлу — дополняем их после загрузки
   try{ TILE_PAL.tower = TILE_PAL.arena_fear || TILE_PAL.sector1; }catch(e){}
   try{ DECAL_KINDS.tower = DECAL_KINDS.arena_fear || DECAL_KINDS.dungeon; }catch(e){}
   try{ AMB.tower = {tint:"rgba(255,30,30,.10)", kind:"ember", n:44, c:["#FF5A4A", "#B8261C"]}; }catch(e){}
+  try{ AMB.season1 = {tint:"rgba(242,193,75,.06)", kind:"ember", n:30, c:["#FFE08A", "#F2C14B"]}; }catch(e){}
 }, 0);
 const TW = {st:null, run:false, seg:[[300, 1300], [1500, 2500]], bar:[1400, 2600], boss:{x:3020, y:450}, hitT:0, out:false};
 const twCleared = k => !enemies.some(e => !e.dead && e.twSeg === k);
