@@ -2121,7 +2121,7 @@ function canReach(e){
 }
 function nearestEnemy(range){
   let best = null, bd = range;
-  for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x-p.x, e.y-p.y); if(d < bd && los(p.x, p.y, e.x, e.y)){ bd = d; best = e; } }
+  for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x-p.x, e.y-p.y); if(d < bd && los(p.x, p.y, e.x, e.y) && canReach(e)){ bd = d; best = e; } }
   return best;
 }
 
@@ -4594,7 +4594,7 @@ function useSkill(i){
   if(!p || p.dead || paused || CB.cd[i] > 0) return;
   const st = stat(), s = skillAt(C.skills[i], skillLv(C.skills[i].id)), atk = st.atk*(1 + buffV("atk"))*(1 + st.skillDmg);
   const need = r => { const lk = typeof lockedEnemy === "function" ? lockedEnemy() : null;
-    const t = locKey === "lobby" ? null : lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r ? lk : nearestEnemy(r);
+    const t = locKey === "lobby" ? null : lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r && los(p.x, p.y, lk.x, lk.y) && canReach(lk) ? lk : nearestEnemy(r);
     if(!t) toast("Нет цели рядом"); else if(!lk){ tgt = {kind:"enemy", e:t}; renderTargetFrame(); } return t; };
   switch(s.type){
     case "strike": { const t = need(C.range + 60); if(!t) return;
@@ -6955,7 +6955,8 @@ const DUNGEONS = {sector1:{first:1}, sector2:{first:21},
 // залы компактные (480×440), между залом и коридором проход 160 — так центральный зал с порталами не касается залов
 const CROSS = {C:900, W:1800, H:1800, corr:130, gap:160, rw:480, rh:440, n:10, hall:[300, 260], portalDx:100};
 // door — длина дверного коридора между проходом и большой комнатой (раньше комнаты примыкали к проходу всей стеной)
-const DG = {cols:10, door:120, colX:i => 470 + i*760, W:7760, H:2500, corrY:1250, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
+// tunnel — длина туннеля от главного коридора до первой (малой) комнаты прохода: комнату не видно и не достать из коридора
+const DG = {cols:10, door:120, tunnel:260, colX:i => 470 + i*760, W:7760, H:3020, corrY:1510, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
 const DG_PREFIX = ["Ржавый","Слабый","Обычный","Стойкий","Закалённый","Хищный","Яростный","Бронированный","Кровожадный","Свирепый","Беспощадный","Древний","Элитный","Разъярённый","Грозный","Смертоносный","Титановый","Кошмарный","Апокалиптический","Легендарный",
   "Пылающий","Громовой","Призрачный","Кристальный","Ядерный","Мифриловый","Бездушный","Чумной","Теневой","Сверхновый","Квантовый","Адский","Небесный","Первородный","Бессмертный","Всепожирающий","Абсолютный","Хаотический","Вечный","Божественный"];
 const DG_BASE = [["scrap_crawler","Краулер"], ["rogue_drone","Дрон"], ["sentry_bot","Страж"], ["war_walker","Шагоход"]];
@@ -7067,7 +7068,7 @@ function dgLayout(key){
     const cx = DG.colX(i), lvTop = cfg.first + 2*i;
     for(const side of [-1, 1]){                                                      // -1 — вверх, 1 — вниз
       const lv = side < 0 ? lvTop : lvTop + 1;
-      let d = corrH/2 + 70;                                                           // расстояние от середины коридора
+      let d = corrH/2 + 70 + DG.tunnel;                                               // расстояние от середины коридора: сначала туннель
       for(let c = 0; c < DG.cycles; c++){
         // малая комната на оси прохода
         const sc = corrY + side*(d + small.h/2);
@@ -8900,7 +8901,7 @@ BUFF_COLOR.reflect = "#FFB347";
 // ---- логика новых умений (по мобам; по игрокам — через pvpAs в PvP-обёртке) ----
 const NC = {echo:null, rune:null, grav:null};
 function ncTarget(r){ const lk = typeof lockedEnemy === "function" ? lockedEnemy() : null;
-  return lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r ? lk : nearestEnemy(r); }
+  return lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r && los(p.x, p.y, lk.x, lk.y) && canReach(lk) ? lk : nearestEnemy(r); }
 function ncSkill(i, s){
   const st = stat(), C = clsOf(S.cls), atk = st.atk*(1 + buffV("atk"))*(1 + st.skillDmg);
   const done = () => { CB.cd[i] = s.cd*(1 - st.cdr); Sfx.play("crit"); if(Sfx.haptic) Sfx.haptic("medium"); };
@@ -8915,16 +8916,18 @@ function ncSkill(i, s){
   }
   if(s.type === "echo"){ NC.echo = {x:p.x, y:p.y, aim:p.aim, until:now + s.dur, v:s.v}; CB.fx.push({type:"ring", x:p.x, y:p.y, r:40, life:.4, max:.4, c:C.color}); done(); return; }
   if(s.type === "siren"){
-    for(const e of enemies){ if(e.dead || Math.hypot(e.x - p.x, e.y - p.y) > s.radius + NPCS[e.type].r) continue;
+    for(const e of enemies){ if(e.dead || Math.hypot(e.x - p.x, e.y - p.y) > s.radius + NPCS[e.type].r || !los(p.x, p.y, e.x, e.y)) continue;   // сквозь стену — нет
       hitEnemy(e, atk*s.mult, "aoe"); e.brkT = now + 5; e.chase = false; e.roomAggro = false; e.slowP = Math.max(e.slowT > now ? e.slowP || 0 : 0, 0.3); e.slowT = now + 3; }
     for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius*(0.5 + k*0.25), life:.45 + k*.1, max:.45 + k*.1, c:C.color});
     done(); return;
   }
   if(s.type === "stealth"){ p.stealthT = now + s.dur; for(const e of enemies) e.chase = false; toast("Нулевой след: ты невидим для мобов"); done(); return; }
   if(s.type === "gravity"){
-    const t = ncTarget(260), cx = t ? t.x : p.x + Math.cos(p.aim)*120, cy = t ? t.y : p.y + Math.sin(p.aim)*120;
+    const t = ncTarget(260);
+    let cx = t ? t.x : p.x + Math.cos(p.aim)*120, cy = t ? t.y : p.y + Math.sin(p.aim)*120;
+    if(!t){ [cx, cy] = landAlong(p.x, p.y, cx, cy, 10); }                          // без цели — не дальше ближайшей стены
     NC.grav = {x:cx, y:cy, r:s.radius, at:now + 0.6, dmg:atk*s.mult};
-    for(const e of enemies) if(!e.dead && !NPCS[e.type].boss && Math.hypot(e.x - cx, e.y - cy) < s.radius){ e.pullT = now + 0.6; e.chase = true; }
+    for(const e of enemies) if(!e.dead && !NPCS[e.type].boss && Math.hypot(e.x - cx, e.y - cy) < s.radius && los(cx, cy, e.x, e.y) && canReach(e)){ e.pullT = now + 0.6; e.chase = true; }
     done(); return;
   }
   if(s.type === "chain"){
@@ -8933,7 +8936,7 @@ function ncSkill(i, s){
     for(let k = 0; k < s.n && cur; k++){
       hit.add(cur); beams.push({x1:px, y1:py - 16, x2:cur.x, y2:cur.y - 16, life:0.25}); hitEnemy(cur, atk*s.mult*(1 + 0.15*k), "beam");
       px = cur.x; py = cur.y;
-      let best = null, bd = 160; for(const e of enemies){ if(e.dead || hit.has(e)) continue; const d = Math.hypot(e.x - px, e.y - py); if(d < bd){ bd = d; best = e; } }
+      let best = null, bd = 160; for(const e of enemies){ if(e.dead || hit.has(e)) continue; const d = Math.hypot(e.x - px, e.y - py); if(d < bd && los(px, py, e.x, e.y) && canReach(e)){ bd = d; best = e; } }
       cur = best;
     }
     done(); return;
@@ -8966,7 +8969,7 @@ function ncSkill(i, s){
   hitEnemy = function(e, dmg, kind){
     if(e && !e.dead && p.stealthT > now && (p._basic || BAL.skill)){ p.stealthT = 0; dmg *= 3*stat().critPow/2; kind = "crit"; addText(e.x, e.y - 50, "ИЗ ТЕНИ", "#FF5FA2"); }
     const r = _hitNC(e, dmg, kind);
-    if(p._basic && NC.echo && NC.echo.until > now && e && Math.hypot(e.x - NC.echo.x, e.y - NC.echo.y) < 260){
+    if(p._basic && NC.echo && NC.echo.until > now && e && Math.hypot(e.x - NC.echo.x, e.y - NC.echo.y) < 260 && los(NC.echo.x, NC.echo.y, e.x, e.y)){
       CB.queue.push({t:0.18, e, dmg:dmg*NC.echo.v, done:false});
       beams.push({x1:NC.echo.x, y1:NC.echo.y - 18, x2:e.x, y2:e.y - 16, life:0.12});
     }
@@ -8986,9 +8989,10 @@ function ncSkill(i, s){
     if(p && p.stealthT > now) for(const e of enemies) e.chase = false;
     if(NC.grav){
       const g = NC.grav;
-      for(const e of enemies) if(e.pullT > now && !e.dead){ const dx = g.x - e.x, dy = g.y - e.y, d = Math.hypot(dx, dy); if(d > 12){ e.x += dx/d*Math.min(d, 420*dt); e.y += dy/d*Math.min(d, 420*dt); } }
+      for(const e of enemies) if(e.pullT > now && !e.dead){ const dx = g.x - e.x, dy = g.y - e.y, d = Math.hypot(dx, dy);
+        if(d > 12){ const ox = e.x, oy = e.y; e.x += dx/d*Math.min(d, 420*dt); e.y += dy/d*Math.min(d, 420*dt); slide(e, ox, oy, NPCS[e.type].r); } }   // стены держат
       if(now >= g.at){ NC.grav = null;
-        for(const e of enemies) if(!e.dead && Math.hypot(e.x - g.x, e.y - g.y) < g.r*0.7 + NPCS[e.type].r) hitEnemy(e, g.dmg, "aoe");
+        for(const e of enemies) if(!e.dead && Math.hypot(e.x - g.x, e.y - g.y) < g.r*0.7 + NPCS[e.type].r && los(g.x, g.y, e.x, e.y)) hitEnemy(e, g.dmg, "aoe");
         for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:g.x, y:g.y, r:g.r*(0.4 + k*0.3), life:.4, max:.4, c:"#FFB347"}); Sfx.play("crit"); }
     }
     return r;
@@ -11338,6 +11342,9 @@ hitEnemy = function(e, dmg, kind){
       if(now > roomWarn){ roomWarn = now + 3; toast("Зайди в комнату, чтобы атаковать"); }
       return;
     }
+    // предохранитель для всех классов и умений: сквозь стену урон не проходит (вне подземелий los всегда true).
+    // Исключение — ответ мобу, который сам бьёт игрока (шипы, отражение): он и так в зоне видимости.
+    if(e && !e.dead && kind !== "reflect" && p && !los(p.x, p.y, e.x, e.y) && !(NC.grav && kind === "aoe" && los(NC.grav.x, NC.grav.y, e.x, e.y))) return;
     return _hitRoom(e, dmg, kind);
   };
 }
