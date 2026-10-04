@@ -57,6 +57,17 @@ class SeasonPtsTest(unittest.TestCase):
         self.run_(sp.add(1, "mbuy", 1.6))               # всего 3,1 GRAM: ещё +20 постоянных и +100 дневных
         self.assertEqual(sp._st[1]["pts"], 130)
 
+    def test_market_pair_cap(self):
+        self.run_(sp.add_trade(1, 2, 50))                # «стирка» 50 GRAM между двумя аккаунтами
+        self.assertEqual(sp._st[1]["pts"], 130)          # в задания пошло только 3 GRAM: +30 постоянных и +100 дневных
+        self.assertEqual(sp._st[2]["pts"], 100)          # продавцу — только дневное задание
+        self.run_(sp.add_trade(1, 2, 50))                # повторно с тем же контрагентом в тот же день — ничего
+        self.assertEqual(sp._st[1]["pts"], 130)
+        self.run_(sp.add_trade(1, 3, 1))                 # другой продавец — считается
+        self.assertEqual(sp._st[1]["pts"], 140)
+        self.run_(sp.add_trade(1, 1, 5))                 # сам у себя — никогда
+        self.assertEqual(sp._st[1]["pts"], 140)
+
     def test_day_reset(self):
         for _ in range(10):
             self.run_(sp.add(1, "chat"))

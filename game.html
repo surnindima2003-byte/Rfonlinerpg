@@ -2222,6 +2222,8 @@ function updateEnemies(dt, st){
     const dx = p.x-e.x, dy = p.y-e.y, d = Math.hypot(dx,dy);
     const safe = p.dead || safeSpot(p);
     if(!safe && d < 240 && !e.room) e.chase = true;             // в подземельях моб агрится только когда его ударили
+    // фарм-зона и сезонная зона: моб сам бросается, если подойти почти вплотную (≈ 60 px между корпусами)
+    else if(!safe && !e.chase && e.room && e.room.scatter && d < k.r + 20 + 60 && los(e.x, e.y, p.x, p.y)) e.chase = true;
     if(safe || d > (e.room ? 560 : 480)){ e.chase = false; e.roomAggro = false; }
     let vx = 0, vy = 0;
     if(e.chase){
@@ -4511,7 +4513,9 @@ function hitEnemy(e, dmg, kind){
   if(e.brkT > now) dmg *= 1.2;                                      // снятая защита: −20% брони (у мобов без брони — +20% урона)
   dmg = Math.max(1, Math.round(dmg));
   e.hp -= dmg; e.flash = 0.12; e.chase = true;
-  if(e.room && !e.roomAggro){                                   // в подземелье на удар отвечает вся комната
+  if(e.room && e.room.scatter){                                 // в фарм-зоне на удар отвечает только своя кучка (≤ 150 px)
+    for(const o of enemies) if(o.room === e.room && !o.dead && !o.chase && Math.hypot(o.x - e.x, o.y - e.y) < 150) o.chase = true;
+  } else if(e.room && !e.roomAggro){                            // в подземелье на удар отвечает вся комната
     for(const o of enemies) if(o.room === e.room && !o.dead){ o.chase = true; o.roomAggro = true; }
   }
   const col = kind === "crit" ? "#F2C14B" : kind === "aoe" ? "#FFB347" : "#fff";
@@ -6888,7 +6892,8 @@ const DUNGEONS = {sector1:{first:1}, sector2:{first:21},
   // фарм-зона и сезонная зона: крест из коридоров и 4 больших зала, мобы вперемешку 21–30 ур. (как в LIBERTY)
   farm1:{shape:"cross", lo:21, hi:30, portals:["back", "season"]},
   season1:{shape:"cross", lo:21, hi:30, portals:["back"]}};
-const CROSS = {C:1300, W:2600, H:2600, corr:130, gap:90, rw:760, rh:720, n:16, cols:4};
+// залы компактные (480×440), между залом и коридором проход 160 — так центральный зал с порталами не касается залов
+const CROSS = {C:900, W:1800, H:1800, corr:130, gap:160, rw:480, rh:440, n:10, hall:[300, 260], portalDx:100};
 const DG = {cols:10, colX:i => 470 + i*520, W:5500, H:2500, corrY:1250, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
 const DG_PREFIX = ["Ржавый","Слабый","Обычный","Стойкий","Закалённый","Хищный","Яростный","Бронированный","Кровожадный","Свирепый","Беспощадный","Древний","Элитный","Разъярённый","Грозный","Смертоносный","Титановый","Кошмарный","Апокалиптический","Легендарный",
   "Пылающий","Громовой","Призрачный","Кристальный","Ядерный","Мифриловый","Бездушный","Чумной","Теневой","Сверхновый","Квантовый","Адский","Небесный","Первородный","Бессмертный","Всепожирающий","Абсолютный","Хаотический","Вечный","Божественный"];
@@ -6975,15 +6980,16 @@ let dgRects = [], dgRooms = [], dgMarks = [], dgKey = "sector1";
 function crossLayout(cfg){
   const {C, corr, gap, rw, rh} = CROSS, h = corr/2, lvs = [];
   for(let lv = cfg.lo; lv <= cfg.hi; lv++) lvs.push(lv);
-  dgRects.push({x:C - 200, y:C - 170, w:400, h:340, hall:true});                       // центральный зал: спавн и порталы
-  dgRects.push({x:300, y:C - h, w:CROSS.W - 600, h:corr, corr:true});                 // коридор запад–восток
-  dgRects.push({x:C - h, y:300, w:corr, h:CROSS.H - 600, corr:true});                 // коридор север–юг
+  const [hw, hh] = CROSS.hall, ext = h + gap + rw - 60, exty = h + gap + rh - 60;   // коридоры доходят до середины залов
+  dgRects.push({x:C - hw/2, y:C - hh/2, w:hw, h:hh, hall:true});                       // центральный зал: спавн и порталы
+  dgRects.push({x:C - ext, y:C - h, w:2*ext, h:corr, corr:true});                     // коридор запад–восток
+  dgRects.push({x:C - h, y:C - exty, w:corr, h:2*exty, corr:true});                   // коридор север–юг
   let i = 0;
   for(const sy of [-1, 1]) for(const sx of [-1, 1]){
     const x = sx < 0 ? C - h - gap - rw : C + h + gap, y = sy < 0 ? C - h - gap - rh : C + h + gap;
     // в каждом зале все уровни зоны вперемешку, со своим сдвигом — у всех игроков одинаково
     const types = Array.from({length:CROSS.n}, (_, j) => "dg" + lvs[(j*3 + i*4) % lvs.length]);
-    const rm = {x, y, w:rw, h:rh, room:true, lv:cfg.lo, n:CROSS.n, cols:CROSS.cols, cx:x + rw/2, cy:y + rh/2, kind:"big", types, noBoss:true};
+    const rm = {x, y, w:rw, h:rh, room:true, lv:cfg.lo, n:CROSS.n, cx:x + rw/2, cy:y + rh/2, kind:"big", types, noBoss:true, scatter:true};
     dgRects.push(rm); dgRooms.push(rm);
     dgRects.push({x:sx < 0 ? C - h - gap - 10 : C + h - 10, y:rm.cy - 80, w:gap + 20, h:160, corr:true, door:true});   // проём к коридору С–Ю
     dgRects.push({x:rm.cx - 80, y:sy < 0 ? C - h - gap - 10 : C + h - 10, w:160, h:gap + 20, corr:true, door:true});   // проём к коридору З–В
@@ -7115,12 +7121,18 @@ function buildDungeon(key){
   const cfg = DUNGEONS[key] || {}, cross = cfg.shape === "cross";
   W = cross ? CROSS.W : DG.W; H = cross ? CROSS.H : DG.H; rocks = [];
   // в кресте порталы стоят в центральном зале: «Город» слева, «Сезон» справа
-  npcs = cross ? cfg.portals.map((kind, j) => ({kind, x:CROSS.C + (j ? 120 : -120), y:CROSS.C - 70})) : [{kind:"back", x:150, y:DG.corrY - 40}];
+  npcs = cross ? cfg.portals.map((kind, j) => ({kind, x:CROSS.C + (j ? CROSS.portalDx : -CROSS.portalDx), y:CROSS.C - 50})) : [{kind:"back", x:150, y:DG.corrY - 40}];
   for(const rm of dgRooms){
     const cols = rm.cols || 3;
     // главарь стоит в самой дальней от коридора комнате прохода (левая из последней пары больших)
     const far = dgRooms.filter(r => r.lv === rm.lv && r.kind === "big").sort((a, b) => Math.abs(b.cy - DG.corrY) - Math.abs(a.cy - DG.corrY) || a.cx - b.cx)[0];
     if(far === rm && !rm.noBoss){ const bk = NPCS["db" + rm.lv]; enemies.push({type:"db" + rm.lv, x:rm.cx, y:rm.cy, hx:rm.cx, hy:rm.cy, tx:rm.cx, ty:rm.cy, hp:bk.hp, max:bk.hp, cd:0, ang:Math.random()*6, chase:false, dead:false, respawn:0, flash:0, wanderT:2, lunge:0, room:rm, boss:true}); }
+    if(rm.scatter){
+      const spots = scatterSpots(rm, rm.n, rngD);
+      spots.forEach(([x, y], j) => { const type = rm.types[j % rm.types.length], k = NPCS[type];
+        enemies.push({type, x, y, hx:x, hy:y, tx:x, ty:y, sx:x, sy:y, hp:k.hp, max:k.hp, cd:0, ang:rngD()*6.28, chase:false, dead:false, respawn:0, flash:0, wanderT:0, lunge:0, room:rm}); });
+      continue;
+    }
     for(let j = 0; j < rm.n; j++){
       const type = rm.types ? rm.types[j % rm.types.length] : "dg" + rm.lv, k = NPCS[type], col = j % cols, row = Math.floor(j/cols), rows = Math.ceil(rm.n/cols);
       const x = rm.x + rm.w*(col + 0.5)/cols + (rngD()*20 - 10);
@@ -7129,10 +7141,31 @@ function buildDungeon(key){
     }
   }
   enemies.forEach((e, i) => e.idx = i);
-  return cross ? {x:CROSS.C, y:CROSS.C + 70} : {x:210, y:DG.corrY};
+  return cross ? {x:CROSS.C, y:CROSS.C + 60} : {x:210, y:DG.corrY};
+}
+// мобы фарм-зоны стоят кучками по 2–3 в разных местах зала (одинаково у всех игроков — зерно общее)
+function scatterSpots(rm, n, rng){
+  const pad = 50, out = [], groups = [];
+  const far = (x, y, list, d) => list.every(([a, b]) => Math.hypot(a - x, b - y) >= d);
+  for(let t = 0; groups.length < Math.ceil(n/2.5) && t < 400; t++){            // центры кучек: друг от друга ≥ 140
+    const x = rm.x + pad + 20 + rng()*(rm.w - 2*pad - 40), y = rm.y + pad + 20 + rng()*(rm.h - 2*pad - 40);
+    if(far(x, y, groups, 140)) groups.push([x, y]);
+  }
+  for(let j = 0, t = 0; out.length < n && t < 2000; t++){                       // мобы вокруг центров, друг от друга ≥ 48
+    const [gx, gy] = groups[j % groups.length], a = rng()*6.28, r = 18 + rng()*38;
+    const x = Math.max(rm.x + pad, Math.min(rm.x + rm.w - pad, gx + Math.cos(a)*r));
+    const y = Math.max(rm.y + pad, Math.min(rm.y + rm.h - pad, gy + Math.sin(a)*r));
+    if(far(x, y, out, 48)){ out.push([x, y]); j++; }
+  }
+  while(out.length < n) out.push([rm.cx + (out.length % 3 - 1)*50, rm.cy + (Math.floor(out.length/3) % 3 - 1)*50]);
+  return out;
 }
 function respawnDungeon(e){
   const k = NPCS[e.type], rm = e.room;
+  if(rm.scatter && e.sx != null){                                                // возрождается на своём месте в кучке
+    Object.assign(e, {x:e.sx, y:e.sy, hp:k.hp, max:k.hp, dead:false, chase:false, stun:0, flash:0, cd:1});
+    e.hx = e.tx = e.x; e.hy = e.ty = e.y; return;
+  }
   Object.assign(e, {x:k.boss ? rm.cx : rm.x + 25 + Math.random()*(rm.w - 50), y:k.boss ? rm.cy : rm.y + 25 + Math.random()*(rm.h - 50), hp:k.hp, max:k.hp, dead:false, chase:false, stun:0, flash:0, cd:1});
   e.hx = e.tx = e.x; e.hy = e.ty = e.y;
 }

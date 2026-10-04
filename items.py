@@ -193,8 +193,10 @@ def craft_in_save(S, item_id, level):
         inv.append({"id": item_id, "n": 1})
     return None
 BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
-LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1}
-DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40)}
+LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1, "farm1": 21, "season1": 21}
+# фарм-зона и сезонная зона: мобы 21–30 вперемешку (как DUNGEONS в игре)
+DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40), "farm1": (21, 30), "season1": (21, 30)}
+SEASON_DROP = {"season1": 1.5}                  # сезонная зона: +50% к ценному дропу
 ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5]   # как в игре
 P = lambda pct: pct / 100.0
 
@@ -540,7 +542,7 @@ async def process_kills(s, uid, me, kills):
         if ticket is None:
             import seasonpts
             ticket = await seasonpts.has_ticket(uid)
-        for d in roll(lv, mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1)):   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
+        for d in roll(lv, mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)):   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)
