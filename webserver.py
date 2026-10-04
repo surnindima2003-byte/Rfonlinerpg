@@ -871,22 +871,8 @@ async def handle_party(d, info):
         if pid and parties[pid]["leader"] == uid and other in parties[pid]["members"] and other != uid:
             await party_leave(other, kicked=True)
     elif t == "heal":
-        pid = member_party.get(uid)
-        tgt = online(other)
-        if not pid or not tgt or member_party.get(other) != pid or other == uid:
-            return
-        if tgt["loc"] != info["loc"] or ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 380:
-            return
-        if time.time() - last_heal.get(uid, 0) < 10:
-            return
-        last_heal[uid] = time.time()
-        try:
-            amount = int(d.get("amount", 0))
-        except (TypeError, ValueError):
-            amount = 0
-        amount = max(1, min(amount, 20 + 5 * info["lvl"], 400))
-        pvpguard.heal(other, amount, tgt.get("mhp", 1))
-        await push_to_player(other, {"t": "healed", "from": info["nick"], "amount": amount})
+        # общий «Подхил» в пати отключён: лечить союзников может только Ремонтник (cheal)
+        return
     elif t in ("cheal", "cbuff"):
         # умения Ремонтника: лечение и щит. Себя — всегда, других — только пати/гильдию рядом в той же локации
         if info.get("cls") != "medic" or info.get("dead"):

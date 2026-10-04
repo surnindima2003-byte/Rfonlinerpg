@@ -5260,8 +5260,8 @@ function renderTargetFrame(){
   $("tfIc").innerHTML = mechImg(o.cls, o.fac || "aegis", o.eq || {}, 40);
   const btn = (act, text, dis) => `<button type="button" data-tf="${act}" ${dis ? "disabled" : ""}>${text}</button>`;
   let h = btn("info", "Инфо");
-  if(mate) h += btn("heal", "Подхил", healCd > 0);
-  else if(NET.on && (!NET.party || (partyLeader() === NET.id && NET.party.members.length < 4))) h += btn("invite", "В пати");
+  // «Подхил» убран: лечить союзников может только Ремонтник своими умениями
+  if(!mate && NET.on && (!NET.party || (partyLeader() === NET.id && NET.party.members.length < 4))) h += btn("invite", "В пати");
   h += btn("dm", "ЛС");
   acts.innerHTML = h;
 }
@@ -9775,7 +9775,7 @@ setTimeout(qBadge, 1600);
 // Виды: краулер (краб-робот), дрон (винты), турель-страж (тренога и ствол), шагоход (двуногий).
 const EPX = 32;                       // сетка спрайта врага 32×32
 const epxCache = new Map();
-function epxBuild(kind, accent, f){
+function epxBuild(kind, accent, f, view){
   const N = EPX, buf = new Array(N*N).fill(null), glow = [];
   const put = (x, y, c, gl) => { x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= N || y >= N || !c) return; buf[y*N + x] = c; if(gl) glow.push([x, y, c]); };
   const rect = (x, y, w, h, c, gl) => { for(let j = 0; j < h; j++) for(let i = 0; i < w; i++) put(x + i, y + j, c, gl); };
@@ -9785,6 +9785,60 @@ function epxBuild(kind, accent, f){
   const A = [mix(accent, "#FFFFFF", .45), accent, shade(accent, .7), shade(accent, .45)];
   const M = ["#9AA6B2", "#6B7682", "#4A5561", "#2B333C"], R = ["#C98A5A", "#8A5A3A", "#6A3E26", "#3E2414"];
   const eye = "#FF5A4A", eyeHi = "#FFD0C8";
+  // ===== враги в 8 направлениях: "s" — к нам, "se" — три четверти к нам, "ne" — три четверти спиной, "n" — спиной =====
+  if(view && view !== "e"){
+    const back = view === "n" || view === "ne", tq = view === "se" || view === "ne" ? 1 : 0, C = 16 + tq;
+    if(kind === "scrap_crawler"){
+      const sw = [[0, 1], [1, 0]][f % 2];
+      for(let i = 0; i < 3; i++){ const st = i % 2 ? sw[0] : sw[1], y0 = 17 + i*2;
+        line(C - 8, y0, C - 12 + st, y0 + 4, R[2]); line(C - 12 + st, y0 + 4, C - 13 + st, y0 + 8, R[3]);
+        line(C + 7, y0, C + 11 - st, y0 + 4, R[1]); line(C + 11 - st, y0 + 4, C + 12 - st, y0 + 8, R[2]); }
+      for(let y = 0; y < 9; y++){ const w = [10, 14, 16, 18, 18, 18, 17, 15, 12][y], x0 = C - (w >> 1); rect(x0, 13 + y, w, 1, y < 2 ? R[0] : y > 6 ? R[3] : R[1]); put(x0, 13 + y, R[0]); }
+      if(back){ rect(C - 4, 14, 8, 1, A[1]); rect(C - 6, 17, 12, 1, R[2]); rect(C - 1, 15, 2, 5, R[2]); }
+      else { rect(C - 6, 19, 12, 1, A[1]); const ex = tq ? 2 : 0; put(C - 3 + ex, 16, eye, true); put(C + 2 + ex, 16, eye, true); put(C + 3 + ex, 15, eyeHi, true); }
+      line(C - 5, 13, C - 8, 9, M[2]); put(C - 8, 8, A[0], true); line(C + 4, 13, C + 7, 9, M[2]); put(C + 7, 8, A[0], true);   // клешни-антенны
+    }
+    else if(kind === "rogue_drone"){
+      const bob = f % 2, rw = f % 2 ? 7 : 4;
+      line(C - 6, 11 + bob, C - 10, 8 + bob, M[2]); line(C + 6, 11 + bob, C + 10, 8 + bob, M[2]);
+      rect(C - 10 - (rw >> 1), 7 + bob, rw, 1, "#C9D1D8"); rect(C + 10 - (rw >> 1), 7 + bob, rw, 1, "#C9D1D8");
+      disc(C, 15 + bob, 7, M[1]); disc(C - 1, 13 + bob, 4, M[0]); disc(C, 16 + bob, 6, M[1]);
+      for(let i = 0; i < 12; i++){ const a = i/12*Math.PI*2; put(C + Math.round(Math.cos(a)*7), 15 + bob + Math.round(Math.sin(a)*7), M[3]); }
+      if(back){ rect(C - 1, 9 + bob, 2, 12, A[2]); rect(C - 4, 14 + bob, 8, 1, M[3]); put(C, 15 + bob, A[1], true); }
+      else { rect(C - 6, 18 + bob, 12, 1, A[2]); const ex = C + (tq ? 3 : 0); disc(ex, 15 + bob, 2, "#1B232C"); put(ex, 15 + bob, eye, true); put(ex + 1, 14 + bob, eyeHi, true); }
+      rect(C - 2, 22 + bob, 4, 2, M[2]); put(C - 1, 24 + bob, A[1], true); put(C, 25 + bob, A[0], true); put(C - 1, 26 + bob, A[2], true);
+    }
+    else if(kind === "sentry_bot"){
+      const fire = f === 2;
+      line(C, 21, C - 6, 28, M[2]); line(C, 21, C + 6, 28, M[2]); line(C, 21, C, 28, M[3]);
+      rect(C - 7, 28, 3, 1, M[3]); rect(C + 5, 28, 3, 1, M[3]); rect(C - 1, 28, 3, 1, M[3]);
+      const hex = [[8, 0], [10, 1], [12, 2], [12, 3], [12, 4], [12, 5], [10, 6], [8, 7]];
+      hex.forEach(([w, j]) => { const x0 = C - (w >> 1); rect(x0, 11 + j, w, 1, j < 2 ? M[0] : j > 5 ? M[3] : M[1]); put(x0, 11 + j, M[0]); put(x0 + w - 1, 11 + j, M[2]); });
+      if(back){ for(let j = 0; j < 3; j++) rect(C - 3, 13 + j*2, 6, 1, M[3]); put(C, 10, A[1], true); rect(C - 1, 9, 2, 2, "#2F3842"); }
+      else if(tq){ rect(C + 3, 15, 6, 2, "#2F3842"); rect(C + 3, 15, 6, 1, "#56626F"); disc(C - 2, 14, 1, "#1B232C"); put(C - 2, 14, eye, true);
+        if(fire) for(const [x, y] of [[C + 10, 16], [C + 10, 15], [C + 11, 16], [C + 9, 17]]) put(x, y, "#FFE08A", true); }
+      else { disc(C, 16, 2, "#1B232C"); put(C, 16, "#0B0F13"); for(let i = 0; i < 8; i++){ const a = i/8*Math.PI*2; put(C + Math.round(Math.cos(a)*3), 16 + Math.round(Math.sin(a)*3), "#56626F"); }
+        put(C - 3, 13, eye, true); put(C + 3, 13, eye, true);
+        if(fire) for(const [x, y] of [[C, 16], [C - 1, 15], [C + 1, 17], [C + 1, 15], [C - 1, 17]]) put(x, y, "#FFE08A", true); }
+      rect(C - 4, 12, 8, 1, A[2]);
+    }
+    else {
+      // шагоход спереди/сзади: ноги поочерёдно поднимаются, пушка-рука справа
+      const by = f % 2 ? 0 : 1, lift = [[2, 0], [0, 0], [0, 2], [0, 0]][f % 4];
+      const leg = (x, l, c) => { block(x, 18 + by - l, 4, 5, c); block(x, 23 + by - l, 4, 5, [c[2], c[2], c[3], c[3]]); rect(x - 1, 28 - l, 6, 1, M[3]); };
+      leg(C - 6, lift[0] + (tq ? 1 : 0), tq ? [M[2], M[2], M[3], M[3]] : M); leg(C + 2, lift[1], M);
+      block(C - 8, 6 + by, 16, 13, M);
+      if(tq) for(let j = 1; j < 12; j++) put(C - 8, 6 + by + j, M[2]);
+      rect(C - 7, 15 + by, 14, 1, A[2]);
+      if(back){ for(let j = 0; j < 3; j++) rect(C - 5, 9 + by + j*2, 10, 1, M[2]); put(C, 16 + by, A[1], true); }
+      else { const vx = C - 4 + (tq ? 2 : 0); rect(vx, 8 + by, 8, 3, "#0B0F13"); rect(vx + 1, 9 + by, 6, 1, eye, true); put(vx + 5, 9 + by, eyeHi, true); }
+      block(C - 11, 8 + by, 4, 6, M);                                                  // наплечник
+      const gx = C + 7 - tq;
+      block(gx, 9 + by, 5, 5, ["#56626F", "#3A444F", "#2B333C", "#1B232C"]);
+      if(back){ rect(gx + 1, 14 + by, 3, 4, "#2B333C"); }
+      else { rect(gx + 1, 14 + by, 3, 6, "#3A444F"); put(gx + 2, 20 + by, A[0], true); put(gx + 2, 19 + by, A[1], true); }
+    }
+  } else
   if(kind === "scrap_crawler"){
     // краб-робот: низкий корпус на шести лапах
     const sw = [[0, 1, 0, -1], [-1, 0, 1, 0]][f % 2];
@@ -9841,10 +9895,10 @@ function epxBuild(kind, accent, f){
   }
   return {px:out, glow};
 }
-function epxCanvas(kind, accent, f, ps){
-  const key = kind + "|" + accent + "|" + f + "|" + ps;
+function epxCanvas(kind, accent, f, ps, view){
+  const key = kind + "|" + (view || "e") + "|" + accent + "|" + f + "|" + ps;
   let c = epxCache.get(key); if(c) return c;
-  const spr = epxBuild(kind, accent, f), base = document.createElement("canvas");
+  const spr = epxBuild(kind, accent, f, view), base = document.createElement("canvas");
   base.width = base.height = EPX*ps;
   const g = base.getContext("2d");
   for(let i = 0; i < spr.px.length; i++){ const col = spr.px[i]; if(!col) continue; g.fillStyle = col; g.fillRect((i % EPX)*ps, Math.floor(i/EPX)*ps, ps, ps); }
@@ -9865,7 +9919,10 @@ function drawEnemyPx(e, k, t){
   else if(kind === "sentry_bot") f = e.cd > 1.15 ? 2 : Math.floor(t*2) % 2;
   else if(kind === "scrap_crawler") f = moving ? Math.floor(t*10) % 2 : 0;
   else f = moving ? Math.floor(t*7) % 4 : 1;
-  const ps = MOB_PS, dps = Math.max(1, Math.round(ps*dpr)), img = epxCanvas(kind, k.color || "#E0694A", f, dps), dir = Math.cos(e.ang || 0) >= 0 ? 1 : -1;
+  // 8 направлений, как у роботов: вид выбирается по углу, куда смотрит враг; левые стороны — зеркало
+  const sec = ((Math.round((e.ang || 0)/(Math.PI/4)) % 8) + 8) % 8;
+  const [view, dir] = [["e", 1], ["se", 1], ["s", 1], ["se", -1], ["e", -1], ["ne", -1], ["n", 1], ["ne", 1]][sec];
+  const ps = MOB_PS, dps = Math.max(1, Math.round(ps*dpr)), img = epxCanvas(kind, k.color || "#E0694A", f, dps, view);
   ctx.save(); ctx.scale(dir, 1); ctx.imageSmoothingEnabled = false;
   const lunge = e.lunge > 0 ? 3 : 0, sz = EPX*dps/dpr;
   ctx.drawImage(img, -sz/2 + lunge, -sz/2 - 3, sz, sz);
@@ -11323,7 +11380,7 @@ setInterval(() => {
 
 // ===================== ТАБЛИЧКА ЦЕЛИ И ОКНО «ИНФО» (по эталону) =====================
 // Компактная табличка по центру под плашкой игрока: прицел + имя, красная полоса прочности с цифрами.
-// Под ней у пилотов — кнопки «Пати+» (или «Подхил» для своих) и «Инфо». Снять цель — коротким тапом по пустому месту.
+// Под ней у пилотов — кнопки «Пати+» (если не в твоей пати) и «Инфо». Снять цель — коротким тапом по пустому месту.
 {
   const tf = $("tframe");
   tf.insertAdjacentHTML("afterbegin", `<i class="tfc tfc-tl"></i><i class="tfc tfc-tr"></i><i class="tfc tfc-bl"></i><i class="tfc tfc-br"></i>`);
@@ -11351,14 +11408,10 @@ setInterval(() => {
     const btn = (act, html, dis) => `<button type="button" data-tf="${act}" ${dis ? "disabled" : ""}>${html}</button>`;
     const ppl = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg>`;
     let h = "";
-    if(mate) h += btn("heal", "Подхил", healCd > 0);
-    else if(NET.on && (!NET.party || (partyLeader() === NET.id && NET.party.members.length < 4))) h += btn("invite", ppl + "Пати+");
+    if(!mate && NET.on && (!NET.party || (partyLeader() === NET.id && NET.party.members.length < 4))) h += btn("invite", ppl + "Пати+");
     h += btn("info", "Инфо");
     acts.innerHTML = h;
   };
-  // «Подхил N» во время перезарядки не должен ломать ширину кнопки
-  const _tick = targetTick;
-  targetTick = function(dt){ _tick(dt); };
   // снять цель: короткий тап по пустому месту карты (не по роботу и не по мобу)
   let tapD = null;
   const _try = tryTarget;
