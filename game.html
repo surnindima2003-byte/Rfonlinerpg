@@ -2061,6 +2061,12 @@ function killEnemy(e){
   if(p.target === e) p.target = null;
   if(levelUps()){ Sfx.play("level"); toast("Новый уровень: " + S.level + "!"); addText(p.x, p.y-52, "УРОВЕНЬ " + S.level, "#F2A93B"); }
 }
+// моба в комнате можно бить, только зайдя в эту комнату: из коридора, прохода или из-за стены — нельзя
+const ROOM_REACH = 40;
+function canReach(e){
+  const rm = e && e.room; if(!rm) return true;
+  return p.x > rm.x - ROOM_REACH && p.x < rm.x + rm.w + ROOM_REACH && p.y > rm.y - ROOM_REACH && p.y < rm.y + rm.h + ROOM_REACH;
+}
 function nearestEnemy(range){
   let best = null, bd = range;
   for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x-p.x, e.y-p.y); if(d < bd && los(p.x, p.y, e.x, e.y)){ bd = d; best = e; } }
@@ -2137,7 +2143,7 @@ function update(dt){
     if(!lockedNow){ const n = autoPick(Math.max(RANGE, 240) + 80); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); lockedNow = n; autoS.stuckT = 0; autoS.losT = 0; autoS.lastD = Infinity; } }
   }
   const t = locKey === "lobby" ? null : lockedNow ? (auto || Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : null; p.target = t;
-  const tDist = t ? Math.hypot(t.x-p.x, t.y-p.y) : 0, tLos = t ? los(p.x, p.y, t.x, t.y) : false;
+  const tDist = t ? Math.hypot(t.x-p.x, t.y-p.y) : 0, tLos = t ? los(p.x, p.y, t.x, t.y) && canReach(t) : false;   // АВТО сам заходит в комнату
   const inReach = t && tDist <= RANGE + NPCS[t.type].r + (auto ? 10 : 0) && tLos;
   const wantAim = t ? Math.atan2(t.y-p.y, t.x-p.x) : p.ang;
   const da2 = ((wantAim - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += da2*Math.min(1, dt*16);
@@ -2224,7 +2230,7 @@ function updateEnemies(dt, st){
     if(!safe && d < 240 && !e.room) e.chase = true;             // в подземельях моб агрится только когда его ударили
     // фарм-зона и сезонная зона: моб сам бросается, если подойти почти вплотную (≈ 60 px между корпусами)
     else if(!safe && !e.chase && e.room && e.room.scatter && d < k.r + 20 + 60 && los(e.x, e.y, p.x, p.y)) e.chase = true;
-    if(safe || d > (e.room ? 560 : 480)){ e.chase = false; e.roomAggro = false; }
+    if(safe || d > (e.room ? 560 : 480) || (e.room && !canReach(e))){ e.chase = false; e.roomAggro = false; }   // вышел из комнаты — моб возвращается
     let vx = 0, vy = 0;
     if(e.chase){
       e.ang = Math.atan2(dy,dx);
@@ -6894,7 +6900,8 @@ const DUNGEONS = {sector1:{first:1}, sector2:{first:21},
   season1:{shape:"cross", lo:21, hi:30, portals:["back"]}};
 // залы компактные (480×440), между залом и коридором проход 160 — так центральный зал с порталами не касается залов
 const CROSS = {C:900, W:1800, H:1800, corr:130, gap:160, rw:480, rh:440, n:10, hall:[300, 260], portalDx:100};
-const DG = {cols:10, colX:i => 470 + i*520, W:5500, H:2500, corrY:1250, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
+// door — длина дверного коридора между проходом и большой комнатой (раньше комнаты примыкали к проходу всей стеной)
+const DG = {cols:10, door:120, colX:i => 470 + i*760, W:7760, H:2500, corrY:1250, corrH:110, small:{w:200, h:170}, big:{w:210, h:230}, cycles:2};
 const DG_PREFIX = ["Ржавый","Слабый","Обычный","Стойкий","Закалённый","Хищный","Яростный","Бронированный","Кровожадный","Свирепый","Беспощадный","Древний","Элитный","Разъярённый","Грозный","Смертоносный","Титановый","Кошмарный","Апокалиптический","Легендарный",
   "Пылающий","Громовой","Призрачный","Кристальный","Ядерный","Мифриловый","Бездушный","Чумной","Теневой","Сверхновый","Квантовый","Адский","Небесный","Первородный","Бессмертный","Всепожирающий","Абсолютный","Хаотический","Вечный","Божественный"];
 const DG_BASE = [["scrap_crawler","Краулер"], ["rogue_drone","Дрон"], ["sentry_bot","Страж"], ["war_walker","Шагоход"]];
@@ -7016,11 +7023,11 @@ function dgLayout(key){
         // пара больших комнат слева и справа от прохода
         const bc = corrY + side*(d + big.h/2);
         for(const sx of [-1, 1]){
-          const x0 = sx < 0 ? cx - 20 - big.w : cx + 20;
+          const x0 = sx < 0 ? cx - 38 - DG.door - big.w : cx + 38 + DG.door;
           const rb = {x:x0, y:bc - big.h/2, w:big.w, h:big.h, room:true, lv, n:12, cx:x0 + big.w/2, cy:bc, kind:"big"};
           dgRects.push(rb); dgRooms.push(rb);
-          // дверной проём: широкий проход между коридором и комнатой, чтобы робот свободно проходил
-          dgRects.push({x:sx < 0 ? cx - 80 : cx - 38, y:bc - 45, w:118, h:90, corr:true, door:true});
+          // дверной коридор между проходом и комнатой: из прохода в комнату не достать, нужно зайти
+          dgRects.push({x:sx < 0 ? cx - 38 - DG.door - 10 : cx + 28, y:bc - 45, w:DG.door + 20, h:90, corr:true, door:true});
         }
         d += big.h + (c < DG.cycles - 1 ? 70 : 0);
       }
@@ -11062,6 +11069,17 @@ hitEnemy = function(e, dmg, kind){
   if(done > 0){ const q = SH.q.get(e.idx); if(q) q[2] += done; else SH.q.set(e.idx, [e.idx, e.type, done]); }
   return r;
 };
+// внешняя обёртка: удар по мобу в комнате не проходит, если игрок не в этой комнате
+{
+  const _hitRoom = hitEnemy; let roomWarn = 0;
+  hitEnemy = function(e, dmg, kind){
+    if(e && !e.dead && e.room && !canReach(e)){
+      if(now > roomWarn){ roomWarn = now + 3; toast("Зайди в комнату, чтобы атаковать"); }
+      return;
+    }
+    return _hitRoom(e, dmg, kind);
+  };
+}
 function shFlush(){
   if(SH.q.size && shOn()){ NET.ws.send(JSON.stringify({t:"mhit", loc:locKey, h:[...SH.q.values()].slice(0, 60)})); SH.q.clear(); }
 }
