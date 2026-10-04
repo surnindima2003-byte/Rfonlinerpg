@@ -4369,7 +4369,16 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     if(!force && js === lastPushed) return;
     S._ts = Date.now(); save();
     const data = snapshot(); lastPushed = JSON.stringify(data);
-    try{ await api("/api/state/save", {epoch:serverEpoch, data}); }catch(e){ lastPushed = ""; }
+    const sentCraft = +S.craftN || 0;
+    try{
+      const r = await api("/api/state/save", {epoch:serverEpoch, data});
+      // сервер видел крафт, которого нет в этом сохранении (например, собрано на другом устройстве):
+      // такие сохранения он не примет — берём его версию. Отказ из-за крафта, ответ на который уже
+      // пришёл (счётчик вырос, пока сохранение шло), не в счёт: следующее сохранение пройдёт.
+      if(r && !r.ok && String(r.error || "").includes("stale save") && sentCraft >= (+S.craftN || 0)){
+        sessionStorage.removeItem("mw-synced"); location.reload(); return;
+      }
+    }catch(e){ lastPushed = ""; }
   }
   setInterval(() => push(false), 10000);
   NET.push = push;                                    // крафт на сервере: сначала отправляем свежее сохранение
@@ -4425,7 +4434,8 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     NET.admin = window.NET_ADMIN = !!r.admin; NET.id = r.tg.id; NET._ready();
     const srv = r.save;
     // на сервере прогресс новее (например, с другого телефона) — берём его
-    if(srv && srv.S && (srv.ts || 0) > (S._ts || 0) && !sessionStorage.getItem("mw-synced")){
+    // или на сервере был крафт, которого нет на телефоне: его сохранения сервер всё равно не примет
+    if(srv && srv.S && ((srv.ts || 0) > (S._ts || 0) || (+srv.S.craftN || 0) > (+S.craftN || 0)) && !sessionStorage.getItem("mw-synced")){
       try{
         localStorage.setItem("mw-save-v2", JSON.stringify({...srv.S, _ts:srv.ts}));
         if(srv.W) localStorage.setItem("mw-wallet", JSON.stringify(srv.W));
@@ -10927,6 +10937,7 @@ async function craftSpecial(id, btn){
     const r = await regApi("craft", {id});
     if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
     craftApply(id, def); addItem(S.inv, id, 1, INV_MAX); regAddSph(id, 1);
+    if(r.craftN) S.craftN = +r.craftN;                // счётчик сервера: сохранения без этого крафта он не примет
     if(D) droneGive(id, true, true); else if(A) artGot(id); else if(Wg) wingGot(id); else if(Ck) cloakGot(id); else toast("Собрано: " + R.name + ". Можно вставить в вещь или продать на маркете");
     Sfx.play(D || A || Wg || Ck ? "level" : "pick"); save();
   }catch(e){ toast("Сервер не ответил, попробуй ещё раз"); }

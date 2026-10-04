@@ -272,7 +272,7 @@ async def api_gram(request):
             import items
             minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
             import saveguard
-            saveguard.note_purchase(uid)                                   # большой прирост в следующем сохранении — это покупка
+            saveguard.note_purchase(uid, pack)                                 # большой прирост в следующем сохранении — это покупка
             await s.commit()
             import vip
             vip.forget(uid)

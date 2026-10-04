@@ -14,9 +14,11 @@
   off    — проверка выключена.
 Рекомендуется несколько дней посмотреть на shadow, прежде чем включать on.
 """
+import asyncio
 import math
 import os
 import time
+import weakref
 from collections import deque
 
 import metrics
@@ -43,8 +45,43 @@ MATS = ("wire", "plate", "chip")    # материалы крафта: из ни
 MAT_BASE = 60                # разовые поступления материалов за одно сохранение
 MAT_PER_SEC = 1.0            # выпадение материалов в секунду с большим запасом
 
-_purchases = {}              # tg_id -> время последней покупки в магазине GRAM
+BASE_REFILL_SEC = 300        # разовый запас (SCRAP_BASE и т.п.) восстанавливается полностью за 5 минут
+
+# Что даёт пак магазина (как PACKS в game.html; совпадение проверяет test_saveguard_packs.py).
+# После покупки этот прирост в ближайшем сохранении законный — но только он, а не «что угодно».
+# ench — в паке вещи с заточкой: проверку скачка заточки для этого сохранения не делаем.
+PACK_GRANTS = {
+    "p_start": {"scrap": 10_000},
+    "p_base": {"scrap": 25_000, "ench": True},
+    "p_std": {"scrap": 70_000, "cores": 50, "ench": True},
+    "p_elite": {"scrap": 500_000, "cores": 400, "sph": 5, "ench": True},
+    "p_legend": {"scrap": 1_000_000, "cores": 1000, "sph": 15, "ench": True},
+    "p_epic": {"scrap": 3_000_000, "cores": 2000, "sph": 130, "ench": True},
+    "p_cores": {"cores": 700},
+    "d_start": {"ench": True}, "d_base": {"ench": True}, "d_adv": {"ench": True},
+    "d_sup": {"ench": True}, "d_top": {"ench": True}, "d_admin": {"ench": True},
+    "x_books": {"ench": True},
+    "x_pots": {"scrap": 20_000},
+    "u1": {"sph": 60}, "u2": {"sph": 120}, "u3": {"sph": 245},
+}
+PURCHASE_TTL = 600           # покупка учитывается в сохранениях следующие 10 минут
+
+_purchases = {}              # tg_id -> {"scrap", "cores", "sph", "ench", "t"} — ещё не учтённые покупки
+_slack = {}                  # tg_id -> {"t", ресурс: остаток разового запаса}
 recent = deque(maxlen=200)   # последние подозрительные сохранения (видны в /metrics)
+
+# Сохранение и серверный крафт одного игрока идут строго по очереди (сервер — один процесс):
+# иначе два крафта в одну секунду дают две вещи за одни ресурсы, а сохранение, начатое до крафта,
+# перезаписывает его списание.
+_locks = weakref.WeakValueDictionary()
+
+
+def player_lock(uid):
+    lock = _locks.get(uid)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[uid] = lock
+    return lock
 
 
 def _num(v):
@@ -130,44 +167,97 @@ def fix_structure(S):
                 x[k] = 0 if not _num(v) or v < 0 else min(int(v), hi)
 
 
-def jumps(old, new, dt, granted):
-    """Подозрительные скачки между прошлым и новым сохранением. granted — выдачи сервера за это время."""
+def _base_caps():
+    caps = {"scrap": SCRAP_BASE, "cores": CORES_BASE, "sph": SPH_BASE}
+    caps.update({m: MAT_BASE for m in MATS})
+    return caps
+
+
+def slack_of(uid, now=None):
+    """Сколько разового запаса осталось у игрока (копия; записать — commit_slack).
+
+    Раньше SCRAP_BASE/MAT_BASE/SPH_BASE давались на КАЖДОЕ сохранение, а частота сохранений не ограничена:
+    сохраняясь раз в секунду, можно было «напечатать» по 20 000 лома, 60 материалов и 40 сфер в секунду.
+    Теперь это общий запас, который тратится на необъяснимый прирост и восстанавливается за BASE_REFILL_SEC."""
+    now = now or time.time()
+    caps = _base_caps()
+    st = _slack.get(uid)
+    if not st:
+        return dict(caps, t=now)
+    k = min(1.0, max(0.0, now - st["t"]) / BASE_REFILL_SEC)
+    out = {r: min(cap, st.get(r, cap) + cap * k) for r, cap in caps.items()}
+    out["t"] = now
+    return out
+
+
+def commit_slack(uid, slack):
+    _slack[uid] = slack
+
+
+def jumps(old, new, dt, granted, slack=None, skip_ench=False):
+    """Подозрительные скачки между прошлым и новым сохранением. granted — выдачи сервера за это время.
+
+    slack — остаток разового запаса (slack_of); тратится на месте. None — полный запас (как одно сохранение)."""
     out = []
     dt = max(1.0, min(dt, 3600.0))
-    for k, base, rate in (("scrap", SCRAP_BASE, SCRAP_PER_SEC), ("cores", CORES_BASE, CORES_PER_SEC)):
+    if slack is None:
+        slack = _base_caps()
+
+    def over(key, gain, allowed):
+        """Прирост сверх объяснимого берётся из запаса. True — запаса не хватило."""
+        extra = gain - allowed
+        if extra <= 0:
+            return False
+        if extra > slack.get(key, 0):
+            return True
+        slack[key] = slack.get(key, 0) - extra
+        return False
+
+    scrap_slack0 = slack.get("scrap", 0)
+    for k, rate in (("scrap", SCRAP_PER_SEC), ("cores", CORES_PER_SEC)):
         a, b = old.get(k, 0), new.get(k, 0)
         if _num(a) and _num(b):
-            limit = base + rate * dt + granted.get(k, 0)
-            if b - a > limit:
-                out.append(f"{k} +{int(b - a)} за {int(dt)} с (предел {int(limit)})")
+            allowed = rate * dt + granted.get(k, 0)
+            if over(k, b - a, allowed):
+                out.append(f"{k} +{int(b - a)} за {int(dt)} с (предел {int(allowed + slack.get(k, 0))})")
     for mid in MATS:
-        limit = MAT_BASE + MAT_PER_SEC * dt
+        allowed = MAT_PER_SEC * dt
         d = mats(new, mid) - mats(old, mid)
-        if d > limit:
-            out.append(f"{mid} +{d} за {int(dt)} с (предел {int(limit)})")
-    d_e = max_ench(new) - max_ench(old)
-    if d_e > ENCH_JUMP:
-        out.append(f"заточка +{d_e} за {int(dt)} с")
+        if over(mid, d, allowed):
+            out.append(f"{mid} +{d} за {int(dt)} с (предел {int(allowed + slack.get(mid, 0))})")
+    if not skip_ench:
+        d_e = max_ench(new) - max_ench(old)
+        if d_e > ENCH_JUMP:
+            out.append(f"заточка +{d_e} за {int(dt)} с")
     # сферы: больше, чем можно купить на весь доступный лом, получить наградами и выбить
     a, b = old.get("scrap", 0), new.get("scrap", 0)
     scrap_room = 0
     if _num(a) and _num(b):
-        scrap_room = max(0, a - b + SCRAP_BASE + SCRAP_PER_SEC * dt + granted.get("scrap", 0))
-    sph_gain = SPH_BASE + granted.get("sph", 0) + int(scrap_room // SPH_PRICE_MIN)
+        scrap_room = max(0, a - b + scrap_slack0 + SCRAP_PER_SEC * dt + granted.get("scrap", 0))
+    sph_allowed = granted.get("sph", 0) + int(scrap_room // SPH_PRICE_MIN)
     s_old, s_new = spheres(old), spheres(new)
-    if s_new - s_old > sph_gain:
-        out.append(f"сферы +{s_new - s_old} за {int(dt)} с (предел {sph_gain})")
+    sph_slack0 = slack.get("sph", 0)
+    if over("sph", s_new - s_old, sph_allowed):
+        out.append(f"сферы +{s_new - s_old} за {int(dt)} с (предел {int(sph_allowed + slack.get('sph', 0))})")
     # заточка без сфер: успешных заточек не может быть больше, чем потрачено сфер
-    spent_max = max(0, s_old + sph_gain - s_new)
-    e_gain = ench_total(new) - ench_total(old)
-    if e_gain > spent_max + ENCH_SLACK:
-        out.append(f"заточка +{e_gain} при потраченных сферах не больше {spent_max}")
+    if not skip_ench:
+        spent_max = max(0, s_old + sph_allowed + sph_slack0 - s_new)
+        e_gain = ench_total(new) - ench_total(old)
+        if e_gain > spent_max + ENCH_SLACK:
+            out.append(f"заточка +{e_gain} при потраченных сферах не больше {spent_max}")
     return out
 
 
-def note_purchase(uid):
-    """Покупка пака: в ближайшем сохранении прирост лома, вещей и заточки законный."""
-    _purchases[uid] = time.time()
+def note_purchase(uid, pack=None):
+    """Покупка пака: в ближайших сохранениях законен прирост ровно того, что в паке."""
+    g = PACK_GRANTS.get(pack, {})
+    p = _purchases.get(uid)
+    if not p or time.time() - p["t"] > PURCHASE_TTL:
+        p = _purchases[uid] = {"scrap": 0, "cores": 0, "sph": 0, "ench": False, "t": 0}
+    for k in ("scrap", "cores", "sph"):
+        p[k] += g.get(k, 0)
+    p["ench"] = p["ench"] or bool(g.get("ench"))
+    p["t"] = time.time()
 
 
 def check(uid, nick, old_data, new_data, dt, granted):
@@ -177,11 +267,22 @@ def check(uid, nick, old_data, new_data, dt, granted):
     S = new_data.get("S") if isinstance(new_data.get("S"), dict) else {}
     oldS = old_data.get("S") if isinstance(old_data, dict) and isinstance(old_data.get("S"), dict) else None
     notes = [("структура", b) for b in structure(S)]
-    bought = _purchases.get(uid, 0) >= time.time() - dt - 5
-    if oldS is not None and not bought:
-        notes += [("скачок", j) for j in jumps(oldS, S, dt, granted)]
-    if bought and oldS is not None:
+    bought = _purchases.get(uid)
+    if bought and time.time() - bought["t"] > PURCHASE_TTL:
         _purchases.pop(uid, None)
+        bought = None
+    slack = slack_of(uid)
+    if oldS is not None:
+        g = dict(granted)
+        if bought:
+            for k in ("scrap", "cores", "sph"):
+                g[k] = g.get(k, 0) + bought[k]
+        notes += [("скачок", j) for j in jumps(oldS, S, dt, g, slack, skip_ench=bool(bought and bought["ench"]))]
+    rejected = MODE == "on" and any(a == "скачок" for a, _ in notes)
+    if not rejected:
+        commit_slack(uid, slack)                     # запас тратится, только если сохранение принято
+        if bought and oldS is not None:
+            _purchases.pop(uid, None)                # покупка учтена в принятом сохранении
     if not notes:
         return new_data, []
     metrics.inc("saveguard.flagged")
@@ -189,9 +290,18 @@ def check(uid, nick, old_data, new_data, dt, granted):
     metrics.gauge("saveguard.recent", list(recent)[-20:])
     if MODE != "on":
         return new_data, notes
-    if any(a == "скачок" for a, _ in notes):
+    if rejected:
         metrics.inc("saveguard.rejected")
         return None, notes
     fix_structure(S)
     metrics.inc("saveguard.fixed")
     return new_data, notes
+
+
+def cleanup(online_ids):
+    """Раз в минуту: забываем запас и покупки ушедших игроков (запас у них всё равно восстановился бы полностью)."""
+    now = time.time()
+    for uid in [u for u, st in _slack.items() if u not in online_ids and now - st["t"] > BASE_REFILL_SEC]:
+        _slack.pop(uid, None)
+    for uid in [u for u, p in _purchases.items() if now - p["t"] > PURCHASE_TTL]:
+        _purchases.pop(uid, None)

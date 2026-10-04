@@ -14,7 +14,7 @@ from aiohttp import web
 from sqlalchemy import select, func, update, case
 
 from db import SessionLocal
-from models import ItemInst, SphereBal, GameSave, LootDay
+from models import ItemInst, SphereBal, GameSave, LootDay, CraftDay
 import metrics
 import mobguard
 from db_atomic import insert_ignore
@@ -157,6 +157,22 @@ CRAFT = {
     "ck_bastion": (42, {"scrap": 230000, "cores": 720, "plate": 65, "chip": 25}),
 }
 INV_MAX_SRV = 60
+# Сколько вещей можно собрать на сервере за сутки (UTC). Собранное продаётся за GRAM, а ресурсы для крафта
+# берутся из сохранения с телефона, которое сервер проверяет лишь по скорости прироста. Лимит — потолок
+# на случай, если подделку не поймали. 0 — без лимита. Админам лимита нет.
+CRAFT_DAILY_MAX = env_int("CRAFT_DAILY_MAX", 20)
+
+
+async def take_craft_slot(s, uid):
+    """Атомарно занять одну попытку крафта на сегодня. False — лимит исчерпан (ничего не изменено)."""
+    if CRAFT_DAILY_MAX <= 0:
+        return True
+    day = int(time.time() // 86400)
+    await s.execute(insert_ignore(CraftDay.__table__, tg_id=uid, day=day, n=0))
+    res = await s.execute(update(CraftDay).where(CraftDay.tg_id == uid, (CraftDay.day != day) | (CraftDay.n < CRAFT_DAILY_MAX))
+                          .values(n=case((CraftDay.day == day, CraftDay.n + 1), else_=1), day=day)
+                          .returning(CraftDay.n).execution_options(synchronize_session=False))
+    return res.first() is not None
 
 
 def _inv_count(S, item_id):
@@ -385,35 +401,47 @@ async def api_items(request):
             item_id = str(body.get("id", ""))
             if item_id not in CRAFT:
                 return web.json_response({"ok": False, "error": "Такое нельзя собрать"})
-            row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
-            try:
-                data = json.loads(row.data) if row and row.data else None
-            except ValueError:
-                data = None
-            S = data.get("S") if isinstance(data, dict) else None
-            if not isinstance(S, dict):
-                return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
             import progress
-            try:
-                level = int(S.get("level", 1))
-            except (TypeError, ValueError):
-                level = 1
-            if not user.get("admin"):
-                level = min(level, await progress.cap_of(s, uid))
-            err = craft_in_save(S, item_id, level)
-            if err:
-                return web.json_response({"ok": False, "error": err})
-            # пишем, только если сохранение не поменялось с момента чтения (параллельное сохранение с телефона)
-            now = int(time.time())
-            res = await s.execute(update(GameSave).where(GameSave.tg_id == uid, GameSave.updated == row.updated)
-                                  .values(data=json.dumps(data, ensure_ascii=False), updated=now).execution_options(synchronize_session=False))
-            if res.rowcount != 1:
-                await s.rollback()
-                return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
-            await add_spheres(s, uid, item_id, 1)
-            await s.commit()
+            import saveguard
+            # строго по очереди с сохранениями и другими крафтами этого игрока: иначе два крафта подряд
+            # (или сохранение, начатое до крафта) дают вещь без списания ресурсов
+            async with saveguard.player_lock(uid):
+                row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+                try:
+                    data = json.loads(row.data) if row and row.data else None
+                except ValueError:
+                    data = None
+                S = data.get("S") if isinstance(data, dict) else None
+                if not isinstance(S, dict):
+                    return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
+                try:
+                    level = int(S.get("level", 1))
+                except (TypeError, ValueError, OverflowError):
+                    level = 1
+                if not user.get("admin"):
+                    level = min(level, await progress.cap_of(s, uid))
+                err = craft_in_save(S, item_id, level)
+                if err:
+                    return web.json_response({"ok": False, "error": err})
+                if not user.get("admin") and not await take_craft_slot(s, uid):
+                    await s.rollback()
+                    return web.json_response({"ok": False, "error": f"На сегодня собрано максимум ({CRAFT_DAILY_MAX}). Завтра можно снова"})
+                try:
+                    craft_n = int(S.get("craftN", 0) or 0) + 1
+                except (TypeError, ValueError, OverflowError):
+                    craft_n = 1
+                S["craftN"] = craft_n                    # сохранения, собранные до этого крафта, сервер больше не примет
+                # updated сравниваем для надёжности; главная защита от гонок — очередь выше
+                res = await s.execute(update(GameSave).where(GameSave.tg_id == uid, GameSave.updated == row.updated)
+                                      .values(data=json.dumps(data, ensure_ascii=False), updated=int(time.time()))
+                                      .execution_options(synchronize_session=False))
+                if res.rowcount != 1:
+                    await s.rollback()
+                    return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
+                await add_spheres(s, uid, item_id, 1)
+                await s.commit()
             metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "wings" if item_id in WINGS else "cloak" if item_id in CLOAKS else "rune"))
-            return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0)})
+            return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0), "craftN": craft_n})
 
         if op in ("socket", "unsocket"):
             # руна вставлена в вещь или вынута: её учёт переходит в «гнездо» (s:<id>) и обратно.

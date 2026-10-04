@@ -19,7 +19,7 @@ from config import (WORLD_HZ, VIEW_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BUR
 from db import SessionLocal, engine, db_ping, dispose as db_dispose
 import metrics
 import realtime
-from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist, Player
+from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist, Player, FirstSeen
 import chipwar
 import funnel
 import mobguard
@@ -200,58 +200,94 @@ async def api_load(request):
 
 async def api_save(request):
     body, user = await read_auth(request)
-        # Открытая до сброса вкладка продолжает посылать старый локальный инвентарь.
+    # Открытая до сброса вкладка продолжает посылать старый локальный инвентарь.
     # Не принимаем его ни от обычного игрока, ни от администратора.
     if body.get("epoch") != DATA_EPOCH:
         raise web.HTTPConflict(text="stale epoch")
     data = body.get("data")
-    raw = json.dumps(data, ensure_ascii=False)
-    if not isinstance(data, dict) or len(raw.encode()) > MAX_SAVE_BYTES:
+    if not isinstance(data, dict):
         raise web.HTTPBadRequest(text="bad save")
-    async with SessionLocal() as s:
-        row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
-        if not row:
-            row = GameSave(tg_id=user["id"])
-            s.add(row)
-        elif not user["admin"] and saveguard.MODE != "off" and row.epoch == DATA_EPOCH and row.data:
-            # проверка сохранения: структура и скачки лома/ядер/заточки относительно прошлого сохранения
-            try:
-                old = json.loads(row.data)
-            except ValueError:
-                old = None
-            since = int(row.updated or 0)
-            granted = {}
-            for g in (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.created >= since))).scalars().all():
+    raw = json.dumps(data, ensure_ascii=False)
+    if len(raw.encode()) > MAX_SAVE_BYTES:
+        raise web.HTTPBadRequest(text="bad save")
+    s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
+    # сохранение и серверный крафт этого игрока — строго по очереди (см. saveguard.player_lock)
+    async with saveguard.player_lock(user["id"]):
+        async with SessionLocal() as s:
+            row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+            if not row:
+                row = GameSave(tg_id=user["id"])
+                s.add(row)
+            old = None
+            if row.data and row.epoch == DATA_EPOCH:
                 try:
-                    pl = json.loads(g.payload or "{}")
-                    key = "sph" if g.kind == "item" and pl.get("item") in saveguard.SPHERES else g.kind
-                    granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
-                except (ValueError, TypeError, AttributeError):
-                    pass
-            data, notes = saveguard.check(user["id"], user["username"] or user["name"], old, data, time.time() - since, granted)
-            if notes:
-                log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
-            if data is None:
-                return web.json_response({"ok": False, "error": "save rejected"}, status=409)
+                    old = json.loads(row.data)
+                except ValueError:
+                    old = None
+            # Счётчик крафтов: сервер увеличивает его при каждом крафте и пишет в сохранение.
+            # Сохранение со счётчиком меньше серверного собрано на телефоне ДО ответа на крафт —
+            # в нём ещё нет списанных ресурсов. Принять его значит отдать вещь бесплатно.
+            old_craft = 0
+            if isinstance(old, dict) and isinstance(old.get("S"), dict):
+                try:
+                    old_craft = int(old["S"].get("craftN", 0) or 0)
+                except (TypeError, ValueError):
+                    old_craft = 0
+            if old_craft:
+                if "craftN" in s_:
+                    try:
+                        new_craft = int(s_.get("craftN") or 0)
+                    except (TypeError, ValueError):
+                        new_craft = 0
+                    if new_craft < old_craft:
+                        metrics.inc("save.stale_craft")
+                        return web.json_response({"ok": False, "error": "stale save"}, status=409)
+                else:
+                    s_["craftN"] = old_craft                 # старая версия страницы счётчик не знает — не теряем его
+            if not user["admin"] and saveguard.MODE != "off":
+                since = int(row.updated or 0) if old is not None else 0
+                if old is None:
+                    # первое сохранение (или первое после вайпа) раньше не проверялось вовсе: сравниваем с пустым,
+                    # время — с первого входа в игру
+                    first = (await s.execute(select(FirstSeen.ts).where(FirstSeen.tg_id == user["id"]))).scalar()
+                    dt = time.time() - first if first else 60
+                    base = {"S": {}}
+                else:
+                    dt = time.time() - since
+                    base = old
+                # проверка сохранения: структура и скачки лома/ядер/заточки относительно прошлого сохранения
+                granted = {}
+                for g in (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.created >= since))).scalars().all():
+                    try:
+                        pl = json.loads(g.payload or "{}")
+                        key = "sph" if g.kind == "item" and pl.get("item") in saveguard.SPHERES else g.kind
+                        granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
+                    except (ValueError, TypeError, AttributeError):
+                        pass
+                data, notes = saveguard.check(user["id"], user["username"] or user["name"], base, data, dt, granted)
+                if notes:
+                    log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
+                if data is None:
+                    return web.json_response({"ok": False, "error": "save rejected"}, status=409)
+                s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
             raw = json.dumps(data, ensure_ascii=False)
-        row.epoch = DATA_EPOCH
-        row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
-        s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
-        try:
-            # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
-            cap = 999 if user["admin"] else await progress.cap_of(s, user["id"])
-            row.lvl = max(1, min(cap, int(s_.get("level", 1))))
-            row.bm = max(0, min(10_000_000 if user["admin"] else progress.bm_cap(row.lvl), int(data.get("bm", 0))))
-        except (TypeError, ValueError):
-            pass
-        new_nick = str(s_.get("name", ""))[:16]
-        if new_nick and new_nick != row.nick:
-            clash = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == new_nick.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
-            if not clash:
-                row.nick = new_nick
-        row.cls = s_.get("cls") if s_.get("cls") in CLASSES and s_.get("cls") else ""
-        row.guild_id = str(s_.get("guildId", ""))[:64]
-        await s.commit()
+            row.epoch = DATA_EPOCH
+            row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
+            try:
+                # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
+                cap = 999 if user["admin"] else await progress.cap_of(s, user["id"])
+                row.lvl = max(1, min(cap, int(s_.get("level", 1))))
+                row.bm = max(0, min(10_000_000 if user["admin"] else progress.bm_cap(row.lvl), int(data.get("bm", 0))))
+            except (TypeError, ValueError, OverflowError):
+                pass
+            new_nick = str(s_.get("name", ""))[:16]
+            if new_nick and new_nick != row.nick:
+                clash = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == new_nick.lower(), GameSave.tg_id != user["id"]))).scalar_one_or_none()
+                if not clash:
+                    row.nick = new_nick
+            row.cls = s_.get("cls") if s_.get("cls") in CLASSES and s_.get("cls") else ""
+            row.guild_id = str(s_.get("guildId", ""))[:64]
+            await s.commit()
     return web.json_response({"ok": True})
 
 
@@ -1762,6 +1798,7 @@ async def cleanup_loop():
             for uid in [u for u, t in report_t.items() if now - t > 60]:
                 report_t.pop(uid, None)
             mobguard.cleanup(online_ids)
+            saveguard.cleanup(online_ids)
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})
         except Exception:

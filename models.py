@@ -254,6 +254,15 @@ class LootDay(Base):
     kills: Mapped[int] = mapped_column(Integer, default=0)        # взвешенно: главарь считается за 10
 
 
+class CraftDay(Base):
+    """Сколько вещей игрок собрал на сервере за сутки (UTC): учтённые вещи продаются за GRAM, поэтому крафт ограничен."""
+    __tablename__ = "craft_day"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    day: Mapped[int] = mapped_column(Integer, default=0)          # номер суток от 1970-01-01 (UTC)
+    n: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class FunnelEvent(Base):
     """Первый раз, когда игрок дошёл до шага воронки новичка (один раз на шаг)."""
     __tablename__ = "funnel_events"
