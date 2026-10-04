@@ -1363,7 +1363,8 @@ for(const T of TIERS){
   if(b) ITEMS["g_phaseblades_" + T.n] = {...b, name:T.adj[2] + " фазовые клинки", cls:"ghost", atk:Math.round(b.atk*1.1), crit:(b.crit || 0) + 1};
   if(h) ITEMS["g_glaive_" + T.n] = {...h, name:T.adj[1] + " глефа", cls:"glyph", hp:Math.round((h.def || 1)*3)};
 }
-CLASS_WPN.ghost = "phaseblades"; CLASS_WPN.glyph = "glaive";
+for(const T of TIERS){ const st = ITEMS["g_staff_" + T.n]; if(st) ITEMS["g_emitter_" + T.n] = {...st, name:T.adj[0] + " ремонтный излучатель", cls:"medic", atk:Math.round(st.atk*0.85), hp:Math.round((st.hp || 8)*1.6)}; }
+CLASS_WPN.ghost = "phaseblades"; CLASS_WPN.glyph = "glaive"; CLASS_WPN.medic = "emitter";
 const GEAR_IDS = Object.keys(ITEMS).filter(k => ITEMS[k].type === "gear" );
 // самые старые вещи (до поколений) → новые; W1/W3 — оружие класса владельца
 const LEGACY_GEAR = {st_head:"g_sensor_1", sensor1:"g_sensor_1", sensor2:"g_sensor_3", st_armor:"g_armor_1", plate1:"g_armor_1", plate2:"g_armor_3",
@@ -1455,7 +1456,13 @@ const CLASSES = {
     {id:"gravity", lore:"Глиф искривляет поле, стягивает металл к центру и схлопывается.", name:"Глиф притяжения", desc:"Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×1,6 урона", cd:14, type:"gravity", radius:150, mult:1.6, pvpAs:"aoe"},
     {id:"chain", lore:"Разряд прыгает от глифа к глифу и с каждой целью набирает силу.", name:"Цепь глифов", desc:"Разряд по 5 целям подряд, каждый следующий прыжок +15% урона", cd:10, type:"chain", n:5, mult:1.2, pvpAs:"strike"},
     {id:"seal", lore:"Зеркальная печать возвращает удары тем, кто их нанёс.", name:"Печать отражения", desc:"5 сек: −40% входящего урона, 40% урона возвращается атакующему", cd:20, type:"buff", buff:"reflect", v:0.4, dur:5},
-    {id:"recall", lore:"Руна запоминает точку. Вызови её снова — и ты уже там, с починенным корпусом.", name:"Руна возврата", desc:"Ставит руну на 10 сек; повторное нажатие — возврат к руне и +15% прочности", cd:16, type:"recall", v:0.15}]}
+    {id:"recall", lore:"Руна запоминает точку. Вызови её снова — и ты уже там, с починенным корпусом.", name:"Руна возврата", desc:"Ставит руну на 10 сек; повторное нажатие — возврат к руне и +15% прочности", cd:16, type:"recall", v:0.15}]},
+  // ===== Ремонтник: чистый лекарь. Слабый урон, лечение по % прочности цели, щит и облако нанитов =====
+  medic:{name:"Ремонтник", role:"Поддержка · лечение", color:"#6EE7A8", hp:1.1, atk:0.7, def:1.1, speed:170, rate:1.0, range:230, melee:false, skills:[
+    {id:"mend", lore:"Сварочный луч стягивает трещины в броне и перезапускает повреждённые узлы.", name:"Ремонтный луч", desc:"Чинит выбранного союзника на 16% его прочности; без выбора — самого раненого рядом (или тебя). По целям ниже 40% прочности — сильнее", cd:7, type:"mend", v:0.16, dist:380},
+    {id:"nanoswarm", lore:"Облако нанороботов оседает на корпусах и латает их, пока не кончится заряд.", name:"Рой нанитов", desc:"Облако на 6 сек в радиусе 150: тебе и союзникам внутри +3,5% прочности в секунду", cd:20, type:"nanofield", v:0.035, dur:6, radius:150},
+    {id:"aegis", lore:"Генератор накидывает на цель тонкую силовую сетку, гасящую удары.", name:"Щит-контур", desc:"Союзник (или ты) получает на 30% меньше урона 5 сек, работает и в PvP", cd:18, type:"shieldcast", v:0.3, dur:5, dist:380},
+    {id:"surge", lore:"Излучатель на миг меняет полярность: энергия врага уходит на ремонт своих.", name:"Разрядник", desc:"Разряд по врагу ×1,5 урона; 50% нанесённого урона чинит самого раненого союзника рядом или тебя", cd:8, type:"siphon", mult:1.5, v:0.5, pvpAs:"strike"}]}
 };
 const NO_CLASS = {hp:1, atk:1, def:1, speed:175, rate:1/0.55, range:240, melee:false};
 const clsOf = id => CLASSES[id] || null;
@@ -1499,6 +1506,8 @@ const PASSIVES = [
   {id:"longshot",  cls:"sniper", name:"Дальнобой",          per:12,  unit:"",   desc:"+12 к дальности атаки за уровень"},
   {id:"overload",  cls:"techno", name:"Перегрузка",         per:4,   unit:"%",  desc:"+4% урона умений за уровень"},
   {id:"cyclotron", cls:"techno", name:"Циклотрон",          per:2.5, unit:"%", sign:"−",  desc:"−2,5% перезарядки умений за уровень"},
+  {id:"fieldrep",  cls:"medic",  name:"Полевой ремонт",     per:4,   unit:"%",  desc:"+4% к силе лечения за уровень"},
+  {id:"triage",    cls:"medic",  name:"Сортировка раненых", per:6,   unit:"%",  desc:"+6% лечения по целям с прочностью ниже 40% за уровень"},
   {id:"swift",     cls:null,     name:"Стремительность",    per:2,   unit:"%",  desc:"+2% скорости атаки за уровень"},
   {id:"vital",     cls:null,     name:"Живучесть",          per:3,   unit:"%",  desc:"+3% максимальной прочности за уровень"},
   {id:"fury",      cls:null,     name:"Боевой раж",         per:4,   unit:"%",  desc:"+4% силы крита за уровень"},
@@ -1544,7 +1553,8 @@ for(const k in S.eq){ if(typeof S.eq[k] === "string") S.eq[k] = {id:S.eq[k], g:0
 migrateGearIds();
 // предметы без грейда становятся серыми
 for(const k in S.eq){ if(typeof S.eq[k] === "string") S.eq[k] = ITEMS[S.eq[k]] ? {id:S.eq[k], g:0} : null; if(S.eq[k] && !ITEMS[S.eq[k].id]) S.eq[k] = null; }
-for(const list of [S.inv, S.store]) for(let i = list.length-1; i >= 0; i--){ if(!ITEMS[list[i].id]) list.splice(i,1); else if(ITEMS[list[i].id].type === "gear" && list[i].g === undefined) list[i].g = 0; }
+// чистка неизвестных предметов перенесена ниже (после описания дронов и артефактов): раньше она стирала их при каждом входе
+for(const list of [S.inv, S.store]) for(const x of list){ if(ITEMS[x.id] && ITEMS[x.id].type === "gear" && x.g === undefined) x.g = 0; }
 if(!S.starterGiven){
   for(const [slot, id] of Object.entries(STARTER)){
     if(!S.eq[slot]) S.eq[slot] = {id, g:0};
@@ -1642,6 +1652,8 @@ const ART_IDS = Object.keys(ARTS);
 for(const id of ART_IDS){ const A = ARTS[id]; ITEMS[id] = {name:A.name, type:"artifact", sell:0, nosell:true, desc:runeText(A) + " · надевается в слот артефакта"}; }
 const artOwned = id => !!ARTS[id] && count(S.inv, id) + count(S.store, id) > 0;
 function artOn(){ const id = S.art; return id && ARTS[id] && artOwned(id) ? ARTS[id] : null; }
+// теперь все предметы (включая дронов и артефакты) уже описаны — убираем только то, чего в игре действительно нет
+for(const list of [S.inv, S.store]) for(let i = list.length-1; i >= 0; i--){ if(!ITEMS[list[i].id]) list.splice(i,1); else if(ITEMS[list[i].id].type === "gear" && list[i].g === undefined) list[i].g = 0; }
 
 function stat(){
   const C = classParams(), U = S.up || {};
@@ -2791,7 +2803,7 @@ function openSheet(title, sub, renderFn){
   $("shTitle").textContent = title; $("shSub").textContent = sub;
   sheetRender = renderFn; renderFn();
   $("sheet").classList.add("open"); paused = true; firing = false;
-  stick = {id:null, ox:0, oy:0, x:0, y:0}; const kn = $("knob"); if(kn) kn.style.transform = ""; const jy = $("joy"); if(jy) jy.classList.remove("active");
+  try{ joyReset(); }catch(_){ stick = {id:null, ox:0, oy:0, x:0, y:0}; const kn = $("knob"); if(kn) kn.style.transform = ""; const jy = $("joy"); if(jy) jy.classList.remove("active"); }
 }
 function closeSheet(){ $("sheet").classList.remove("open"); sheetRender = null; paused = false; save(); }
 $("shClose").addEventListener("click", () => closeSheet());
@@ -5246,7 +5258,7 @@ function onNetExtra(d){
   } else if(d.t === "healed"){
     const mh = stat().maxhp, a = Math.max(0, +d.amount || 0);
     S.hp = Math.min(mh, S.hp + a); addText(p.x, p.y - 40, "+" + a, "#7BC98A");
-    toast(String(d.from || "Союзник").slice(0, 16) + " подлатал тебя: +" + a); Sfx.play("pick");
+    if(!d.q){ toast(String(d.from || "Союзник").slice(0, 16) + " подлатал тебя: +" + a); Sfx.play("pick"); }
   } else if(d.t === "pxp"){
     const a = Math.max(0, Math.min(500, +d.amount || 0)); if(!a) return;
     S.exp += a; addText(p.x, p.y - 56, "+" + a + " опыта (пати)", "#5FD4E8");
@@ -5840,6 +5852,25 @@ function buildSprite(kind, P, anim, f){
     if(fw){ for(const [x, y] of [[44, 9], [46, 11], [45, 13], [47, 8], [43, 7]]) put(x, y + B, P.glowHi, true); }
   }
 
+  else if(kind === "medic"){
+    // ---- Ремонтник: округлый корпус, ранец-бак с нанитами, крест на груди, излучатель с кольцом ----
+    legPair(4, 15, 21);
+    block(9, 17 + B, 7, 12, P.dk, P.md, P.dd, P.lt);                                   // ранец
+    for(let j = 0; j < 8; j++) put(12, 19 + B + j, j % 2 ? P.glow : P.glowHi, true);   // шкала бака
+    line(11, 16 + B, 11, 9 + B, P.dd); put(11, 8 + B, idleGlow ? P.glowHi : P.glow, true);
+    rect(15, 30 + B, 11, 2, P.dd);
+    block(14, 18 + B, 13, 13, P.md, P.lt, P.dk, P.hi);                                 // корпус
+    rect(19, 21 + B, 3, 7, P.glow, true); rect(17, 23 + B, 7, 3, P.glow, true); put(20, 24 + B, "#FFFFFF", true);
+    line(15, 29 + B, 25, 29 + B, P.arm);
+    disc(20, 13 + B, 4, P.md); for(let x = 17; x <= 23; x++) put(x, 9 + B, P.hi);       // круглая голова
+    rect(18, 13 + B, 6, 2, "#0B0F13"); rect(19, 13 + B, 5, 1, P.eye, true); put(16, 13 + B, P.trim);
+    block(25, 21 + B, 4, 4, P.md, P.lt, P.dk);
+    if(anim === "attack"){
+      rect(28, 22 + B, 9, 2, P.gun); rect(28, 22 + B, 9, 1, P.gunHi);
+      for(let a = 0; a < 12; a++) put(39 + Math.round(Math.cos(a/12*Math.PI*2)*3), 23 + B + Math.round(Math.sin(a/12*Math.PI*2)*3), a % 3 ? P.wpn : P.glowHi, true);
+      if(f === 0) for(const [x, y] of [[43, 23], [44, 22], [44, 24], [45, 23]]) put(x, y + B, P.glowHi, true);
+    } else { rect(28, 23 + B, 6, 2, P.gun); put(34, 23 + B, P.wpn, true); put(34, 24 + B, P.wpn, true); put(35, 23 + B, P.glowHi, true); }
+  }
   else {
     legPair(4, 15, 21);
     rect(15, 30 + B, 11, 2, P.dd);
@@ -7894,6 +7925,7 @@ const PVP_STYLE = {
   sniper:{kind:"tracer", c1:"#EFFFD8", c2:"#7BC98A", speed:1700},   // быстрый трассер
   guard:{kind:"melee", c1:"#FFB26B", c2:"#E08A4E"},
   reaper:{kind:"melee", c1:"#D6B8FF", c2:"#9B7BFF"},
+  medic:{kind:"bolt", c1:"#E2FFF0", c2:"#6EE7A8", speed:900},
   "":{kind:"bolt", c1:"#BFF6FF", c2:"#5FD4E8", speed:1000}
 };
 const unitBars = () => typeof locKey !== "undefined" && LOCS[locKey] && !LOCS[locKey].safe;
@@ -9068,6 +9100,15 @@ async function regSync(){
   try{
     const r = await regApi("state"); if(!r || !r.ok) return;
     REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = Object.fromEntries(REG_IDS.map(id => [id, +(r.sph || {})[id] || 0]));
+    // дроны и артефакты, которые сервер за игроком числит, но которых нет в сумке и на складе:
+    // их стирала старая ошибка загрузки сохранения — возвращаем
+    const back = [];
+    for(const id of [...DRONE_IDS, ...ART_IDS]){
+      let miss = (REG.sph[id] || 0) - (count(S.inv, id) + count(S.store, id));
+      while(miss-- > 0){ if(addItem(S.inv, id, 1, INV_MAX) || addItem(S.store, id, 1, STORE_MAX)) back.push(ITEMS[id].name); else break; }
+    }
+    if(back.length){ if(S.drone && !droneOn()) S.drone = ""; if(!droneOn()){ const d = DRONE_IDS.find(droneOwned); if(d) S.drone = d; }
+      toast("Возвращено: " + back.join(", ")); }
     const byUid = Object.fromEntries(r.items.map(x => [x.uid, x]));
     const fix = x => { if(!x || !x.uid) return; const s = byUid[x.uid]; if(!s || s.id !== x.id){ delete x.uid; return; } x.g = s.g; x.e = s.e; };
     [...S.inv, ...S.store, ...Object.values(S.eq)].forEach(fix);
@@ -9864,8 +9905,17 @@ function applyJoy(){
   joy.style.setProperty("--ja", S.settings.joyAlpha);
   joy.style.setProperty("--js", S.settings.joySize);
 }
+// сброс стика: палец отпущен, касание отменено системой, окно свернули, открыли другую вкладку
+function joyReset(){
+  if(stick.id !== null){ try{ if(joy.hasPointerCapture && joy.hasPointerCapture(stick.id)) joy.releasePointerCapture(stick.id); }catch(_){} }
+  stick = {id:null, ox:0, oy:0, x:0, y:0}; joy.classList.remove("active"); knob.style.transform = "";
+  if(joyHome){ joy.style.left = joyHome.left; joy.style.top = joyHome.top; joy.style.bottom = joyHome.bottom; joyHome = null; }
+}
 function joyStart(e){
-  if(stick.id !== null || window.layEditing) return;
+  if(window.layEditing) return;
+  // на стике может лежать только один палец: если старое касание «потерялось» (iOS не прислал pointerup
+  // после смены вкладки или системного жеста), новое касание забирает стик, а не игнорируется — раньше стик застревал
+  if(stick.id !== null && stick.id !== e.pointerId){ const keepHome = joyHome; joyHome = null; joyReset(); joyHome = keepHome; }
   stick = {id:e.pointerId, x:0, y:0};
   joy.classList.add("active");
   try{ joy.setPointerCapture(e.pointerId); }catch(_){}
@@ -9881,12 +9931,21 @@ function joyMove(e){
 }
 function joyEnd(e){
   if(e.pointerId !== stick.id) return;
-  stick = {id:null, x:0, y:0}; joy.classList.remove("active"); knob.style.transform = "";
-  if(joyHome){ joy.style.left = joyHome.left; joy.style.top = joyHome.top; joy.style.bottom = joyHome.bottom; joyHome = null; }
+  joyReset();
 }
 joy.addEventListener("pointerdown", e => { e.preventDefault(); joyStart(e); });
 joy.addEventListener("pointermove", joyMove);
 joy.addEventListener("pointerup", joyEnd); joy.addEventListener("pointercancel", joyEnd);
+joy.addEventListener("lostpointercapture", joyEnd);
+// отпускание пальца ловим и на всём окне: элемент мог потерять захват (перерисовка, смена экрана)
+window.addEventListener("pointerup", joyEnd, true); window.addEventListener("pointercancel", joyEnd, true);
+// на iOS последний палец ушёл с экрана — стик точно свободен
+window.addEventListener("touchend", e => { if(stick.id !== null && (!e.touches || e.touches.length === 0)) joyReset(); }, true);
+window.addEventListener("touchcancel", () => { if(stick.id !== null) joyReset(); }, true);
+document.addEventListener("visibilitychange", () => { if(document.hidden) joyReset(); });
+window.addEventListener("blur", joyReset); window.addEventListener("pagehide", joyReset);
+// экран игры скрыт (Профиль, Персонаж, Карта…) или открыт редактор кнопок — стик отпускаем
+setInterval(() => { if(stick.id !== null && (window.layEditing || !scrG.offsetParent || scrG.hidden)) joyReset(); }, 250);
 // «плавающий» режим: касание левой части экрана переносит стик под палец
 function joyFloatStart(e){
   if(!S.settings.joyFloat || stick.id !== null || window.layEditing) return;
@@ -10847,6 +10906,191 @@ function adSuspects(sx){
   return `<div class="dsect">Отклонённые убийства за сутки</div><div class="stline">Проверка боя с мобами: <b>${mode}</b></div>` +
     (sx.list.length ? sx.list.map(x => `<div class="stline">${esc(x.nick)} <small>ур. ${x.lvl} · id ${x.uid}</small> — <b>${x.rejects}</b></div>`).join("") : `<div class="empty">Отказов нет</div>`);
 }
+
+// ===================== РЕМОНТНИК: ЛЕЧЕНИЕ, ЩИТ-КОНТУР, РОЙ НАНИТОВ =====================
+// Баланс: урон класса низкий (×0,7 атаки), лечение считается от прочности цели (не от атаки — иначе снаряжение
+// на урон делало бы из лекаря «бога»), щит не сильнее −45%, в PvP-бою лечение слабее на 40%.
+// Лечение союзников проверяет сервер: только пати/гильдия, рядом, и не больше «запаса лечения» лекаря в секунду.
+const MED = {field:null, pvpT:0};
+const MED_RANGE = 380, MED_SHIELD_MAX = 0.45, MED_SIPHON_MAX = 0.75, MED_PVP = 0.6;
+BUFF_COLOR.shield = "#6EE7A8";
+Object.assign(SKILL_ART, {
+  mend:I => `<path d="M12 50 44 18" stroke="${I.L}" stroke-width="8" opacity=".35" filter="url(#${I.u}sg)"/>
+    <path d="M12 50 44 18" stroke="url(#${I.u}e)" stroke-width="3.4" stroke-linecap="round"/>
+    <rect x="38" y="8" width="8" height="22" rx="2" fill="#fff"/><rect x="31" y="15" width="22" height="8" rx="2" fill="#fff"/>
+    <rect x="40" y="10" width="4" height="18" fill="${I.c}"/><rect x="33" y="17" width="18" height="4" fill="${I.c}"/>
+    <circle cx="12" cy="50" r="5" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.4"/>`,
+  nanoswarm:I => `<circle cx="32" cy="34" r="20" fill="${I.L}" opacity=".18"/><circle cx="32" cy="34" r="20" fill="none" stroke="${I.L}" stroke-width="2" stroke-dasharray="3 4"/>
+    ${[[22, 26], [40, 22], [30, 40], [44, 38], [18, 40], [34, 28], [26, 48], [42, 48]].map(([x, y], k) => `<circle cx="${x}" cy="${y}" r="${k % 3 ? 2.4 : 3.2}" fill="url(#${I.u}e)"/>`).join("")}
+    <path d="M28 34h8M32 30v8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`,
+  aegis:I => `<path d="M32 8 52 16v16c0 12-9 20-20 24C21 52 12 44 12 32V16z" fill="${I.L}" opacity=".25" stroke="url(#${I.u}e)" stroke-width="3"/>
+    <path d="M22 22h20M20 30h24M22 38h20M27 16v30M37 16v30" stroke="${I.L}" stroke-width="1.2" opacity=".7"/>
+    <path d="M32 24v14M25 31h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`,
+  surge:I => `<path d="M36 6 18 34h12l-4 24 20-30H34z" fill="url(#${I.u}e)" stroke="#1B2129" stroke-width="1.4"/>
+    <path d="M46 44a10 10 0 1 1-6-12" stroke="${I.L}" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M40 28l2 5-5 1" stroke="${I.L}" stroke-width="2.6" fill="none"/>`
+});
+const medMul = () => 1 + 0.04*pasLv("fieldrep");
+const medInPvp = () => typeof pvpZone === "function" && pvpZone() && now - MED.pvpT < 10;
+const medFrac = o => o === "self" ? S.hp/Math.max(1, stat().maxhp) : (+o.hp || 0)/Math.max(1, +o.mhp || 1);
+// союзники (пати/гильдия) рядом с точкой
+function medFriends(r, x, y){
+  const out = []; if(typeof NET === "undefined" || !NET.others) return out;
+  for(const o of NET.others.values()){
+    if(!o || !(+o.hp > 0) || (o.loc && o.loc !== locKey) || !isFriend(o)) continue;
+    if(Math.hypot(o.rx - x, o.ry - y) <= r && los(p.x, p.y, o.rx, o.ry)) out.push(o);
+  }
+  return out;
+}
+// кого лечить: выбранный союзник; иначе самый раненый из союзников рядом и тебя
+function medPick(r){
+  const o = typeof tgtPlayer === "function" ? tgtPlayer() : null;
+  if(o && isFriend(o) && +o.hp > 0){
+    if(Math.hypot(o.rx - p.x, o.ry - p.y) > r){ toast("Союзник далеко: подойди ближе"); return null; }
+    if(!los(p.x, p.y, o.rx, o.ry)){ toast("Союзник за стеной"); return null; }
+    return o;
+  }
+  let best = "self", bf = medFrac("self");
+  for(const f of medFriends(r, p.x, p.y)){ const k = medFrac(f); if(k < bf){ bf = k; best = f; } }
+  return best;
+}
+function medAmount(target, frac){
+  const mhp = target === "self" ? stat().maxhp : +target.mhp || 1;
+  let a = mhp*frac*medMul();
+  if(medFrac(target) < 0.4) a *= 1 + 0.06*pasLv("triage");
+  return Math.max(1, Math.round(a));
+}
+function medHeal(target, amount, quiet){
+  if(target === "self"){
+    if(medInPvp()) amount = Math.round(amount*MED_PVP);
+    const mx = stat().maxhp, got = Math.min(amount, Math.max(0, mx - S.hp));
+    S.hp = Math.min(mx, S.hp + amount); healCP(amount);
+    if(!quiet || got > 0) addText(p.x + (Math.random()*16 - 8), p.y - 44, "+" + Math.round(amount), "#6EE7A8");
+    netSend({t:"cheal", to:(typeof NET !== "undefined" ? NET.id : 0), amount});            // сервер видит лечение (PvP-учёт прочности)
+    return;
+  }
+  if(netSend({t:"cheal", to:target.id, amount})) addText(target.rx + (Math.random()*16 - 8), target.ry - 44, "+" + amount, "#6EE7A8");
+}
+const medTx = t => t === "self" ? [p.x, p.y] : [t.rx, t.ry];
+function medSkill(i, s){
+  const C = clsOf(S.cls), st = stat();
+  const done = () => { CB.cd[i] = s.cd*(1 - st.cdr); Sfx.play("pick"); if(Sfx.haptic) Sfx.haptic("light");
+    if(typeof tutSkillUses !== "undefined") tutSkillUses++; if(typeof questEvent === "function") questEvent("skill"); };
+  if(s.type === "mend"){
+    const t = medPick(s.dist || MED_RANGE); if(!t) return;
+    const [x, y] = medTx(t);
+    if(t !== "self") CB.fx.push({type:"trail", x1:p.x, y1:p.y - 20, x2:x, y2:y - 20, life:.45, max:.45, c:C.color});
+    CB.fx.push({type:"ring", x, y, r:34, life:.5, max:.5, c:C.color});
+    p.aim = p.ang = t === "self" ? p.aim : Math.atan2(y - p.y, x - p.x); p.atkT = 0.25;
+    medHeal(t, medAmount(t, s.v)); done(); return;
+  }
+  if(s.type === "nanofield"){
+    MED.field = {x:p.x, y:p.y, r:s.radius, until:now + s.dur, v:s.v, next:now};
+    CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius, life:.5, max:.5, c:C.color});
+    done(); return;
+  }
+  if(s.type === "shieldcast"){
+    const t = medPick(s.dist || MED_RANGE); if(!t) return;
+    const v = Math.min(MED_SHIELD_MAX, s.v), dur = s.dur, [x, y] = medTx(t);
+    if(t === "self"){ CB.buffs.shield = {v, t:dur, max:dur}; addText(p.x, p.y - 50, "Щит-контур", C.color); netSend({t:"cbuff", to:(typeof NET !== "undefined" ? NET.id : 0), k:"shield", v, dur}); }
+    else { if(!netSend({t:"cbuff", to:t.id, k:"shield", v, dur})){ toast("Нет связи с сервером"); return; }
+      CB.fx.push({type:"trail", x1:p.x, y1:p.y - 20, x2:x, y2:y - 20, life:.4, max:.4, c:C.color}); addText(x, y - 50, "Щит-контур", C.color); }
+    for(let k = 0; k < 2; k++) CB.fx.push({type:"ring", x, y, r:30 + k*10, life:.4 + k*.15, max:.4 + k*.15, c:C.color});
+    done(); return;
+  }
+  if(s.type === "siphon"){
+    const e = ncTarget(classParams().range + st.range + 60); if(!e){ toast("Нет цели рядом"); return; }
+    if(typeof tgt !== "undefined" && (!tgt || tgt.kind !== "enemy")){ tgt = {kind:"enemy", e}; if(typeof renderTargetFrame === "function") renderTargetFrame(); }
+    const before = e.hp, atk = st.atk*(1 + buffV("atk"))*(1 + st.skillDmg);
+    p.aim = p.ang = Math.atan2(e.y - p.y, e.x - p.x); p.atkT = 0.25;
+    hitEnemy(e, atk*s.mult, "plasma");
+    const dealt = Math.max(0, before - (e._raw != null ? e._raw : e.hp)) || Math.round(atk*s.mult*0.5);
+    const t = medPick(MED_RANGE) || "self";
+    const [x, y] = medTx(t);
+    beams.push({x1:e.x, y1:e.y - 16, x2:x, y2:y - 20, life:0.3});
+    medHeal(t, Math.max(1, Math.round(dealt*Math.min(MED_SIPHON_MAX, s.v)*medMul())));
+    done(); return;
+  }
+}
+{
+  const MED_TYPES = ["mend", "nanofield", "shieldcast", "siphon"];
+  const _useMed = useSkill;
+  useSkill = function(i){
+    const C = clsOf(S.cls); if(!C || CB.cd[i] > 0 || !p || p.dead || paused) return _useMed(i);
+    const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+    if(!MED_TYPES.includes(s.type)) return _useMed(i);
+    if(s.type === "siphon"){
+      const o = typeof tgtPlayer === "function" ? tgtPlayer() : null;
+      if(o && !isFriend(o) && pvpZone()) return _useMed(i);              // по вражескому пилоту — обычный удар через PvP-обёртку
+      if(locKey === "lobby"){ toast("Нет цели рядом"); return; }
+    }
+    medSkill(i, s);
+  };
+}
+// щит: −X% входящего урона от мобов (урон в PvP уже уменьшает сервер)
+{
+  const _hurtMed = hurtPlayer;
+  hurtPlayer = function(dmg, by, src){ const v = buffV("shield"); if(v > 0) dmg *= 1 - v; return _hurtMed(dmg, by, src); };
+}
+// входящее: щит от союзного лекаря; удары игроков — для учёта «PvP-боя»
+{
+  const prevMed = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "cbuff" && d.k === "shield"){
+      const v = Math.max(0, Math.min(MED_SHIELD_MAX, +d.v || 0)), dur = Math.max(0, Math.min(9, +d.dur || 0));
+      if(v && dur && p){ CB.buffs.shield = {v, t:dur, max:dur}; addText(p.x, p.y - 50, "Щит-контур", "#6EE7A8"); toast(String(d.from || "Союзник").slice(0, 16) + " накрыл тебя щитом"); }
+      return;
+    }
+    if(d.t === "pvp_hit") MED.pvpT = now;
+    prevMed(d);
+  };
+}
+// рой нанитов: раз в секунду чинит тебя и союзников внутри облака
+setInterval(() => {
+  const F = MED.field; if(!F) return;
+  if(now >= F.until || !p || p.dead){ MED.field = null; return; }
+  if(now < F.next) return;
+  F.next = now + 1;
+  if(Math.hypot(p.x - F.x, p.y - F.y) <= F.r) medHeal("self", Math.round(stat().maxhp*F.v*medMul()), true);
+  for(const o of medFriends(F.r, F.x, F.y)) medHeal(o, medAmount(o, F.v));
+}, 200);
+{
+  const _layerMed = drawPvpLayer;
+  drawPvpLayer = function(t, dt){
+    _layerMed(t, dt);
+    const F = MED.field; if(!F || now >= F.until) return;
+    const k = Math.max(0, (F.until - now)/6);
+    ctx.save();
+    ctx.globalAlpha = .10 + .05*Math.sin(t*4); ctx.fillStyle = "#6EE7A8"; circle(F.x, F.y, F.r); ctx.fill();
+    ctx.globalAlpha = .7; ctx.strokeStyle = "#6EE7A8"; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.lineDashOffset = -t*25; circle(F.x, F.y, F.r); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "#C8FFE0";
+    for(let n = 0; n < 22; n++){ const a = n*2.4 + t*(n % 2 ? .8 : -.6), rr2 = F.r*((n*37 % 100)/100)*.95;
+      ctx.globalAlpha = .35 + .3*Math.sin(t*5 + n); ctx.fillRect(F.x + Math.cos(a)*rr2 - 1.5, F.y + Math.sin(a)*rr2*.6 - 1.5 - (t*20 + n*7) % 18, 3, 3); }
+    ctx.restore();
+  };
+}
+// описание умений в окне навыков
+{
+  const _skT = skillText, _skTy = skillType;
+  skillText = function(s){
+    if(s.type === "mend") return `Лечение цели: ${pct(s.v)} её прочности · дальность ${s.dist}`;
+    if(s.type === "nanofield") return `Облако (радиус ${s.radius}): ${(s.v*100).toFixed(1).replace(".", ",")}% прочности в секунду · ${s.dur} сек`;
+    if(s.type === "shieldcast") return `Щит: −${pct(Math.min(MED_SHIELD_MAX, s.v))} входящего урона · ${s.dur} сек`;
+    if(s.type === "siphon") return `Разряд: ${pct(s.mult)} атаки · ${pct(Math.min(MED_SIPHON_MAX, s.v))} урона уходит на лечение`;
+    return _skT(s);
+  };
+  skillType = function(s){ return ["mend", "nanofield"].includes(s.type) ? "Лечение" : s.type === "shieldcast" ? "Защита" : s.type === "siphon" ? "Урон · лечение" : _skTy(s); };
+}
+// АВТО для Ремонтника: лечит раненых, ставит щит, бросает рой в бою и бьёт Разрядником
+setInterval(() => {
+  if(typeof auto === "undefined" || !auto || S.cls !== "medic" || !p || p.dead || paused) return;
+  const C = clsOf(S.cls), idx = ty => C.skills.findIndex(k => k.type === ty), ready = i => i >= 0 && !(CB.cd[i] > 0);
+  let low = medFrac("self"); for(const f of medFriends(MED_RANGE, p.x, p.y)) low = Math.min(low, medFrac(f));
+  const iM = idx("mend"), iS = idx("shieldcast"), iN = idx("nanofield"), iD = idx("siphon");
+  if(low < 0.45 && ready(iS)) return useSkill(iS);
+  if(low < 0.65 && ready(iM)) return useSkill(iM);
+  if(p.target && low < 0.85 && ready(iN)) return useSkill(iN);
+  if(p.target && locKey !== "lobby" && ready(iD) && Math.hypot(p.target.x - p.x, p.target.y - p.y) < classParams().range + stat().range + 60) useSkill(iD);
+}, 400);
 
 // ---- перевод страницы ----
 const trOrig = new WeakMap(), trDone = new WeakMap();

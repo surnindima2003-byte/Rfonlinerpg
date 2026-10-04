@@ -45,7 +45,7 @@ MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower"}
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда
 FACTIONS = {"aegis", "vex", "core"}
-CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph"}
+CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
 GEAR_IDS = items.GEAR_IDS | {"kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti"}
 LIMITS = {"scrap": 1_000_000, "cores": 100_000, "exp": 1_000_000, "level": 50, "item": 50}
@@ -761,6 +761,22 @@ parties = {}                 # id пати -> {"id", "leader", "members": [tg_id
 member_party = {}            # tg_id -> id пати
 invites = {}                 # tg_id приглашённого -> {tg_id пригласившего: время}
 last_heal = {}               # tg_id -> время последнего лечения
+med_bucket = {}              # tg_id Ремонтника -> [запас лечения, время] (сколько он может вылечить в секунду)
+med_shield = {}              # tg_id Ремонтника -> время последнего щита
+MED_RANGE = 460              # с запасом к дальности умений на телефоне (380) и задержке позиций
+MED_PVP = 0.6                # лечение по цели в PvP-бою слабее на 40%
+
+
+def med_budget(uid, lvl):
+    """Запас лечения Ремонтника: копится 20 + 6·уровень в секунду, не больше 8 секунд накопления."""
+    rate = 20 + 6 * max(1, int(lvl or 1))
+    now = time.time()
+    b = med_bucket.get(uid)
+    if not b:
+        b = med_bucket[uid] = [rate * 8.0, now]
+    b[0] = min(rate * 8.0, b[0] + (now - b[1]) * rate)
+    b[1] = now
+    return b
 
 
 def online(uid):
@@ -871,6 +887,48 @@ async def handle_party(d, info):
         amount = max(1, min(amount, 20 + 5 * info["lvl"], 400))
         pvpguard.heal(other, amount, tgt.get("mhp", 1))
         await push_to_player(other, {"t": "healed", "from": info["nick"], "amount": amount})
+    elif t in ("cheal", "cbuff"):
+        # умения Ремонтника: лечение и щит. Себя — всегда, других — только пати/гильдию рядом в той же локации
+        if info.get("cls") != "medic" or info.get("dead"):
+            return
+        tgt = info if other in (0, uid) else online(other)
+        if not tgt or tgt.get("dead"):
+            return
+        if tgt is not info:
+            pid = member_party.get(uid)
+            friend = (pid and member_party.get(other) == pid) or (info.get("gt") and info.get("gt") == tgt.get("gt"))
+            if not friend or tgt["loc"] != info["loc"]:
+                return
+            if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > MED_RANGE:
+                return
+        if t == "cheal":
+            try:
+                amount = int(d.get("amount", 0))
+            except (TypeError, ValueError):
+                return
+            b = med_budget(uid, info.get("lvl"))
+            mhp = tgt.get("mhp", 1)
+            amount = min(amount, int(0.35 * mhp), int(b[0]))
+            if amount < 1:
+                return
+            b[0] -= amount
+            if pvpguard.in_combat(tgt["id"]):
+                amount = max(1, int(amount * MED_PVP))
+            pvpguard.heal(tgt["id"], amount, mhp)
+            if tgt is not info:
+                await push_to_player(tgt["id"], {"t": "healed", "from": info["nick"], "amount": amount, "q": 1})
+        else:
+            if time.time() - med_shield.get(uid, 0) < 12:
+                return
+            med_shield[uid] = time.time()
+            try:
+                v = max(0.0, min(float(d.get("v", 0)), 0.45))
+                dur = max(0.0, min(float(d.get("dur", 0)), 9.0))
+            except (TypeError, ValueError):
+                return
+            tgt["shield_v"], tgt["shield_until"] = v, time.time() + dur
+            if tgt is not info:
+                await push_to_player(tgt["id"], {"t": "cbuff", "k": "shield", "v": v, "dur": dur, "from": info["nick"]})
     elif t == "pxp":
         pid = member_party.get(uid)
         if not pid:
@@ -1197,6 +1255,8 @@ async def handle_pvp(d, info):
         info["pvp_t"] = time.time()
     info["pvp_last"] = time.time()
     dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
+    if tgt.get("shield_until", 0) > time.time():
+        dmg = max(1, int(dmg * (1 - tgt.get("shield_v", 0))))     # Щит-контур Ремонтника
     pvp.on_hit(info, tgt)
     pvp.record_hit(info["id"], to, dmg)
     dead = pvpguard.on_hit(tgt, dmg)                # сервер сам ведёт CP и прочность жертвы
@@ -1326,7 +1386,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
 async def ws_handler(request):
@@ -1420,7 +1480,7 @@ async def ws_handler(request):
                     mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
                 if d.get("mk"):
                     await handle_kills(d, info, conn)
-            elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "pxp"):
+            elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
                 await handle_party(d, info)
             elif t == "pvp":
                 await handle_pvp(d, info)
@@ -1565,6 +1625,10 @@ async def cleanup_loop():
                     invites.pop(uid, None)
             for uid in [u for u, t in last_heal.items() if now - t > 60]:
                 last_heal.pop(uid, None)
+            for uid in [u for u in med_bucket if u not in online_ids]:
+                med_bucket.pop(uid, None)
+            for uid in [u for u, t in med_shield.items() if now - t > 60]:
+                med_shield.pop(uid, None)
             for uid in [u for u, t in last_seen.items() if now - t > 3 * 86400]:
                 last_seen.pop(uid, None)                       # дальше «заходил в …» берётся из базы
             for key in [k for k in chat_limits if k[0] not in online_ids]:
