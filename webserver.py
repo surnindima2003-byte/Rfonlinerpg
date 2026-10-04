@@ -771,6 +771,22 @@ PXP_HALF_W = 220
 PXP_HALF_H = 440
 
 
+# Разница уровней в пати: до 10 — опыт полностью, от 10 до 30 — плавно урезается, больше 30 — не даётся.
+# Так высокий уровень не может «таскать» твинка. Уровни — серверные (info["lvl"] ограничен пределом сервера).
+PXP_FULL_GAP = 10
+PXP_MAX_GAP = 30
+
+
+def pxp_gap_mult(lvl_a, lvl_b):
+    """Доля командного опыта по разнице уровней убившего и получателя: 1.0 … 0.0."""
+    gap = abs(int(lvl_a or 1) - int(lvl_b or 1))
+    if gap <= PXP_FULL_GAP:
+        return 1.0
+    if gap > PXP_MAX_GAP:
+        return 0.0
+    return round(1 - (gap - PXP_FULL_GAP) / (PXP_MAX_GAP - PXP_FULL_GAP + 1), 3)
+
+
 def in_party_view(a, b):
     """Союзник b виден на экране у a (одна локация, по прямоугольнику экрана, не по кругу)."""
     if a.get("loc") != b.get("loc"):
@@ -943,7 +959,9 @@ async def handle_party(d, info):
         for m in parties[pid]["members"]:
             i = online(m)
             if m != uid and i and not i.get("dead") and in_party_view(info, i):     # далеко или мёртв — опыта нет
-                await push_to_player(m, {"t": "pxp", "amount": share, "from": info["nick"]})
+                got = int(share * pxp_gap_mult(info.get("lvl"), i.get("lvl")))       # большая разница уровней — меньше или ноль
+                if got > 0:
+                    await push_to_player(m, {"t": "pxp", "amount": got, "from": info["nick"]})
 
 
 CARD_NUM = {"atk": 1e6, "def": 1e6, "mhp": 1e7, "rate": 50, "crit": 100, "cpow": 50, "regen": 1e5, "bm": 1e8}
