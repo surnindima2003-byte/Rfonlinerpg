@@ -1079,6 +1079,46 @@ textarea.field{min-height:70px;resize:vertical}
 .facpick button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:12px 14px;border-radius:12px;border:1px solid #34414E;border-left:5px solid var(--c);background:var(--panel-2);color:var(--text);font:15px 'Russo One',sans-serif}
 .facpick button small{font:13px Rubik,sans-serif;color:var(--muted)}
 .facpick button:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+/* ---- табличка цели по эталону ---- */
+.tframe{left:68px;right:122px;transform:none;width:auto;max-width:176px;margin-inline:auto;min-width:0;background:rgba(13,19,28,.9);border:1.5px solid var(--tfc,#C8485A);border-radius:10px;padding:5px 9px 7px;box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 12px rgba(0,0,0,.35)}
+.tframe .tfc{position:absolute;width:9px;height:9px;border:0 solid rgba(140,175,210,.75);pointer-events:none}
+.tframe .tfc-tl{left:3px;top:3px;border-left-width:1.5px;border-top-width:1.5px}
+.tframe .tfc-tr{right:3px;top:3px;border-right-width:1.5px;border-top-width:1.5px}
+.tframe .tfc-bl{left:3px;bottom:3px;border-left-width:1.5px;border-bottom-width:1.5px}
+.tframe .tfc-br{right:3px;bottom:3px;border-right-width:1.5px;border-bottom-width:1.5px}
+.tframe .tf-top{gap:5px}
+.tframe .tf-ic{width:15px;height:15px;background:none;border-radius:0}
+.tframe .tf-ic svg{width:15px;height:15px}
+.tframe .tf-tx b{font:700 13px Rubik,sans-serif;text-overflow:clip}
+.tframe .tf-tx small,.tframe .tf-x{display:none}
+.tframe .tf-bar{height:15px;margin-top:4px;border-radius:8px;background:#2A1418;box-shadow:inset 0 0 0 1px rgba(0,0,0,.6)}
+.tframe .tf-bar i{background:linear-gradient(180deg,#FF7A86,#D8404F 55%,#B02E3E);border-radius:8px}
+.tframe .tf-bar span{font:800 12px Rubik,sans-serif;color:#fff;text-shadow:-1px -1px 0 #1A0D10,1px -1px 0 #1A0D10,-1px 1px 0 #1A0D10,1px 1px 0 #1A0D10}
+.tframe .tf-cp{display:none!important}
+.tframe .tf-acts{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;justify-content:center;gap:8px}
+.tframe .tf-acts button{flex:none;display:inline-flex;align-items:center;gap:5px;border:1.5px solid #5FB46A;background:rgba(13,19,28,.88);color:#8FE07A;border-radius:10px;padding:5px 13px;font:700 12px Rubik,sans-serif}
+.tframe .tf-acts button svg{width:15px;height:15px}
+.tframe .tf-acts button[data-tf="heal"],.tframe .tf-acts button[data-tf="invite"]{border-color:#5FB46A;color:#8FE07A}
+/* ---- окно «Инфо» по эталону ---- */
+.ic-head{display:flex;align-items:center;gap:12px;margin:2px 0 12px}
+.ic-av{width:46px;height:52px;flex:none;display:grid;place-items:center}
+.ic-head b{display:block;font:700 19px Rubik,sans-serif}
+.ic-head small{display:block;font-size:13px;color:#93A0AC;margin-top:2px}
+.ic-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.ic-cell{border:1px solid var(--line);background:var(--panel-2);border-radius:12px;padding:10px 4px 8px;text-align:center}
+.ic-cell svg{width:18px;height:18px;display:block;margin:0 auto 5px}
+.ic-cell b{display:block;font:800 19px Rubik,sans-serif;color:var(--text);white-space:nowrap}
+.ic-cell small{display:block;font-size:11px;color:var(--cyan);opacity:.85;margin-top:3px}
+.ic-h{margin:14px 0 8px;font:700 14px Rubik,sans-serif;color:var(--muted)}
+.ie-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ie-t{position:relative;border:1.5px solid var(--line);border-radius:9px;background:var(--panel-2);padding:5px 3px 4px;text-align:center;min-width:0}
+.ie-t .ie-ic{display:block;width:34px;height:34px;margin:0 auto}
+.ie-t .ie-ic img,.ie-t .ie-ic svg{width:100%;height:100%}
+.ie-t small{display:block;font-size:9px;line-height:1.15;color:var(--muted);margin-top:3px;height:21px;overflow:hidden}
+.ie-t.empty{border-color:var(--line);opacity:.6}
+.ie-ph{border:1.5px dashed var(--line);border-radius:7px;box-sizing:border-box}
+.ie-t .enc{position:absolute;right:3px;top:2px;font:700 10px Rubik,sans-serif;color:#F2C14B;font-style:normal}
+.ic-dm{margin-top:12px}
 </style>
 </head>
 <body>
@@ -11280,6 +11320,135 @@ setInterval(() => {
   if(p.target && low < 0.85 && ready(iN)) return useSkill(iN);
   if(p.target && locKey !== "lobby" && ready(iD) && Math.hypot(p.target.x - p.x, p.target.y - p.y) < classParams().range + stat().range + 60) useSkill(iD);
 }, 400);
+
+// ===================== ТАБЛИЧКА ЦЕЛИ И ОКНО «ИНФО» (по эталону) =====================
+// Компактная табличка по центру под плашкой игрока: прицел + имя, красная полоса прочности с цифрами.
+// Под ней у пилотов — кнопки «Пати+» (или «Подхил» для своих) и «Инфо». Снять цель — коротким тапом по пустому месту.
+{
+  const tf = $("tframe");
+  tf.insertAdjacentHTML("afterbegin", `<i class="tfc tfc-tl"></i><i class="tfc tfc-tr"></i><i class="tfc tfc-bl"></i><i class="tfc tfc-br"></i>`);
+  $("tfIc").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/></svg>`;
+  const ICON_HTML = $("tfIc").innerHTML;
+  // цвет имени моба по разнице уровней, как в эталоне: слабый — зелёный, равный — светлый, опасный — оранжевый/красный
+  const mobCol = k => { const d = (k.lvl || 1) - (S.level || 1); return d <= -3 ? "#8FD07A" : d <= 1 ? "#E4DED1" : d <= 4 ? "#F2A93B" : "#FF6B78"; };
+  const _rTF = renderTargetFrame;
+  renderTargetFrame = function(){
+    _rTF();
+    if(!tgt) return;
+    $("tfIc").innerHTML = ICON_HTML;
+    const acts = $("tfActs");
+    if(tgt.kind === "enemy"){
+      const k = NPCS[tgt.e.type], c = mobCol(k);
+      $("tfName").textContent = T(k.name); $("tfName").style.color = c; $("tfIc").style.color = c;
+      tf.style.setProperty("--tfc", "#C8485A"); acts.innerHTML = ""; return;
+    }
+    const o = tgtPlayer(); if(!o) return;
+    const mate = inParty(o.id), fr = isFriend(o);
+    const foe = !fr && pvpZone() && !(typeof pvpNewbie === "function" && pvpNewbie(o));
+    const c = fr ? "#7BC98A" : foe ? "#FF6B78" : "#F2A93B";
+    $("tfName").textContent = (o.gt ? "[" + o.gt + "] " : "") + (o.nick || "Пилот"); $("tfName").style.color = c; $("tfIc").style.color = c;
+    tf.style.setProperty("--tfc", fr ? "#4E9A5E" : foe ? "#C8485A" : "#B07A2A");
+    const btn = (act, html, dis) => `<button type="button" data-tf="${act}" ${dis ? "disabled" : ""}>${html}</button>`;
+    const ppl = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg>`;
+    let h = "";
+    if(mate) h += btn("heal", "Подхил", healCd > 0);
+    else if(NET.on && (!NET.party || (partyLeader() === NET.id && NET.party.members.length < 4))) h += btn("invite", ppl + "Пати+");
+    h += btn("info", "Инфо");
+    acts.innerHTML = h;
+  };
+  // «Подхил N» во время перезарядки не должен ломать ширину кнопки
+  const _tick = targetTick;
+  targetTick = function(dt){ _tick(dt); };
+  // снять цель: короткий тап по пустому месту карты (не по роботу и не по мобу)
+  let tapD = null;
+  const _try = tryTarget;
+  tryTarget = function(ev){
+    const r = _try(ev);
+    if(!r && tgt){
+      const g = gameEl.getBoundingClientRect(), leftFloat = S.settings.joyFloat && ev.clientX - g.left < g.width*0.5;
+      if(!leftFloat) tapD = {x:ev.clientX, y:ev.clientY, t:performance.now(), id:ev.pointerId};
+    }
+    return r;
+  };
+  window.addEventListener("pointerup", ev => {
+    if(!tapD || ev.pointerId !== tapD.id) return;
+    const ok = performance.now() - tapD.t < 260 && Math.hypot(ev.clientX - tapD.x, ev.clientY - tapD.y) < 12;
+    tapD = null;
+    if(ok && tgt){ clearTarget(); Sfx.play("ui"); }
+  }, true);
+}
+
+// ---- карточка пилота: свои характеристики уходят на сервер, чужие запрашиваются по кнопке «Инфо» ----
+const CARD = {last:"", got:new Map(), want:null};
+function myCard(){
+  const st = stat(), eq = {};
+  for(const [s, e] of Object.entries(S.eq || {})) if(e && ITEMS[e.id]) eq[s] = [e.id, e.g || 0, e.e || 0];
+  return {atk:st.atk, def:st.def, mhp:st.maxhp, rate:+(classParams().rate*st.rate).toFixed(2), crit:+st.crit.toFixed(1), cpow:+st.critPow.toFixed(2),
+    regen:+st.regen.toFixed(2), bm:combatPower(), eq, dr:droneOn() ? S.drone : "", art:artOn() ? S.art : ""};
+}
+setInterval(() => {
+  if(typeof NET === "undefined" || !NET.ws || NET.ws.readyState !== 1) { CARD.last = ""; return; }
+  const c = myCard(), js = JSON.stringify(c);
+  if(js !== CARD.last){ CARD.last = js; netSend({t:"card", c}); }
+}, 5000);
+{
+  const prevCard = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "card"){ CARD.got.set(d.id, d); if(CARD.want === d.id && sheetRender) sheetRender(); return; }
+    prevCard(d);
+  };
+}
+const ST_ICON = {
+  hp:`<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>`,
+  atk:`<path d="M14 4h6v6L9 21l-3-3L17 7M5 14l5 5M3 21l3-3"/>`,
+  def:`<path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/>`,
+  rate:`<path d="M13 2 5 14h6l-1 8 8-12h-6z"/>`,
+  crit:`<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>`,
+  cpow:`<path d="M12 22c4 0 7-2.8 7-6.6 0-3.4-2.4-5.6-4-8.4-.6 2.2-1.8 3.4-3 4 .2-3.4-1.4-6.6-4-9 .2 4.4-3 6.6-3 11.4C5 19.2 8 22 12 22z"/>`,
+  regen:`<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>`,
+  bm:`<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>`
+};
+const ST_COL = {hp:"#E0463A", atk:"#F2A93B", def:"#F2A93B", rate:"#F2A93B", crit:"#E0463A", cpow:"#F2A93B", regen:"#6FCF7A", bm:"#F2C14B"};
+const ST_NAME = {hp:"Прочность", atk:"Атака", def:"Броня", rate:"Скор. ат.", crit:"Крит шанс", cpow:"Крит сила", regen:"Регенерация", bm:"БМ"};
+playerInfoSheet = function(o){
+  CARD.want = o.id; CARD.got.delete(o.id);
+  netSend({t:"card_get", id:o.id});
+  openSheet(o.nick || "Пилот", "", () => {
+    const d = CARD.got.get(o.id), c = (d && d.c) || {}, cur = NET.others.get(o.id) || o;
+    const C = CLASSES[cur.cls || (d && d.cls)], lvl = +(cur.lvl || (d && d.lvl) || 1);
+    const fr = isFriend(cur), nameCol = "var(--ok)";
+    $("shTitle").style.color = nameCol;
+    const v = (k, f) => c[k] === undefined ? "—" : f(c[k]);
+    const cell = (k, val) => `<div class="ic-cell"><svg viewBox="0 0 24 24" fill="none" stroke="${ST_COL[k]}" stroke-width="2" stroke-linejoin="round">${ST_ICON[k]}</svg><b>${val}</b><small>${ST_NAME[k]}</small></div>`;
+    const slots = [["weapon", "Оружие"], ["head", "Сенсор"], ["armor", "Корпус"], ["module", "Модуль"], ["core", "Реактор"], ["legs", "Ходовая"]];
+    const eqc = c.eq || {}, tile = (id, g, e, empty) => id && ITEMS[id]
+      ? `<div class="ie-t" style="border-color:${g !== undefined ? gradeColor(g) : "#3A4757"}"><span class="ie-ic">${icon(id, g)}</span>${e ? `<i class="enc">+${e}</i>` : ""}<small>${esc(ITEMS[id].name)}</small></div>`
+      : `<div class="ie-t empty"><span class="ie-ic ie-ph"></span><small>${empty}</small></div>`;
+    body().innerHTML = `
+      <div class="ic-head"><span class="ic-av">${mechImg(cur.cls, cur.fac || "aegis", cur.eq || {}, 46)}</span>
+        <div><b style="color:${C ? C.color : "#E4DED1"}">${C ? C.name : "Без класса"}</b><small>Уровень ${lvl}${cur.gt ? ` · <span data-notr>[${esc(cur.gt)}] ${esc(cur.gn || "")}</span>` : ""}${inParty(cur.id) ? ` · <span style="color:#7BC98A">в твоей пати</span>` : ""}</small></div></div>
+      <div class="ic-grid">
+        ${cell("hp", Math.ceil(+cur.hp || 0) + "/" + Math.ceil(+cur.mhp || c.mhp || 0))}${cell("atk", v("atk", Math.round))}${cell("def", v("def", Math.round))}
+        ${cell("rate", v("rate", x => x.toFixed(2)))}${cell("crit", v("crit", x => x.toFixed(1) + "%"))}${cell("cpow", v("cpow", x => x.toFixed(2) + "x"))}
+        ${cell("regen", v("regen", x => x.toFixed(2)))}${cell("bm", (+(c.bm || cur.bm) || 0).toLocaleString("ru-RU"))}
+      </div>
+      ${d ? "" : `<p class="hint" style="margin:6px 0 0">Загружаем характеристики…</p>`}
+      <h3 class="ic-h">Снаряжение</h3>
+      <div class="ie-grid">${slots.map(([s, nm]) => { const it = eqc[s]; return it ? tile(it[0], it[1], it[2]) : tile(null, 0, 0, nm); }).join("")}
+        ${c.dr && DRONES[c.dr] ? tile(c.dr, DRONES[c.dr].g) : tile(null, 0, 0, "Дрон")}${c.art && ARTS[c.art] ? tile(c.art, ARTS[c.art].g) : tile(null, 0, 0, "Артефакт")}</div>
+      <button type="button" class="btn wide ic-dm" data-icdm="1">Написать лично</button>`;
+  });
+};
+{
+  const _open = openSheet;
+  openSheet = function(title, sub, fn){ $("shTitle").style.color = ""; return _open(title, sub, fn); };
+  $("shBody").addEventListener("click", e => {
+    if(!e.target.closest("[data-icdm]")) return;
+    const d = CARD.got.get(CARD.want), o = NET.others.get(CARD.want);
+    const nick = (o && o.nick) || (d && d.nick); if(!nick) return;
+    closeSheet(); openChat(); openDm(nick);
+  });
+}
 
 // ---- перевод страницы ----
 const trOrig = new WeakMap(), trDone = new WeakMap();

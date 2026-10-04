@@ -946,6 +946,37 @@ async def handle_party(d, info):
                 await push_to_player(m, {"t": "pxp", "amount": share, "from": info["nick"]})
 
 
+CARD_NUM = {"atk": 1e6, "def": 1e6, "mhp": 1e7, "rate": 50, "crit": 100, "cpow": 50, "regen": 1e5, "bm": 1e8}
+CARD_SLOTS = ("head", "weapon", "module", "armor", "core", "legs")
+CARD_ID = re.compile(r"[a-z0-9_]{1,24}")
+
+
+def clean_card(c):
+    """Карточка пилота от телефона: только известные поля, числа в разумных пределах."""
+    out = {}
+    if not isinstance(c, dict):
+        return out
+    for k, hi in CARD_NUM.items():
+        v = c.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v:
+            out[k] = round(max(0.0, min(float(v), hi)), 2)
+    eq = c.get("eq")
+    if isinstance(eq, dict):
+        out["eq"] = {}
+        for sl in CARD_SLOTS:
+            it = eq.get(sl)
+            if isinstance(it, list) and len(it) == 3 and isinstance(it[0], str) and CARD_ID.fullmatch(it[0]):
+                try:
+                    out["eq"][sl] = [it[0], max(0, min(int(it[1]), 3)), max(0, min(int(it[2]), 15))]
+                except (TypeError, ValueError):
+                    pass
+    for k in ("dr", "art"):
+        v = c.get(k)
+        if isinstance(v, str) and CARD_ID.fullmatch(v):
+            out[k] = v
+    return out
+
+
 def clean_pos(d, info):
     """Берём из сообщения только допустимые поля, чтобы нельзя было прислать мусор другим игрокам."""
     try:
@@ -1386,7 +1417,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "card", "card_get", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
 async def ws_handler(request):
@@ -1486,6 +1517,22 @@ async def ws_handler(request):
                 await handle_pvp(d, info)
             elif t == "pvp_dead":
                 await handle_pvp_dead(d, info)
+            elif t == "card":
+                # карточка пилота для окна «Инфо»: характеристики и снаряжение (только показ, на бой не влияет)
+                if time.time() - info.get("card_t", 0) >= 4:
+                    info["card_t"] = time.time()
+                    info["card"] = clean_card(d.get("c"))
+            elif t == "card_get":
+                try:
+                    tid = int(d.get("id", 0))
+                except (TypeError, ValueError):
+                    tid = 0
+                ti = online(tid)
+                if ti and time.time() - info.get("cardq_t", 0) >= 0.5:
+                    info["cardq_t"] = time.time()
+                    conn.push(realtime.encode({"t": "card", "id": tid, "nick": ti.get("nick", ""), "lvl": ti.get("lvl", 1), "cls": ti.get("cls", ""),
+                                               "hp": ti.get("hp", 0), "mhp": ti.get("mhp", 1), "gt": ti.get("gt", ""), "gn": ti.get("gn", ""),
+                                               "c": ti.get("card") or {}}))
             elif t == "emote":
                 eid = str(d.get("id", ""))[:10]
                 if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
