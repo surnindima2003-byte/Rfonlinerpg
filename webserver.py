@@ -988,7 +988,7 @@ def clean_card(c):
                     out["eq"][sl] = [it[0], max(0, min(int(it[1]), 3)), max(0, min(int(it[2]), 15))]
                 except (TypeError, ValueError):
                     pass
-    for k in ("dr", "art", "wg"):
+    for k in ("dr", "art", "wg", "ck"):
         v = c.get(k)
         if isinstance(v, str) and CARD_ID.fullmatch(v):
             out[k] = v
@@ -1033,6 +1033,7 @@ def clean_pos(d, info):
         info["sth"] = 1 if d.get("sth") and info.get("cls") == "ghost" else 0          # Призрак в тени (видят и другие)
         info["dr"] = d.get("dr") if d.get("dr") in DRONE_IDS else ""                  # дрон-компаньон рядом с роботом
         info["wg"] = d.get("wg") if d.get("wg") in WING_IDS else ""                   # крылья за спиной
+        info["ck"] = d.get("ck") if d.get("ck") in CLOAK_IDS else ""                  # плащ
         info["gt"] = str(d.get("gt", ""))[:4]
         info["gn"] = str(d.get("gn", ""))[:20]
         info["gi"] = d.get("gi") if d.get("gi") in ("gear", "shield", "bolt", "crown", "claw", "star") else ""
@@ -1046,11 +1047,13 @@ def clean_pos(d, info):
 
 
 PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
-               "hp", "mhp", "cp", "mcp", "bm", "admin", "sth", "dr", "wg")
+               "hp", "mhp", "cp", "mcp", "bm", "admin", "sth", "dr", "wg", "ck")
 # дроны-компаньоны (как в game.html → DRONES): другим игрокам показываем только известные виды
 DRONE_IDS = {"d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phantom", "d_sol"}
 # крылья (как в game.html → WINGS): другим игрокам показываем только известные виды
 WING_IDS = {"wg_scrap", "wg_servo", "wg_ion", "wg_titan", "wg_seraph", "wg_void", "wg_phoenix", "wg_storm"}
+# плащи (как в game.html → CLOAKS)
+CLOAK_IDS = {"ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_night", "ck_ember", "ck_aurora"}
 
 
 def public(info):

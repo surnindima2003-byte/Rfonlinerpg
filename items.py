@@ -123,7 +123,9 @@ DRONES = ("d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phan
 ARTIFACTS = ("a_reactor", "a_lens", "a_servo", "a_plate", "a_crown", "a_eye", "a_heart", "a_relic")
 # крылья (как в game.html → WINGS): надеваются одни, видны другим игрокам, продаются на маркете
 WINGS = ("wg_scrap", "wg_servo", "wg_ion", "wg_titan", "wg_seraph", "wg_void", "wg_phoenix", "wg_storm")
-REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS      # всё, что учитывается штуками (без номера)
+# плащи (как в game.html → CLOAKS): надевается один, виден другим игрокам, продаются на маркете
+CLOAKS = ("ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_night", "ck_ember", "ck_aurora")
+REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS      # всё, что учитывается штуками (без номера)
 SOCKET_PREFIX = "s:"            # учёт рун, вставленных в вещи (строка «s:r_fortune» влезает в 12 символов столбца)
 
 # Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
@@ -149,6 +151,10 @@ CRAFT = {
     "wg_servo":  (25, {"scrap": 60000, "cores": 220, "plate": 25, "wire": 20}),
     "wg_ion":    (35, {"scrap": 150000, "cores": 500, "wire": 40, "chip": 25}),
     "wg_titan":  (45, {"scrap": 260000, "cores": 800, "plate": 70, "chip": 30}),
+    "ck_canvas": (12, {"scrap": 15000, "cores": 60, "wire": 12}),
+    "ck_mesh":   (22, {"scrap": 45000, "cores": 170, "wire": 20, "plate": 15}),
+    "ck_scout":  (32, {"scrap": 120000, "cores": 420, "wire": 35, "chip": 20}),
+    "ck_bastion": (42, {"scrap": 230000, "cores": 720, "plate": 65, "chip": 25}),
 }
 INV_MAX_SRV = 60
 
@@ -406,7 +412,7 @@ async def api_items(request):
                 return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
             await add_spheres(s, uid, item_id, 1)
             await s.commit()
-            metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "wings" if item_id in WINGS else "rune"))
+            metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "wings" if item_id in WINGS else "cloak" if item_id in CLOAKS else "rune"))
             return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0)})
 
         if op in ("socket", "unsocket"):
@@ -490,7 +496,7 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "рун"
+            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
     return None, "За GRAM можно продавать только снаряжение, сферы с мобов, руны, дронов и артефакты"
@@ -602,7 +608,10 @@ PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "sphe
               "ar_heart": [("sph", "a_heart", 1)], "ar_relic": [("sph", "a_relic", 1)],
               # крылья из магазина (как в game.html → PACKS, вкладка «Крылья»)
               "wn_seraph": [("sph", "wg_seraph", 1)], "wn_void": [("sph", "wg_void", 1)],
-              "wn_phoenix": [("sph", "wg_phoenix", 1)], "wn_storm": [("sph", "wg_storm", 1)]}
+              "wn_phoenix": [("sph", "wg_phoenix", 1)], "wn_storm": [("sph", "wg_storm", 1)],
+              # плащи из магазина (вкладка «Плащи»)
+              "cl_royal": [("sph", "ck_royal", 1)], "cl_night": [("sph", "ck_night", 1)],
+              "cl_ember": [("sph", "ck_ember", 1)], "cl_aurora": [("sph", "ck_aurora", 1)]}
 
 
 async def mint_pack(s, owner, pack):

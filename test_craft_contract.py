@@ -22,7 +22,7 @@ GAME = (Path(__file__).resolve().parent / "game.html").read_text(encoding="utf-8
 
 def client_recipes():
     out = {}
-    for block in ("RUNES", "DRONES", "ARTS", "WINGS"):
+    for block in ("RUNES", "DRONES", "ARTS", "WINGS", "CLOAKS"):
         body = re.search(rf"const {block} = \{{(.*?)\n\}};", GAME, re.S).group(1)
         for m in re.finditer(r'(\w+):\s*\{name:"[^"]*",\s*src:"craft", lvl:(\d+)[^\n]*?(?:\n[^\n]*?)?need:\{([^}]*)\}', body):
             need = {k: int(v) for k, v in re.findall(r"(\w+):(\d+)", m.group(3))}
@@ -37,7 +37,7 @@ class CraftContract(unittest.TestCase):
     def test_all_tradeable_ids_known_to_client(self):
         for rid in items.RUNES:
             self.assertIn(f"{rid}:", GAME)
-        for did in items.DRONES + items.ARTIFACTS + items.WINGS:
+        for did in items.DRONES + items.ARTIFACTS + items.WINGS + items.CLOAKS:
             self.assertIn(f"{did}:", GAME)
 
     def test_ids_fit_balance_column(self):
@@ -61,6 +61,15 @@ class CraftContract(unittest.TestCase):
             self.assertRegex(gram_src, rf'"{pid}":\s*\d+')
         body = re.search(r"const WINGS = \{(.*?)\n\};", GAME, re.S).group(1)
         self.assertEqual(set(re.findall(r"^\s*(wg_\w+):", body, re.M)), set(items.WINGS))
+
+    def test_cloak_packs_minted_by_server(self):
+        gram_src = (Path(__file__).resolve().parent / "gram.py").read_text(encoding="utf-8")
+        for pid in ("cl_royal", "cl_night", "cl_ember", "cl_aurora"):
+            self.assertIn(pid, items.PACK_ITEMS)
+            self.assertIn(items.PACK_ITEMS[pid][0][1], items.CLOAKS)
+            self.assertRegex(gram_src, rf'"{pid}":\s*\d+')
+        body = re.search(r"const CLOAKS = \{(.*?)\n\};", GAME, re.S).group(1)
+        self.assertEqual(set(re.findall(r"^\s*(ck_\w+):", body, re.M)), set(items.CLOAKS))
 
     def test_craft_spends_and_adds(self):
         S = {"level": 12, "scrap": 9000, "cores": 40, "inv": [{"id": "chip", "n": 5}]}
