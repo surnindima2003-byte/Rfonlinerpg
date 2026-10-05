@@ -45,21 +45,32 @@ def view():
             "next": next_start() * 1000, "name": NAME, "x": X, "y": Y, "loc": LOC}
 
 
-def start(manual=False):
-    st.update(active=True, hp=MAX_HP, until=time.time() + DURATION, hits={}, aoe_t=time.time() + 8, dirty=True, manual=manual)
+def start(manual=False, slot=None):
+    st.update(active=True, hp=MAX_HP, until=time.time() + DURATION, hits={}, aoe_t=time.time() + 8, dirty=True, manual=manual, slot=slot)
     metrics.inc("wboss.start")
+
+
+def _ended(now):
+    """Босс ушёл или повержен. Плановое окно отмечаем «отыгранным» — повторно в нём босс не появится.
+    Раньше блокировка шла по времени конца (30 минут после любого босса): если админ вызвал и убил босса
+    перед 20:00, плановый босс в этот вечер не появлялся."""
+    st["active"] = False
+    st["ended"] = now
+    st["dirty"] = True
+    if st.get("slot"):
+        st["done_slot"] = st["slot"]
 
 
 def tick(hub):
     now = time.time()
     if not st["active"]:
         s = next_start(now)
-        if s <= now < s + DURATION and now - st.get("ended", 0) > DURATION:
-            start()
+        if s <= now < s + DURATION and st.get("done_slot") != s:
+            start(slot=s)
             hub.to_all({"t": "pinfo", "text": f"⚠ Мировой босс «{NAME}» появился в Центральном ангаре!"})
     if st["active"]:
         if now > st["until"]:
-            st["active"] = False; st["ended"] = now; st["dirty"] = True
+            _ended(now)
             hub.to_all({"t": "pinfo", "text": f"Мировой босс «{NAME}» ушёл непобеждённым"})
         elif now >= st["aoe_t"]:
             st["aoe_t"] = now + random.uniform(4, 7)
@@ -71,6 +82,7 @@ def tick(hub):
         hub.to_all(view())
     if st["loot"] and now > st["loot_until"]:
         st["loot"] = {}
+        hub.to_loc(LOC, {"t": "wbloot", "items": []})              # кучки исчезают и у игроков (раньше висели до перезахода)
 
 
 async def on_hit(info, d, hub, seasonpts):
@@ -91,7 +103,8 @@ async def on_hit(info, d, hub, seasonpts):
     st["hits"][uid] = st["hits"].get(uid, 0) + 1
     await seasonpts.add(uid, "wboss", 1)                           # задание сезона: «Ударить мирового босса 3 раза»
     if st["hp"] <= 0:
-        st["active"] = False; st["ended"] = now; st["hp"] = 0
+        _ended(now)
+        st["hp"] = 0
         items, n = {}, 0
         for kind, cnt, g, piles in DROP:
             for _ in range(piles):

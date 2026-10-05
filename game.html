@@ -7975,7 +7975,8 @@ async function mkCancel(id){
 function finishPack(pk, before){
   if(pk.once) S.bought[pk.once + (pk.once === "season" ? seasonId() : "")] = true;
   const minted = pk._minted || []; pk._minted = null;
-  giveShop(pk.rew.filter(r => !minted.some(m => m.id === r.id || m.id === r.d)));        // вещи с сервера выдаются ниже, с номерами
+  // вещи с сервера выдаются ниже, с номерами; rw — какую строку пака заменяет вещь (набор брони, оружие класса)
+  giveShop(pk.rew.filter(r => !minted.some(m => m.id === r.id || m.id === r.d || m.rw === r.id)));
   for(const m of minted){
     if(m.uid) addItem(S.inv, m.id, 1, INV_MAX, m.g, m.e, m.uid) || addItem(S.store, m.id, 1, STORE_MAX, m.g, m.e, m.uid);
     else { addItem(S.inv, m.id, m.n, INV_MAX) || addItem(S.store, m.id, m.n, STORE_MAX); if(m.reg && typeof regAddSph === "function") regAddSph(m.id, m.n); }

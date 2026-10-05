@@ -308,6 +308,37 @@ async def process_transactions(txs):
                 await s.commit()
 
 
+async def _spend(s, w, uid, pack, price, push_to_player):
+    """Покупка пака в магазине GRAM (вызывается под очередью покупок игрока)."""
+    nano = int(round(price * NANO))
+    if pack == "season":
+        import seasonpts
+        if await seasonpts.has_ticket(uid):
+            return web.json_response({"ok": False, "error": "Билет этого сезона уже куплен"})
+    locked_before = (await s.execute(select(GramWallet.locked).where(GramWallet.tg_id == uid))).scalar() or 0
+    if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
+        return web.json_response({"ok": False, "error": "Не хватает GRAM"})
+    await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
+    from_locked = min(locked_before, nano)            # столько покупки оплачено звёздами
+    await s.execute(update(GramWallet).where(GramWallet.tg_id == uid).values(spent=GramWallet.spent + nano)
+                    .execution_options(synchronize_session=False))
+    set_committed_value(w, "spent", (w.spent or 0) + nano)
+    notes = await pay_referrals(s, uid, nano, from_locked)
+    import items
+    minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
+    import saveguard
+    saveguard.note_purchase(uid, pack)                                 # большой прирост в следующем сохранении — это покупка
+    await s.commit()
+    import vip
+    vip.forget(uid)
+    if pack == "season":
+        import seasonpts
+        seasonpts.forget_ticket(uid)                                # билет сразу даёт +60% к дропу                                                # новый VIP действует на дроп сразу
+    for who, bonus in notes:
+        await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
+    return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "items": minted})
+
+
 # ---------- API игрока ----------
 async def api_gram(request):
     from webserver import read_auth, push_to_player
@@ -329,33 +360,11 @@ async def api_gram(request):
             price = PACK_PRICES.get(pack)
             if price is None:
                 return web.json_response({"ok": False, "error": "Нет такого пака"})
-            nano = int(round(price * NANO))
-            if pack == "season":
-                import seasonpts
-                if await seasonpts.has_ticket(uid):
-                    return web.json_response({"ok": False, "error": "Билет этого сезона уже куплен"})
-            locked_before = (await s.execute(select(GramWallet.locked).where(GramWallet.tg_id == uid))).scalar() or 0
-            if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
-                return web.json_response({"ok": False, "error": "Не хватает GRAM"})
-            await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
-            from_locked = min(locked_before, nano)            # столько покупки оплачено звёздами
-            await s.execute(update(GramWallet).where(GramWallet.tg_id == uid).values(spent=GramWallet.spent + nano)
-                            .execution_options(synchronize_session=False))
-            set_committed_value(w, "spent", (w.spent or 0) + nano)
-            notes = await pay_referrals(s, uid, nano, from_locked)
-            import items
-            minted = await items.mint_pack(s, uid, pack)                  # вещи пака регистрируются сервером
             import saveguard
-            saveguard.note_purchase(uid, pack)                                 # большой прирост в следующем сохранении — это покупка
-            await s.commit()
-            import vip
-            vip.forget(uid)
-            if pack == "season":
-                import seasonpts
-                seasonpts.forget_ticket(uid)                                # билет сразу даёт +60% к дропу                                                # новый VIP действует на дроп сразу
-            for who, bonus in notes:
-                await push_to_player(who, {"t": "gram", "text": f"Реферальный бонус: +{g(bonus)} GRAM"})
-            return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "items": minted})
+            # покупки игрока — по очереди: иначе два одновременных запроса билета сезона оба проходили
+            # проверку «билета ещё нет» и списывали GRAM дважды
+            async with saveguard.player_lock(("shop", uid)):
+                return await _spend(s, w, uid, pack, price, push_to_player)
         if op == "withdraw":
             address = str(body.get("address", "")).strip()
             try:

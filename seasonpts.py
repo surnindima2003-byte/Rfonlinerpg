@@ -91,7 +91,8 @@ async def _load(uid):
         return st
     async with SessionLocal() as s:
         row = (await s.execute(select(SeasonPts).where(SeasonPts.tg_id == uid, SeasonPts.season == key))).scalar_one_or_none()
-    st = {"season": key, "pts": row.pts if row else 0, "data": json.loads(row.data or "{}") if row else {}}
+    st = {"season": key, "pts": row.pts if row else 0, "data": json.loads(row.data or "{}") if row else {},
+          "pts_t": (getattr(row, "pts_t", 0) or 0) if row else 0}
     _st[uid] = st
     return st
 
@@ -125,6 +126,7 @@ async def add(uid, counter, amount=1):
     _dirty.add(uid)
     if gained:
         st["pts"] += gained
+        st["pts_t"] = int(time.time())
         metrics.inc("season.pts", gained)
         if _push:
             text = ("Задание сезона: " + names[0] + f" · +{gained} очков") if names else f"+{gained} очков сезона"
@@ -188,9 +190,9 @@ async def flush():
                     st = _st.get(uid)
                     if not st:
                         continue
-                    await s.execute(insert_ignore(SeasonPts.__table__, tg_id=uid, season=st["season"], pts=0, data="{}", updated=now))
+                    await s.execute(insert_ignore(SeasonPts.__table__, tg_id=uid, season=st["season"], pts=0, data="{}", updated=now, pts_t=0))
                     await s.execute(update(SeasonPts).where(SeasonPts.tg_id == uid, SeasonPts.season == st["season"])
-                                    .values(pts=st["pts"], data=json.dumps(st["data"]), updated=now)
+                                    .values(pts=st["pts"], data=json.dumps(st["data"]), updated=now, pts_t=st.get("pts_t") or 0)
                                     .execution_options(synchronize_session=False))
                 await s.commit()
         except Exception:
@@ -294,8 +296,11 @@ async def _nicks(s, ids):
 
 async def top(s, key, limit=TOP_N):
     """Лучшие по очкам: при равенстве выше тот, кто набрал раньше."""
+    from sqlalchemy import func
+    # при равенстве — кто раньше набрал эти очки (pts_t); у старых строк его нет — тогда по updated, как раньше
+    reached = func.coalesce(func.nullif(SeasonPts.pts_t, 0), SeasonPts.updated)
     rows = (await s.execute(select(SeasonPts.tg_id, SeasonPts.pts).where(SeasonPts.season == key, SeasonPts.pts > 0)
-                            .order_by(SeasonPts.pts.desc(), SeasonPts.updated.asc()).limit(limit))).all()
+                            .order_by(SeasonPts.pts.desc(), reached.asc()).limit(limit))).all()
     names = await _nicks(s, [r[0] for r in rows])
     return [{"place": i + 1, "id": str(uid), "nick": names.get(uid, "Пилот"), "pts": pts, "usdt": PRIZES_USDT.get(i + 1, 0)}
             for i, (uid, pts) in enumerate(rows)]

@@ -70,6 +70,23 @@ def next_start(now, schedule=None, tz=TZ_OFFSET):
     return best
 
 
+def current_slot(now, schedule=None, tz=TZ_OFFSET, duration=DURATION):
+    """Начало события, которое идёт прямо сейчас по расписанию (UTC), или None."""
+    slots = parse_schedule(SCHEDULE if schedule is None else schedule)
+    local = now + tz * 3600
+    day0 = int(local // 86400) * 86400
+    weekday = (int(local // 86400) + 3) % 7
+    for back in (0, 1):                                    # событие могло начаться вчера и идти через полночь
+        wd = (weekday - back) % 7
+        for d, h, m in slots:
+            if d != wd:
+                continue
+            t = day0 - back * 86400 + h * 3600 + m * 60 - tz * 3600
+            if t <= now < t + duration:
+                return t
+    return None
+
+
 class War:
     """Состояние одного события. Без сети и базы — чтобы логику можно было проверить тестами."""
 
@@ -247,6 +264,14 @@ async def loop(hub, push, metrics):
     import asyncio
     await load_buff()
     STATE["next"] = next_start(time.time())
+    # сервер перезапустился посреди события по расписанию: раньше оно пропадало до следующей недели,
+    # теперь продолжается до своего конца (счёт начинается заново — он хранился только в памяти)
+    slot = current_slot(time.time())
+    if slot and WAR.phase != "live":
+        left = int(slot + DURATION - time.time())
+        if left > 60:
+            await start_now(hub, left)
+            log.warning("Chip War продолжена после перезапуска: осталось %s с", left)
     while True:
         await asyncio.sleep(1.0)
         try:

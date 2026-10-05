@@ -290,6 +290,9 @@ class SeasonPts(Base):
     pts: Mapped[int] = mapped_column(Integer, default=0, index=True)
     data: Mapped[str] = mapped_column(Text, default="{}")              # счётчики заданий дня, недели и постоянных
     updated: Mapped[int] = mapped_column(Integer, default=0)
+    # когда очки выросли в последний раз: при равенстве очков в рейтинге выше тот, кто набрал раньше.
+    # updated для этого не годится — он меняется от любой активности (счётчики заданий, чат)
+    pts_t: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class SeasonPrize(Base):

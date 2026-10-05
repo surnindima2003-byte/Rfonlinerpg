@@ -246,7 +246,8 @@ def roll(lv, mult=1):
     out, s = [], lv - 1
     pool = [g for g, need in GEAR if lv - 10 <= need <= lv + 2]
     for grade, per in enumerate(gear_per(lv)):
-        if per and random.random() < min(0.5, per * mult) * len(pool):
+        # потолок 50% — на итоговый шанс (раньше min стоял до умножения на число вещей и не ограничивал ничего)
+        if per and pool and random.random() < min(0.5, per * mult * len(pool)):
             out.append({"kind": "gear", "id": random.choice(pool), "g": grade})
     if random.random() < min(0.9, P(0.0033 + 0.000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_cu", "n": 1})
@@ -609,9 +610,25 @@ async def migrate_market_registry():
             log.info("Маркет: %s старых лотов возвращены продавцам (переход на реестр вещей)", len(lots))
 
 
-# предметы паков магазина GRAM, которые регистрируются сервером (их потом можно продать на маркете)
-# "W2" — оружие класса покупателя 2-го поколения, "W3" — 3-го
-PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "spheres": [("sph", "sph_cu", 3)], "cores": [("sph", "sph_ti", 1)],
+# Что из паков магазина GRAM учитывает сервер (зеркало PACKS в game.html; совпадение проверяет test_pack_items.py).
+# Учтённое можно продать на маркете за GRAM. Записи:
+#   ("gset", поколение, грейд, заточка) — набор брони: сенсор, корпус, ходовая, модуль, реактор (как gsetIds в игре);
+#   ("wcls", поколение, грейд, заточка) — оружие класса покупателя;
+#   ("sph", id, сколько) — сферы, руны, дроны, артефакты, крылья, плащи (учёт штуками).
+# Раньше снаряжение и сферы из паков «Паки» и «Допы» сервер не учитывал вовсе (в таблице были ключи
+# books/legend/spheres/cores, которых нет в магазине): заплативший GRAM не мог продать купленное.
+GSET_FAMS = ("sensor", "armor", "legs", "module", "core")
+PACK_ITEMS = {"p_base": [("gset", 2, 1, 0), ("wcls", 2, 1, 0)],
+              "p_std": [("gset", 4, 1, 5), ("wcls", 4, 1, 5)],
+              "p_elite": [("gset", 6, 2, 3), ("wcls", 6, 2, 3), ("sph", "sph_ti", 5)],
+              "p_legend": [("gset", 8, 2, 8), ("wcls", 8, 2, 8), ("sph", "sph_ti", 15)],
+              "p_epic": [("gset", 10, 3, 8), ("wcls", 10, 3, 8), ("sph", "sph_ti", 30), ("sph", "sph_cu", 100)],
+              "d_start": [("gset", 3, 2, 3), ("wcls", 3, 2, 3)], "d_base": [("gset", 5, 2, 5), ("wcls", 5, 2, 5)],
+              "d_adv": [("gset", 7, 3, 5), ("wcls", 7, 3, 5)], "d_sup": [("gset", 8, 3, 7), ("wcls", 8, 3, 7)],
+              "d_top": [("gset", 9, 3, 9), ("wcls", 9, 3, 9)], "d_admin": [("gset", 10, 3, 10), ("wcls", 10, 3, 10)],
+              "x_books": [("wcls", 5, 2, 0)],
+              "u1": [("sph", "sph_ti", 10), ("sph", "sph_cu", 50)], "u2": [("sph", "sph_ti", 20), ("sph", "sph_cu", 100)],
+              "u3": [("sph", "sph_ti", 45), ("sph", "sph_cu", 200)],
               # паки рун (как в game.html → PACKS, вкладка «Руны»): руны выдаёт и учитывает сервер
               "rn_base": [("sph", "r_atk", 2), ("sph", "r_def", 2), ("sph", "r_hp", 2)],
               "rn_pro": [("sph", "r_crit", 2), ("sph", "r_cpow", 2), ("sph", "r_aspd", 2), ("sph", "r_spd", 2)],
@@ -632,12 +649,26 @@ PACK_ITEMS = {"books": [("gear", "W2", 2)], "legend": [("gear", "W3", 3)], "sphe
 
 
 async def mint_pack(s, owner, pack):
+    """Учесть содержимое пака. Каждая запись ответа помечена rw — какую строку пака она заменяет
+    (телефон выдаёт эти вещи с номерами сервера и не дублирует их своими)."""
     out = []
     cls = (await s.execute(select(GameSave.cls).where(GameSave.tg_id == owner))).scalar() or ""
-    for kind, iid, v in PACK_ITEMS.get(pack, []):
-        if kind == "gear" and iid.startswith("W"):
-            iid = weapon_id(cls, int(iid[1]))
-        out.append(await mint_gear(s, owner, iid, v, source="shop") if kind == "gear" else await add_spheres(s, owner, iid, v))
+    for entry in PACK_ITEMS.get(pack, []):
+        kind, a, b = entry[:3]
+        c = entry[3] if len(entry) > 3 else 0
+        if kind == "gset":
+            for fam in GSET_FAMS:
+                it = await mint_gear(s, owner, f"g_{fam}_{a}", b, c, source="shop")
+                it["rw"] = "gset"
+                out.append(it)
+        elif kind == "wcls":
+            it = await mint_gear(s, owner, weapon_id(cls, a), b, c, source="shop")
+            it["rw"] = "wcls"
+            out.append(it)
+        else:
+            it = await add_spheres(s, owner, a, b)
+            it["rw"] = a
+            out.append(it)
     return out
 
 
