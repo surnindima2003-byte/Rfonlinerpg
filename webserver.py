@@ -379,6 +379,28 @@ async def api_ack(request):
     return web.json_response({"ok": True})
 
 
+def set_saved_nick(row, name, now_ms=None):
+    """Новый позывной в строке сохранения: и в индексе (nick), и внутри сохранения (S.name).
+
+    Метка времени сохранения тоже обновляется: иначе телефон игрока при входе оставит свою копию (она
+    «новее»), пришлёт её со старым позывным — и сервер вернёт старый. Пустое сохранение не трогаем."""
+    row.nick = name
+    if not row.data:
+        return
+    try:
+        data = json.loads(row.data)
+    except ValueError:
+        return
+    if not isinstance(data, dict) or not isinstance(data.get("S"), dict):
+        return
+    now_ms = int(now_ms if now_ms is not None else time.time() * 1000)
+    data["S"]["name"] = name
+    data["S"]["_ts"] = now_ms
+    data["ts"] = now_ms
+    row.data = json.dumps(data, ensure_ascii=False)
+    row.updated = now_ms // 1000
+
+
 async def admin_set_name(user, body):
     """Админ меняет позывной игроку: проверка формата и занятости, запись в сохранение, обновление в игре."""
     name = str(body.get("name", "")).strip()
@@ -398,14 +420,7 @@ async def admin_set_name(user, body):
         if taken:
             return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
         old = row.nick or ""
-        row.nick = name
-        try:                                                     # чтобы при следующем входе в сохранении был новый позывной
-            data = json.loads(row.data) if row.data else None
-            if isinstance(data, dict) and isinstance(data.get("S"), dict):
-                data["S"]["name"] = name
-                row.data = json.dumps(data, ensure_ascii=False)
-        except ValueError:
-            pass
+        set_saved_nick(row, name)                               # и при следующем входе в сохранении будет новый позывной
         tg_id, uname = row.tg_id, row.username or ""
         await s.commit()
     for c in list(hub.by_uid.get(tg_id, [])):                   # игрок в сети — меняем сразу

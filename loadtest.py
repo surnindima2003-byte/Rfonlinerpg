@@ -6,7 +6,7 @@
 
 Пример:
   pip install aiohttp
-  python tools/loadtest.py --url https://metalwar-staging.up.railway.app --bot-token $STAGING_BOT_TOKEN \
+  python loadtest.py --url https://metalwar-staging.up.railway.app --bot-token $STAGING_BOT_TOKEN \
       --players 100 --ramp 120 --duration 1500 --metrics-token $METRICS_TOKEN
 Худший случай (все в одной локации):  добавить --one-loc
 Короткая проверка:  --players 25 --ramp 10 --duration 60
@@ -95,7 +95,8 @@ class Bot:
             self.stats.counts["connect_fail"] += 1
             print(f"[{self.nick}] не подключился: {e}")
             return
-        await self.ws.send_str(json.dumps({"t": "auth", "initData": init_data(a.bot_token, self.uid, self.nick)}))
+        # proto 2 — как у настоящей игры (дельты по полям); --proto 1 — старые полные списки, для сравнения
+        await self.ws.send_str(json.dumps({"t": "auth", "initData": init_data(a.bot_token, self.uid, self.nick), "proto": a.proto}))
         msg = await self.ws.receive(timeout=10)
         if msg.type != aiohttp.WSMsgType.TEXT or json.loads(msg.data).get("t") != "hello":
             self.stats.counts["auth_fail"] += 1
@@ -171,7 +172,7 @@ class Bot:
             self.stats.counts["bytes_in"] += len(msg.data)
             d = json.loads(msg.data)
             t = d.get("t")
-            if t == "players":
+            if t in ("players", "pd"):
                 self.stats.counts["snapshots"] += 1
             elif t == "chat":
                 m = d.get("m") or {}
@@ -201,12 +202,20 @@ async def http_load(args, session, stop_at, stats):
             stats.counts["http_error"] += 1
         stats.lat[kind].append((time.perf_counter() - t0) * 1000)
 
+    # сервер принимает сохранение только с текущей эпохой данных (иначе 409 — нагрузки на запись не было бы)
+    epoch = ""
+    try:
+        async with session.post(args.http_url + "/api/state/load", json={"initData": init_data(args.bot_token, UID_BASE, "lt000")},
+                                timeout=aiohttp.ClientTimeout(total=10)) as r:
+            epoch = (await r.json(content_type=None)).get("epoch", "")
+    except Exception as e:
+        print("не удалось узнать эпоху данных:", e)
     while time.time() < stop_at:
         n = random.randrange(args.players)
         uid, nick = UID_BASE + n, f"lt{n:03d}"
         idata = init_data(args.bot_token, uid, nick)
         if random.random() < args.save_rate / (args.save_rate + args.top_rate):
-            asyncio.create_task(post("/api/state/save", {"initData": idata, "data": {"S": {"level": 20, "name": nick}, "bm": 1000}}, "http_save"))
+            asyncio.create_task(post("/api/state/save", {"initData": idata, "epoch": epoch, "data": {"S": {"level": 20, "name": nick}, "bm": 1000}}, "http_save"))
         else:
             asyncio.create_task(post("/api/pvp/top", {"initData": idata}, "http_pvp_top"))
         await asyncio.sleep(1 / (args.save_rate + args.top_rate))
@@ -223,6 +232,7 @@ async def loop_lag(stats, stop_at):
 
 async def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--proto", type=int, default=2, choices=(1, 2), help="протокол мира: 2 — как в игре, 1 — старые полные списки")
     p.add_argument("--url", required=True, help="адрес staging, например https://metalwar-staging.up.railway.app")
     p.add_argument("--bot-token", required=True, help="токен ТЕСТОВОГО бота (как BOT_TOKEN на staging)")
     p.add_argument("--players", type=int, default=100)

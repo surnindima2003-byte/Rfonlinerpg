@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent             # файл лежит в корне репозитория
 GAME = (ROOT / "game.html").read_text(encoding="utf-8")
 ITEMS_SERVER = (ROOT / "items.py").read_text(encoding="utf-8")
 
@@ -47,7 +47,7 @@ class GearCatalogContractTests(unittest.TestCase):
 
     def test_removed_legacy_items_are_not_in_the_live_catalog(self):
         live_catalog = re.search(
-            r"const ITEMS = \{(.*?)\n\};\n// =+ СНАРЯЖЕНИЕ", GAME, re.S
+            r"const ITEMS = \{(.*?)\n\};\n// =+ ", GAME, re.S          # конец каталога — следующий раздел, как бы он ни назывался
         ).group(1)
         legacy = {
             "st_head", "sensor1", "sensor2", "st_armor", "plate1", "plate2",
