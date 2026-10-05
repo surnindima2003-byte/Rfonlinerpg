@@ -674,3 +674,12 @@ async def mint_pack(s, owner, pack):
 
 def setup(app):
     app.router.add_post("/api/items/{op}", api_items)
+
+
+def cleanup(online_ids):
+    """Раз в минуту: таймеры главарей и жетоны частоты убийств ушедших игроков (раньше копились навсегда)."""
+    now = time.time()
+    for uid in [u for u, t in _boss_t.items() if now - t > BOSS_GAP]:
+        _boss_t.pop(uid, None)
+    for uid in [u for u in _bucket if u not in online_ids]:
+        _bucket.pop(uid, None)

@@ -422,3 +422,15 @@ def setup_rating(app, read_auth, push_to_player):
     app.router.add_post("/api/season/top", api_top)
     app.router.add_post("/api/season/claim", api_claim)
     app.router.add_post("/api/season/approve", api_approve)
+
+
+def cleanup(online_ids):
+    """Раз в минуту: очки ушедших игроков, уже записанные в базу, держать в памяти незачем (при входе
+    они загрузятся снова); проверки билета старше 5 минут — тоже. Раньше копились за весь сезон."""
+    if _flush_lock.locked():
+        return                                    # идёт запись: игрок мог быть в пачке, его очки ещё нужны
+    now = time.time()
+    for uid in [u for u in _st if u not in online_ids and u not in _dirty]:
+        _st.pop(uid, None)
+    for uid in [u for u, v in _ticket.items() if now - v[2] > 300]:
+        _ticket.pop(uid, None)

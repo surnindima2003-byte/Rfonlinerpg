@@ -116,3 +116,9 @@ async def add_levels(s, uid, n):
 def bm_cap(lvl):
     """Предел боевой мощи для уровня — с большим запасом на лучшее снаряжение и заточку."""
     return 3000 + 900 * lvl + 20 * lvl * lvl
+
+
+def cleanup(online_ids):
+    """Раз в минуту: кэш уровней нужен только игрокам в сети (сохранение офлайн-игрока его тоже заполняет)."""
+    for uid in [u for u in _cap if u not in online_ids]:
+        forget(uid)

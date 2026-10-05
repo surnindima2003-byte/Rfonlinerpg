@@ -126,3 +126,8 @@ def on_pick(info, d, hub):
     st["loot"].pop(it["id"], None)                                 # кто первый — того и предмет
     hub.to_uid(info["id"], {"t": "wbgot", **it})
     hub.to_loc(LOC, {"t": "wbrm", "id": it["id"]})
+
+
+def cleanup():
+    for uid in [u for u, t in _last_hit.items() if time.time() - t > 60]:
+        _last_hit.pop(uid, None)

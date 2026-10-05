@@ -95,3 +95,12 @@ def setup(app, read_auth, push_to_player, grant_dict):
 
     app.router.add_post("/api/special/status", api_status)
     app.router.add_post("/api/special/claim", api_claim)
+
+
+def cleanup():
+    """Раз в минуту: отметки «нажал недавно» и свободные замки игроков (раньше копились для всех навсегда)."""
+    now = time.time()
+    for uid in [u for u, t in _last.items() if now - t > 60]:
+        _last.pop(uid, None)
+    for uid in [u for u, lk in _locks.items() if u not in _last and not lk.locked()]:
+        _locks.pop(uid, None)

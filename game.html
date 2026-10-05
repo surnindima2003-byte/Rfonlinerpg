@@ -1306,7 +1306,9 @@ textarea.field{min-height:70px;resize:vertical}
 const ERR_Q = [];
 (function(){
   const push = (msg, stack) => { if(ERR_Q.length < 30 && msg) ERR_Q.push({msg:String(msg).slice(0, 500), stack:String(stack || "").slice(0, 2000), ua:navigator.userAgent.slice(0, 200)}); };
-  window.addEventListener("error", e => push(e.message, e.error && e.error.stack || (e.filename + ":" + e.lineno)));
+  // «Script error.» без файла и строки — ошибка в чужом скрипте (браузер скрывает подробности): исправить её
+  // нельзя, а в «Статистике» она только шумит
+  window.addEventListener("error", e => { if(e.message === "Script error." && !e.filename && !e.error) return; push(e.message, e.error && e.error.stack || (e.filename + ":" + e.lineno)); });
   window.addEventListener("unhandledrejection", e => push("Promise: " + (e.reason && e.reason.message || e.reason), e.reason && e.reason.stack));
   setInterval(() => { if(!ERR_Q.length || typeof NET === "undefined" || !NET.on || !NET.id) return; const x = ERR_Q.shift(); NET.api("/api/err", x).catch(() => {}); }, 4000);
 })();
@@ -2911,7 +2913,9 @@ function gfxWatch(ms){
 }
 function loop(ts){
   if(S.settings && S.settings.fps60 === false && ts - last < 31){ requestAnimationFrame(loop); return; }
-  const raw = ts - last, dt = Math.min(0.05, raw/1000); last = ts;
+  // метка кадра бывает меньше прошлой (первый кадр, возврат из фона): отрицательный шаг «отматывал» эффекты,
+  // и у тающих кругов радиус уходил в минус (на iPhone это ошибка IndexSizeError)
+  const raw = ts - last, dt = Math.max(0, Math.min(0.05, raw/1000)); last = ts;
   gfxWatch(raw);
   if(running && vw > 0){
     const t0 = DBG.on ? performance.now() : 0;
@@ -4364,8 +4368,18 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   if(!TG || !TG.initData) return;
   const initData = TG.initData;
   NET.on = true;
+  // Подпись Telegram (initData) действует сутки. Перезагрузка страницы её не обновит — только новый запуск игры.
+  let expiredShown = false;
+  function sessionExpired(){
+    if(expiredShown) return; expiredShown = true;
+    if(typeof save === "function") try{ save(); }catch(_){}
+    openSheet("Сессия устарела", "Игра открыта больше суток", () => {
+      $("shBody").innerHTML = `<div class="empty">Прогресс сохранён на телефоне. Закрой игру и открой её снова через бота — вход обновится, и всё продолжится с этого места.</div><button class="btn wide" type="button" id="expClose">Закрыть игру</button>`;
+      const b = $("expClose"); if(b) b.onclick = () => { try{ Telegram.WebApp.close(); }catch(_){ } };
+    });
+  }
   const api = NET.api = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData, ...(body || {})})})
-    .then(r => r.ok ? r.json() : r.text().then(t => ({ok:false, error:t})));
+    .then(r => r.ok ? r.json() : r.text().then(t => { if(r.status === 401 && t.includes("session expired")) sessionExpired(); return {ok:false, error:t}; }));
 
   // ---- сохранения ----
   let lastPushed = "";
@@ -4482,7 +4496,9 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         // протокол 2: сервер присылает только изменившихся соседей и id ушедших
         if(d.loc !== locKey){ NET.others.clear(); return; }
         if(d.full){ const keep = new Set((d.up || []).map(o => o.id)); for(const id of [...NET.others.keys()]) if(!keep.has(id)) NET.others.delete(id); }
-        for(const o of d.up || []){ let cur = NET.others.get(o.id); if(cur) Object.assign(cur, o); else NET.others.set(o.id, cur = {...o, rx:o.x, ry:o.y}); netSample(cur); }
+        // для знакомых соседей сервер шлёт только изменившиеся поля; незнакомого без полного описания пропускаем —
+        // он придёт целиком (в ближайшем полном снимке), а не появится «пустым» роботом
+        for(const o of d.up || []){ let cur = NET.others.get(o.id); if(cur) Object.assign(cur, o); else if(o.nick !== undefined) NET.others.set(o.id, cur = {...o, rx:o.x, ry:o.y}); else continue; netSample(cur); }
         for(const id of d.gone || []) NET.others.delete(id);
       } else if(d.t === "players"){
         if(d.loc !== locKey){ NET.others.clear(); return; }
@@ -4503,7 +4519,9 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
       else if(d.t === "pong"){ dbgPong(d); }
       else if(typeof onNetExtra === "function") onNetExtra(d);
     };
-    ws.onclose = () => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames(); setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
+    ws.onclose = ev => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames();
+      if(ev && ev.code === 4003){ sessionExpired(); return; }       // подпись Telegram устарела — переподключение не поможет
+      setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
   }
 
   // своё положение — 8 раз в секунду, пока что-то меняется
@@ -10449,9 +10467,18 @@ async function openAdminStats(){
     ${adFunnel(adStats.funnel)}${adSuspects(adStats.suspects)}
     <div class="dsect">Ошибки у игроков (${adStats.errors.length})</div>
     ${adStats.errors.length ? adStats.errors.map(e => `<details class="sterr"><summary><b>${esc(e.msg)}</b><small>${e.count} раз · игроков ${e.users} · ${new Date(e.last).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})}</small></summary><pre>${esc(e.stack || "")}</pre><small>${esc(e.ua)}</small></details>`).join("") : `<div class="empty">Ошибок нет 🎉</div>`}
+    ${adStats.errors.length ? `<button class="btn wide" type="button" data-aderrclear="1">Очистить ошибки</button>` : ""}
     <button class="btn wide" type="button" data-adstats="1">Обновить</button>`;
 }
 $("shBody").addEventListener("click", e => { const b = e.target.closest("button[data-adstats]"); if(b) openAdminStats(); });
+// старые, уже исправленные ошибки иначе висят в списке вечно (новые появятся снова, если не исправлены)
+$("shBody").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-aderrclear]"); if(!b) return;
+  if(!confirm("Удалить все записи об ошибках? Если ошибка не исправлена, она появится снова.")) return;
+  b.disabled = true;
+  const r = await NET.api("/api/admin/errors/clear", {}).catch(() => null);
+  toast(r && r.ok ? "Ошибки очищены: " + r.deleted : "Не получилось"); openAdminStats();
+});
 // ===================== УПРАВЛЕНИЕ: ДЖОЙСТИК, СТИКЕРЫ, РАСПОЛОЖЕНИЕ КНОПОК =====================
 S.settings.joyAlpha = S.settings.joyAlpha ?? 0.66;
 S.settings.joySize = S.settings.joySize ?? 1;

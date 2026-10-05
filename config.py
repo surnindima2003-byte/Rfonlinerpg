@@ -37,6 +37,13 @@ PORT = env_int("PORT", 8080)
 ADMIN_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "D0gEx0").split(",") if u.strip()}
 # Модераторы: могут выдавать мут в чате, АВТО-бой доступен без VIP. Остальных прав админа у них нет.
 MOD_USERNAMES = {u.strip().lstrip("@").lower() for u in os.getenv("MOD_USERNAMES", "yamakaschi,Yana_Ivanova66").split(",") if u.strip()}
+# Надёжнее всего — по Telegram id (числа через запятую): username можно сменить, и его займёт другой человек.
+# Если id не заданы, username из списков выше при первом входе «закрепляется» за своим id (см. webserver.role_ok).
+ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x.isdigit()}
+MOD_IDS = {int(x) for x in os.getenv("MOD_IDS", "").replace(" ", "").split(",") if x.isdigit()}
+# Сколько секунд действует initData (подпись Telegram при открытии игры). Украденная подпись — вход за игрока,
+# поэтому не неделя, как было, а сутки. Дольше сессия не длится: игрок просто открывает игру заново.
+INITDATA_MAX_AGE = max(3600, env_int("INITDATA_MAX_AGE", 86400))
 # Сброс базы: сервер сносит все таблицы, когда эта метка меняется.
 # Чтобы снова обнулить игру, поменяй WIPE_TOKEN в Railway → Variables (например на wipe-
 # Эпоха 5 принудительно обнуляет прогресс всех игроков при следующем запуске,
@@ -70,6 +77,11 @@ BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backups")
 WORLD_HZ = max(1, min(20, env_int("WORLD_HZ", 10)))
 # Радиус видимости в пикселях мира: игрокам шлём только тех, кто ближе. 0 — всю локацию (как было).
 VIEW_RADIUS = env_float("VIEW_RADIUS", 0)
+# соседи на экране пропадают на этом множителе радиуса (появляются — на самом радиусе): без мигания на границе
+VIEW_HYST = max(1.0, env_float("VIEW_HYST", 1.2))
+# Ближняя зона: соседи ближе — 10 раз в секунду, дальние (их видно на миникарте) — раз в секунду.
+# 1300 px больше экрана телефона и обычного окна на компьютере (1 px мира = 1 px экрана). 0 — все каждый шаг.
+NEAR_RADIUS = env_float("NEAR_RADIUS", 1300)
 # Сколько вкладок одного игрока держим одновременно
 WS_MAX_PER_UID = env_int("WS_MAX_PER_UID", 3)
 # Входящие сообщения с одного сокета: в среднем в секунду и допустимый всплеск

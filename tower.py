@@ -53,7 +53,7 @@ def _day_reset():
 
 
 def open_reg(sec=REG_SEC):
-    st.update(phase="reg", reg=set(), until=time.time() + sec, dmg={}, dead=set(), dirty=True)
+    st.update(phase="reg", reg=set(), until=time.time() + sec, dmg={}, dead=set(), dirty=True, nick={})   # ники прошлой башни не копятся
 
 
 async def tick(hub, seasonpts, push):
@@ -154,3 +154,9 @@ def setup(app, read_auth, online):
 
     app.router.add_post("/api/tower/state", api_state)
     app.router.add_post("/api/tower/join", api_join)
+
+
+def cleanup():
+    """Раз в минуту: отметки частоты ударов старше минуты не нужны."""
+    for uid in [u for u, t in _last.items() if time.time() - t > 60]:
+        _last.pop(uid, None)

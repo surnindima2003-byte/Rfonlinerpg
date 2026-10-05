@@ -13,8 +13,8 @@ from sqlalchemy import select, func, update
 import re
 import secrets
 
-from config import BOT_TOKEN, ADMIN_USERNAMES, MOD_USERNAMES, DATA_EPOCH, ENV_NAME
-from config import (WORLD_HZ, VIEW_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BURST, WS_AUTH_TIMEOUT,
+from config import BOT_TOKEN, ADMIN_USERNAMES, MOD_USERNAMES, ADMIN_IDS, MOD_IDS, INITDATA_MAX_AGE, DATA_EPOCH, ENV_NAME
+from config import (WORLD_HZ, VIEW_RADIUS, VIEW_HYST, NEAR_RADIUS, WS_MAX_PER_UID, WS_IN_RATE, WS_IN_BURST, WS_AUTH_TIMEOUT,
                     METRICS_TOKEN, LOADTEST, LOADTEST_UID_BASE)
 from db import SessionLocal, engine, db_ping, dispose as db_dispose
 import metrics
@@ -37,6 +37,7 @@ import mobworld
 import seasonpts
 import worldboss
 import tower
+import vip
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -85,20 +86,90 @@ def ensure_epoch():
 
 
 # ---------- проверка игрока по подписи Telegram ----------
-def auth(init_data: str):
-    """Возвращает игрока, если initData подписан нашим ботом и свежий, иначе None."""
+# username → tg_id, за которым закреплена роль (в meta, переживает вайп). Раньше админом был любой, у кого
+# сейчас этот username: если админ сменит ник в Telegram, занявший старый получил бы админку и бэкапы кошельков.
+ROLE_PINS_KEY = "role_pins"
+_role_pins = {}
+_role_warned = {}
+
+
+def role_ok(username, uid, names, ids):
+    """Роль по id (ADMIN_IDS/MOD_IDS) или по username, закреплённому за первым вошедшим с ним id."""
+    if uid in ids:
+        return True
+    if not username or username not in names:
+        return False
+    pinned = _role_pins.get(username)
+    if pinned is None:
+        _role_pins[username] = uid
+        log.warning("Роль по username @%s закреплена за id %s", username, uid)
+        try:
+            asyncio.get_running_loop().create_task(save_role_pins())
+        except RuntimeError:
+            pass
+        return True
+    if pinned == uid:
+        return True
+    if time.time() - _role_warned.get(uid, 0) > 3600:
+        _role_warned[uid] = time.time()
+        log.error("Вход с username @%s, но роль закреплена за другим id (%s ≠ %s) — прав не даём", username, uid, pinned)
+    return False
+
+
+async def load_role_pins():
+    async with SessionLocal() as s:
+        row = (await s.execute(select(Meta).where(Meta.key == ROLE_PINS_KEY))).scalar_one_or_none()
+    try:
+        pins = json.loads(row.value) if row and row.value else {}
+        _role_pins.update({str(k): int(v) for k, v in pins.items()})
+    except (ValueError, TypeError):
+        log.error("meta.%s испорчен — закрепления ролей начнутся заново", ROLE_PINS_KEY)
+
+
+async def save_role_pins():
+    from db_atomic import insert_ignore
+    try:
+        async with SessionLocal() as s:
+            val = json.dumps(_role_pins)
+            await s.execute(insert_ignore(Meta.__table__, key=ROLE_PINS_KEY, value=val))
+            await s.execute(update(Meta).where(Meta.key == ROLE_PINS_KEY).values(value=val).execution_options(synchronize_session=False))
+            await s.commit()
+    except Exception:
+        log.exception("не удалось сохранить закрепления ролей")
+
+
+def admin_ids():
+    """Все id администраторов: из ADMIN_IDS и закреплённые username (для рассылки бэкапов и т.п.)."""
+    return set(ADMIN_IDS) | {uid for name, uid in _role_pins.items() if name in ADMIN_USERNAMES}
+
+
+def _parse_init(init_data):
     if not init_data or len(init_data) > 4096:
         return None
     try:
         data = safe_parse_webapp_init_data(token=BOT_TOKEN, init_data=init_data)
     except ValueError:
         return None
-    if not data.user or time.time() - data.auth_date.timestamp() > 7 * 86400:
+    return data if data.user else None
+
+
+def auth(init_data: str):
+    """Возвращает игрока, если initData подписан нашим ботом и свежий, иначе None."""
+    data = _parse_init(init_data)
+    if not data or time.time() - data.auth_date.timestamp() > INITDATA_MAX_AGE:
         return None
     u = data.user
     username = (u.username or "").lower()
+    admin = role_ok(username, u.id, ADMIN_USERNAMES, ADMIN_IDS)
+    mod = admin or role_ok(username, u.id, MOD_USERNAMES, MOD_IDS)
     return {"id": u.id, "username": username, "name": u.first_name or "Пилот", "start": str(data.start_param or "")[:64],
-            "admin": username in ADMIN_USERNAMES, "mod": username in MOD_USERNAMES or username in ADMIN_USERNAMES}
+            "admin": admin, "mod": mod}
+
+
+def auth_expired(init_data):
+    """Подпись настоящая, но устарела: игроку нужно открыть игру заново (а не «ошибка входа»)."""
+    data = _parse_init(init_data)
+    return bool(data) and time.time() - data.auth_date.timestamp() > INITDATA_MAX_AGE
 
 
 async def read_auth(request):
@@ -110,7 +181,7 @@ async def read_auth(request):
         raise web.HTTPBadRequest(text="bad json")
     user = auth(body.get("initData", ""))
     if not user:
-        raise web.HTTPUnauthorized(text="bad initData")
+        raise web.HTTPUnauthorized(text="session expired" if auth_expired(body.get("initData", "")) else "bad initData")
     return body, user
 
 
@@ -175,6 +246,7 @@ async def metrics_page(request):
     data["env"] = ENV_NAME
     data["world_hz"] = WORLD_HZ
     data["view_radius"] = VIEW_RADIUS
+    data["near_radius"] = NEAR_RADIUS
     return web.json_response(data)
 
 
@@ -1791,6 +1863,36 @@ async def handle_pvp_dead(d, info):
     metrics.inc("pvp.death")
 
 
+KILLS_BACKLOG = 30          # пачек убийств в очереди одного игрока — больше уже не нормальная игра
+
+
+def queue_kills(d, info, conn):
+    """Убийства — в фоне, по очереди для каждого игрока.
+
+    Раньше цикл сообщений игрока ждал, пока засчитаются до 40 убийств (несколько запросов к базе на каждое).
+    Всё это время его позиции не обрабатывались: для остальных он замирал, а потом «прыгал».
+    Удары (mh) по-прежнему учитываются сразу, до постановки в очередь, — сервер видит их раньше убийства.
+    Порядок пачек сохраняется: asyncio.Lock отдаёт очередь ждущим по порядку."""
+    lock = info.get("_klock")
+    if lock is None:
+        lock = info["_klock"] = asyncio.Lock()
+    if info.get("_kq", 0) >= KILLS_BACKLOG:
+        metrics.inc("kill.backlog_drop")
+        conn.push(realtime.encode({"t": "kres", "n": d.get("kn"), "drops": [], "lvlCap": info.get("lvl_cap")}))
+        return
+    info["_kq"] = info.get("_kq", 0) + 1
+
+    async def run():
+        try:
+            async with lock:
+                await handle_kills(d, info, conn)
+        except Exception:
+            log.exception("убийства в фоне uid=%s", info.get("id"))
+        finally:
+            info["_kq"] -= 1
+    asyncio.create_task(run())
+
+
 async def handle_kills(d, info, conn):
     """Убийства мобов из сообщения pos. Ответ (выпавший лут) — сообщением kres с тем же номером пачки."""
     exp = []
@@ -1897,7 +1999,10 @@ async def ws_handler(request):
                 user = auth(d.get("initData", ""))
                 if not user:
                     metrics.inc("ws.auth_fail")
-                    await ws.close(code=4001, message=b"bad auth")
+                    if auth_expired(d.get("initData", "")):
+                        await ws.close(code=4003, message=b"session expired")      # телефон не будет переподключаться
+                    else:
+                        await ws.close(code=4001, message=b"bad auth")
                     break
                 auth_timer.cancel()
                 try:
@@ -1997,7 +2102,7 @@ async def handle_ws_message(d, t, info, conn):
         if d.get("mh"):
             mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
         if d.get("mk"):
-            await handle_kills(d, info, conn)
+            queue_kills(d, info, conn)
     elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
         await handle_party(d, info)
     elif t == "pvp":
@@ -2059,34 +2164,87 @@ def _near(a, b, r2):
     return (a.get("x", 0) - b.get("x", 0)) ** 2 + (a.get("y", 0) - b.get("y", 0)) ** 2 <= r2
 
 
+def _diff(old, new):
+    if old is None or old.keys() != new.keys():
+        return None
+    ch = {k: v for k, v in new.items() if old.get(k) != v}
+    ch["id"] = new["id"]
+    return realtime.encode(ch)
+
+
+def _pub_state(c, slow_tick):
+    """Публичное состояние игрока на этом шаге (хранится в info, считается только при изменениях):
+    _pv/_pf/_pd — версия, строка целиком, данные; _pp — изменения за этот шаг (от версии _pv-1);
+    _kv/_kp — версия на прошлом «медленном» шаге и изменения от неё (для дальних соседей, раз в секунду)."""
+    i = c.info
+    d = public(i)
+    if d != i.get("_pd"):
+        i["_pp"] = _diff(i.get("_pd"), d)
+        i["_pv"] = i.get("_pv", 0) + 1
+        i["_pf"] = realtime.encode(d)
+        i["_pd"] = d
+    if slow_tick:
+        if i.get("_kd_v") != i["_pv"]:
+            i["_kp"] = _diff(i.get("_kd"), d)
+            i["_kv"] = i.get("_kd_v")                    # от какой версии считаны изменения
+            i["_kd"], i["_kd_v"] = d, i["_pv"]
+    return i
+
+
 def world_tick(keepalive, full_tick=False):
-    """Один шаг рассылки. Каждый игрок сериализуется ОДИН раз за шаг, а не для каждого получателя."""
+    """Один шаг рассылки. Каждый игрок сериализуется ОДИН раз за шаг (и только если изменился).
+
+    Протокол 2 (все текущие клиенты) — два уровня интереса:
+      * соседи ближе NEAR_RADIUS — каждый шаг; если телефон знает предыдущую версию, уходят только изменившиеся
+        поля (обычно x, y, ang, aim — около 60 байт вместо ~350), телефон сливает их (Object.assign);
+      * дальние — раз в секунду (для миникарты), тоже только изменения с прошлой секунды.
+    Новые соседи, пропущенные версии и раз в 10 с — целиком. VIEW_RADIUS (если задан) — жёсткая отсечка.
+    Замер на 100 бегущих игроках в одной локации: было ~394 КБ/с на игрока, стало ~10–15 КБ/с."""
     r2 = VIEW_RADIUS ** 2 if VIEW_RADIUS > 0 else 0
+    r2_out = (VIEW_RADIUS * VIEW_HYST) ** 2 if VIEW_RADIUS > 0 else 0
+    n2 = NEAR_RADIUS ** 2 if NEAR_RADIUS > 0 else 0
     for loc, members in list(hub.by_loc.items()):
         conns = [c for c in members if not c.closing]
         if not conns:
             continue
-        frags = [(c, realtime.encode(public(c.info))) for c in conns]
+        states = [(o, _pub_state(o, keepalive)) for o in conns]
         loc_js = json.dumps(loc)
         head = '{"t":"players","loc":' + loc_js + ',"list":['
         for c in conns:
             me, uid = c.info, c.uid
+            base = c.sent_view if c.delta else None
             if r2:
-                vis = [(o.uid, f) for o, f in frags if o.uid != uid and _near(me, o.info, r2)]
+                # кто уже на экране, пропадает чуть дальше, чем появляется: без мигания на границе видимости
+                vis = [(o, st) for o, st in states if o.uid != uid and
+                       _near(me, o.info, r2_out if base is not None and o.uid in base else r2)]
             else:
-                vis = [(o.uid, f) for o, f in frags if o.uid != uid]
+                vis = [(o, st) for o, st in states if o.uid != uid]
             if not c.delta:
-                c.push_snapshot(head + ",".join(f for _, f in vis) + "]}", keepalive)
+                c.push_snapshot(head + ",".join(st["_pf"] for _, st in vis) + "]}", keepalive)
                 continue
-            # протокол 2: только изменившиеся соседи и id ушедших; полный снимок — после смены локации и раз в 10 с
-            view = dict(vis)
-            base = c.sent_view
             full = base is None or full_tick
-            if full:
-                up, gone = list(view.values()), []
-            else:
-                up = [f for i, f in view.items() if base.get(i) != f]
-                gone = [i for i in base if i not in view]
+            view, up = {}, []
+            for o, st in vis:
+                i, ver = o.uid, st["_pv"]
+                if full:
+                    view[i] = ver
+                    up.append(st["_pf"])
+                    continue
+                have = base.get(i)
+                if have == ver:
+                    view[i] = ver
+                    continue
+                if have is not None and n2 and not keepalive and not _near(me, o.info, n2):
+                    view[i] = have                       # дальний сосед: обновим на «медленном» шаге
+                    continue
+                view[i] = ver
+                if have == ver - 1 and st.get("_pp") is not None:
+                    up.append(st["_pp"])
+                elif keepalive and have is not None and have == st.get("_kv") and st.get("_kp") is not None:
+                    up.append(st["_kp"])
+                else:
+                    up.append(st["_pf"])
+            gone = [] if full else [i for i in base if i not in view]
             if not full and not up and not gone:
                 metrics.inc("world.delta_empty")
                 continue
@@ -2160,6 +2318,15 @@ async def cleanup_loop():
             mobguard.cleanup(online_ids)
             mobworld.cleanup(online_ids)
             saveguard.cleanup(online_ids)
+            # временные словари модулей: без этого они росли с каждым новым игроком до перезапуска
+            items.cleanup(online_ids)
+            progress.cleanup(online_ids)
+            seasonpts.cleanup(online_ids)
+            stats.cleanup()
+            vip.cleanup()
+            worldboss.cleanup()
+            tower.cleanup()
+            special_quests.cleanup()
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})
         except Exception:
@@ -2216,6 +2383,7 @@ async def start_web(port: int):
     STATE["tasks"]["season"] = asyncio.create_task(seasonpts.flush_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await load_mutes()
+    await load_role_pins()
     await clean_guilds()
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи
@@ -2226,7 +2394,8 @@ async def start_web(port: int):
     STATE["ready"] = True
     if LOADTEST:
         log.warning("РЕЖИМ НАГРУЗОЧНОГО ТЕСТА включён (staging, LOADTEST=1)")
-    log.info("Игра доступна на порту %s (мир %s Гц, радиус видимости %s)", port, WORLD_HZ, VIEW_RADIUS or "вся локация")
+    log.info("Игра доступна на порту %s (мир %s Гц, радиус видимости %s, ближняя зона %s)", port, WORLD_HZ,
+             VIEW_RADIUS or "вся локация", NEAR_RADIUS or "вся локация")
 
 
 async def stop_web(drain_s=2.0):

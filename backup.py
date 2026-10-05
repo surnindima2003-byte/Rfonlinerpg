@@ -50,19 +50,22 @@ def make_backup():
 
 
 async def send_to_admins(made):
-    """Денежная выгрузка уходит администраторам в Telegram: копия переживёт даже потерю диска Railway."""
+    """Денежная выгрузка уходит администраторам в Telegram: копия переживёт даже потерю диска Railway.
+
+    Получатели — по Telegram id (ADMIN_IDS и username, закреплённые за своим id при первом входе).
+    Раньше искали по username в сохранениях: им мог оказаться другой человек, занявший старый ник админа,
+    и тогда ему уходили балансы и адреса всех игроков."""
     from aiogram.types import FSInputFile
-    from sqlalchemy import func as sfunc
     import gram
-    from config import ADMIN_USERNAMES
-    from db import SessionLocal
-    from models import GameSave
+    from webserver import admin_ids
     bot = gram.BOT.get("bot")
     money = [p for p in made if os.path.basename(p).startswith("money-")]
-    if not bot or not money or not ADMIN_USERNAMES:
+    ids = sorted(admin_ids())
+    if not bot or not money:
         return
-    async with SessionLocal() as s:
-        ids = [r[0] for r in (await s.execute(select(GameSave.tg_id).where(sfunc.lower(GameSave.username).in_([u.lower() for u in ADMIN_USERNAMES])))).all()]
+    if not ids:
+        log.warning("Резервная копия не отправлена: нет id администраторов (задай ADMIN_IDS или зайди в игру админом)")
+        return
     for chat in ids:
         try:
             await bot.send_document(chat, FSInputFile(money[0]), caption="🗄 Ежедневная резервная копия денежных таблиц MetalWar (GRAM, выводы, звёзды, реестр вещей, маркет, рефералы). Храни этот файл.")

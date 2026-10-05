@@ -1,5 +1,6 @@
 """Статистика для админа и сбор ошибок из игры."""
 import hashlib
+import logging
 import time
 
 from aiohttp import web
@@ -8,6 +9,7 @@ from sqlalchemy import select, func
 from db import SessionLocal
 from models import GameSave, FirstSeen, ClientError, GramWallet, GramTx, GramWithdrawal, StarPayment, MarketHist, PvpStat
 
+log = logging.getLogger("stats")
 _err_rate = {}          # tg_id -> [время, количество] — не больше 20 ошибок в минуту от игрока
 _err_users = {}         # ключ ошибки -> набор игроков (в памяти, для оценки охвата)
 NANO = 10 ** 9
@@ -55,6 +57,20 @@ async def api_err(request):
                         .execution_options(synchronize_session=False))
         await s.commit()
     return web.json_response({"ok": True})
+
+
+async def api_errors_clear(request):
+    """Админ очищает список ошибок (старые, уже исправленные, иначе висят в «Статистике» вечно)."""
+    from webserver import read_auth
+    body, user = await read_auth(request)
+    if not user["admin"]:
+        raise web.HTTPForbidden()
+    async with SessionLocal() as s:
+        n = (await s.execute(ClientError.__table__.delete())).rowcount
+        await s.commit()
+    _err_users.clear()
+    log.info("Админ %s очистил ошибки игроков: %s", user["id"], n)
+    return web.json_response({"ok": True, "deleted": n})
 
 
 async def api_stats(request):
@@ -115,3 +131,14 @@ async def api_stats(request):
 def setup(app):
     app.router.add_post("/api/err", api_err)
     app.router.add_post("/api/admin/stats", api_stats)
+    app.router.add_post("/api/admin/errors/clear", api_errors_clear)
+
+
+def cleanup():
+    """Раз в минуту (из webserver.cleanup_loop): счётчики частоты старше минуты не нужны; охват ошибок —
+    оценка, поэтому при разрастании просто начинаем считать заново (раньше оба словаря росли без предела)."""
+    now = time.time()
+    for uid in [u for u, (t0, _) in _err_rate.items() if now - t0 > 60]:
+        _err_rate.pop(uid, None)
+    if len(_err_users) > 500 or sum(len(v) for v in _err_users.values()) > 50_000:
+        _err_users.clear()

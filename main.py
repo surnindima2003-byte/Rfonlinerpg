@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.types import MenuButtonWebApp, WebAppInfo
 
-from config import BOT_TOKEN, WEBAPP_URL, PORT, ADMIN_USERNAMES
+from config import BOT_TOKEN, WEBAPP_URL, PORT, ADMIN_USERNAMES, ADMIN_IDS
 from db import init_db
 from webserver import start_web, stop_web
 import start_handlers as start
@@ -36,7 +36,8 @@ async def main():
         gram.BOT_USERNAME["name"] = (await bot.get_me()).username or ""
     except Exception as e:
         logging.warning("Не удалось узнать имя бота: %s", e)
-    logging.info("Администраторы игры: %s", ", ".join("@" + a for a in ADMIN_USERNAMES) or "не заданы")
+    logging.info("Администраторы игры: %s; по id: %s", ", ".join("@" + a for a in ADMIN_USERNAMES) or "—",
+                 ", ".join(map(str, sorted(ADMIN_IDS))) or "не заданы (username закрепится за id при первом входе)")
 
     if WEBAPP_URL:
         await bot.set_chat_menu_button(

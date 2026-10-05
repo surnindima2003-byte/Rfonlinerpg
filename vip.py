@@ -42,3 +42,10 @@ async def level(s, uid, admin=False):
 def forget(uid):
     """Сбросить кэш после покупки в магазине — новый VIP начнёт действовать сразу."""
     _cache.pop(uid, None)
+
+
+def cleanup():
+    """Раз в минуту: кэш уровней VIP старше 10 минут не нужен (при надобности перечитается из базы)."""
+    now = time.time()
+    for uid in [u for u, (t, _) in _cache.items() if now - t > 600]:
+        _cache.pop(uid, None)
