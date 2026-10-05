@@ -4384,18 +4384,38 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   // ---- сохранения ----
   let lastPushed = "";
   let serverEpoch = null;
+  let rejUntil = 0, rejToastT = 0, fixToastT = 0;      // отказы и поправки сервера при сохранении
   function snapshot(){ return {S, W:Wl, ts:S._ts || 0, bm:combatPower()}; }
   async function push(force){
     // До ответа сервера эпоха неизвестна: отправка здесь могла бы вернуть
     // старый локальный инвентарь сразу после полного сброса.
     if(!serverEpoch) return;
+    if(!force && Date.now() < rejUntil) return;          // сервер недавно отказал — повторим через минуту, не каждые 10 с
     const js = JSON.stringify(snapshot());
     if(!force && js === lastPushed) return;
     S._ts = Date.now(); save();
     const data = snapshot(); lastPushed = JSON.stringify(data);
     const sentCraft = +S.craftN || 0;
+    const sent = {scrap:+S.scrap || 0, cores:+S.cores || 0};
     try{
       const r = await api("/api/state/save", {epoch:serverEpoch, data});
+      // сервер срезал лишний лом или ядра (больше, чем можно было набрать за это время) — применяем у себя,
+      // считая от отправленного: за время запроса игрок мог набрать ещё
+      if(r && r.ok && r.fix){
+        const cut = [];
+        for(const k of ["scrap", "cores"]){
+          const v = +r.fix[k];
+          if(isFinite(v) && sent[k] > v){ const d = sent[k] - v; S[k] = Math.max(0, (+S[k] || 0) - d); cut.push((k === "scrap" ? "лом " : "ядра ") + "−" + d.toLocaleString("ru-RU")); }
+        }
+        if(cut.length){ save(); lastPushed = ""; if(Date.now() - fixToastT > 60000){ fixToastT = Date.now(); toast("Сервер не засчитал лишнее: " + cut.join(", ")); } }
+      }
+      if(r && !r.ok && String(r.error || "").includes("save rejected")){
+        // не молча: игрок должен понимать, почему прогресс не уходит на сервер (он хранится на телефоне)
+        let what = []; try{ what = JSON.parse(r.error).what || []; }catch(_){}
+        lastPushed = ""; rejUntil = Date.now() + 60000;
+        if(Date.now() - rejToastT > 600000){ rejToastT = Date.now();
+          toast("Сервер не принял сохранение" + (what.length ? " (подозрительный прирост: " + what.join(", ") + ")" : "") + ". Прогресс хранится на этом телефоне, повторим через минуту"); }
+      } else if(r && r.ok) rejUntil = 0;
       // сервер видел крафт, которого нет в этом сохранении (например, собрано на другом устройстве):
       // такие сохранения он не примет — берём его версию. Отказ из-за крафта, ответ на который уже
       // пришёл (счётчик вырос, пока сохранение шло), не в счёт: следующее сохранение пройдёт.
@@ -10464,7 +10484,7 @@ async function openAdminStats(){
     ${Object.entries(P.levels).map(([k, n]) => `<div class="stbar"><span>${k}</span><div><i style="width:${n/lvMax*100}%"></i></div><b>${n}</b></div>`).join("")}
     <div class="dsect">Деньги</div>
     <div class="stgrid">${card(gramF(M.gram_total), "GRAM на балансах")}${card(gramF(M.gram_locked), "из них игровые ⭐")}${card(gramF(M.dep_day), "пополнено за сутки", "var(--ok)")}${card(gramF(M.dep_all), "пополнено всего")}${card(gramF(M.shop_day), "потрачено в магазине за сутки")}${card(M.stars_day + " ⭐", "звёзд за сутки")}${card(M.stars_all + " ⭐", "звёзд всего")}${card(M.market_day, "сделок на маркете за сутки")}${card(gramF(M.market_day_sum), "оборот маркета, GRAM")}${card(M.wd_pending, "заявок на вывод", M.wd_pending ? "#F2A93B" : "")}${card(gramF(M.wd_pending_sum), "к выплате, GRAM")}${card(M.pvp_kills, "побед в PvP всего")}</div>
-    ${adFunnel(adStats.funnel)}${adSuspects(adStats.suspects)}
+    ${adFunnel(adStats.funnel)}${adSuspects(adStats.suspects)}${adSaves(adStats.saves)}
     <div class="dsect">Ошибки у игроков (${adStats.errors.length})</div>
     ${adStats.errors.length ? adStats.errors.map(e => `<details class="sterr"><summary><b>${esc(e.msg)}</b><small>${e.count} раз · игроков ${e.users} · ${new Date(e.last).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})}</small></summary><pre>${esc(e.stack || "")}</pre><small>${esc(e.ua)}</small></details>`).join("") : `<div class="empty">Ошибок нет 🎉</div>`}
     ${adStats.errors.length ? `<button class="btn wide" type="button" data-aderrclear="1">Очистить ошибки</button>` : ""}
@@ -12003,6 +12023,14 @@ function adFunnel(f){
   if(!f || !f.length) return "";
   const top = Math.max(1, f[0].n);
   return `<div class="dsect">Воронка новичков за 7 дней</div>` + f.map(x => `<div class="stbar"><span>${esc(x.name)}</span><div><i style="width:${x.n/top*100}%"></i></div><b>${x.n}${x !== f[0] && f[0].n ? ` <small>${Math.round(x.n*100/f[0].n)}%</small>` : ""}</b></div>`).join("");
+}
+// проверка сохранений: видно прямо в игре, не ловит ли она честных игроков
+function adSaves(sv){
+  if(!sv) return "";
+  const mode = {off:"выключена", shadow:"только наблюдение", on:"включена"}[sv.mode] || sv.mode, c = sv.counts || {};
+  const row = x => `<div class="stline">${esc(x.nick || "?")} <small>id ${esc(String(x.uid))} · ${new Date(x.ts*1000).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})}</small><br><small>${(x.notes || []).map(esc).join("<br>")}</small></div>`;
+  return `<div class="dsect">Проверка сохранений</div><div class="stline">Режим: <b>${mode}</b> · с запуска сервера: подозрительных <b>${c.flagged || 0}</b>, исправлено <b>${c.clamped || 0}</b>, отклонено <b>${c.rejected || 0}</b></div>` +
+    (sv.recent && sv.recent.length ? sv.recent.map(row).join("") : `<div class="empty">Замечаний нет</div>`);
 }
 function adSuspects(sx){
   if(!sx) return "";

@@ -78,6 +78,8 @@ async def api_stats(request):
     body, user = await read_auth(request)
     if not user["admin"]:
         raise web.HTTPForbidden()
+    import metrics
+    import saveguard
     now = int(time.time())
     day, week = now - 86400, now - 7 * 86400
     async with SessionLocal() as s:
@@ -125,6 +127,10 @@ async def api_stats(request):
                   "stars_day": stars_day, "stars_all": stars_all, "market_day": mk_day[0] or 0, "market_day_sum": g(mk_day[1]), "pvp_kills": pvp_fights},
         "funnel": fun,
         "suspects": {"mode": mobguard.MODE, "list": [{"uid": str(u), "nick": nicks.get(u, ("?", 1))[0], "lvl": nicks.get(u, ("?", 1))[1], "rejects": n} for u, n in sus]},
+        # проверка сохранений: последние отклонённые и исправленные (в памяти, до перезапуска) — чтобы видеть,
+        # не ловит ли она честных игроков, без /metrics
+        "saves": {"mode": saveguard.MODE, "counts": {k: metrics.counters.get(f"saveguard.{k}", 0) for k in ("flagged", "rejected", "clamped")},
+                  "recent": list(saveguard.recent)[-15:][::-1]},
         "errors": [{"msg": e.msg, "stack": e.stack[:600], "count": e.count, "users": e.users, "last": e.last * 1000, "ua": e.ua} for e in errs]})
 
 

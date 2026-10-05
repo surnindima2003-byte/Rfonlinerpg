@@ -283,6 +283,7 @@ async def api_save(request):
     if len(raw.encode()) > MAX_SAVE_BYTES:
         raise web.HTTPBadRequest(text="bad save")
     s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
+    fix = {}                                             # что сервер поправил в сохранении (телефон применит)
     # сохранение и серверный крафт этого игрока — строго по очереди (см. saveguard.player_lock)
     async with saveguard.player_lock(user["id"]):
         async with SessionLocal() as s:
@@ -336,11 +337,14 @@ async def api_save(request):
                         granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
                     except (ValueError, TypeError, AttributeError):
                         pass
-                data, notes = saveguard.check(user["id"], user["username"] or user["name"], base, data, dt, granted)
+                data, notes = saveguard.check(user["id"], user["username"] or user["name"], base, data, dt, granted, fix_out=fix)
                 if notes:
                     log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
                 if data is None:
-                    return web.json_response({"ok": False, "error": "save rejected"}, status=409)
+                    # причина — телефону, чтобы игрок понимал, что происходит (раньше отказ проходил молча)
+                    names = {"сферы": "сферы", "заточка": "заточка", "chip": "микросхемы", "wire": "провода", "plate": "бронепластины"}
+                    what = sorted({v for k, v in names.items() if any(b.startswith(k) for a, b in notes if a == "скачок")})
+                    return web.json_response({"ok": False, "error": "save rejected", "what": what}, status=409)
                 s_ = data.get("S") if isinstance(data.get("S"), dict) else {}
             raw = json.dumps(data, ensure_ascii=False)
             row.epoch = DATA_EPOCH
@@ -365,7 +369,7 @@ async def api_save(request):
             await s.commit()
     if nick_changed:
         set_online_nick(user["id"], row.nick)
-    return web.json_response({"ok": True})
+    return web.json_response({"ok": True, "fix": fix} if fix else {"ok": True})
 
 
 async def api_ack(request):

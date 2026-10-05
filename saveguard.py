@@ -194,11 +194,14 @@ def commit_slack(uid, slack):
     _slack[uid] = slack
 
 
-def jumps(old, new, dt, granted, slack=None, skip_ench=False):
+def jumps(old, new, dt, granted, slack=None, skip_ench=False, caps_out=None):
     """Подозрительные скачки между прошлым и новым сохранением. granted — выдачи сервера за это время.
 
-    slack — остаток разового запаса (slack_of); тратится на месте. None — полный запас (как одно сохранение)."""
+    slack — остаток разового запаса (slack_of); тратится на месте. None — полный запас (как одно сохранение).
+    caps_out — словарь: для каждого превышения ключ ресурса → наибольшее допустимое значение (для лома и ядер
+    по нему сервер может «срезать» лишнее, а не отклонять всё сохранение)."""
     out = []
+    caps_out = {} if caps_out is None else caps_out
     dt = max(1.0, min(dt, 3600.0))
     if slack is None:
         slack = _base_caps()
@@ -219,15 +222,18 @@ def jumps(old, new, dt, granted, slack=None, skip_ench=False):
         if _num(a) and _num(b):
             allowed = rate * dt + granted.get(k, 0)
             if over(k, b - a, allowed):
+                caps_out[k] = int(a + allowed + slack.get(k, 0))
                 out.append(f"{k} +{int(b - a)} за {int(dt)} с (предел {int(allowed + slack.get(k, 0))})")
     for mid in MATS:
         allowed = MAT_PER_SEC * dt
         d = mats(new, mid) - mats(old, mid)
         if over(mid, d, allowed):
+            caps_out[mid] = None
             out.append(f"{mid} +{d} за {int(dt)} с (предел {int(allowed + slack.get(mid, 0))})")
     if not skip_ench:
         d_e = max_ench(new) - max_ench(old)
         if d_e > ENCH_JUMP:
+            caps_out["ench"] = None
             out.append(f"заточка +{d_e} за {int(dt)} с")
     # сферы: больше, чем можно купить на весь доступный лом, получить наградами и выбить
     a, b = old.get("scrap", 0), new.get("scrap", 0)
@@ -238,12 +244,14 @@ def jumps(old, new, dt, granted, slack=None, skip_ench=False):
     s_old, s_new = spheres(old), spheres(new)
     sph_slack0 = slack.get("sph", 0)
     if over("sph", s_new - s_old, sph_allowed):
+        caps_out["sph"] = None
         out.append(f"сферы +{s_new - s_old} за {int(dt)} с (предел {int(sph_allowed + slack.get('sph', 0))})")
     # заточка без сфер: успешных заточек не может быть больше, чем потрачено сфер
     if not skip_ench:
         spent_max = max(0, s_old + sph_allowed + sph_slack0 - s_new)
         e_gain = ench_total(new) - ench_total(old)
         if e_gain > spent_max + ENCH_SLACK:
+            caps_out["ench"] = None
             out.append(f"заточка +{e_gain} при потраченных сферах не больше {spent_max}")
     return out
 
@@ -260,8 +268,15 @@ def note_purchase(uid, pack=None):
     p["t"] = time.time()
 
 
-def check(uid, nick, old_data, new_data, dt, granted):
-    """Возвращает (данные для записи или None — не записывать, список замечаний)."""
+CLAMPABLE = ("scrap", "cores")       # эти скачки сервер исправляет (срезает лишнее), остальные — отклоняет
+
+
+def check(uid, nick, old_data, new_data, dt, granted, fix_out=None):
+    """Возвращает (данные для записи или None — не записывать, список замечаний).
+
+    fix_out — словарь: сюда попадают значения, которые сервер исправил в сохранении (например {"scrap": 120000}),
+    чтобы телефон применил их у себя. Раньше любой скачок отклонял сохранение целиком: честный игрок с лишним
+    ломом (продажа вещей, награда) терял на сервере и весь остальной прогресс."""
     if MODE == "off":
         return new_data, []
     S = new_data.get("S") if isinstance(new_data.get("S"), dict) else {}
@@ -277,7 +292,16 @@ def check(uid, nick, old_data, new_data, dt, granted):
         if bought:
             for k in ("scrap", "cores", "sph"):
                 g[k] = g.get(k, 0) + bought[k]
-        notes += [("скачок", j) for j in jumps(oldS, S, dt, g, slack, skip_ench=bool(bought and bought["ench"]))]
+        caps = {}
+        notes += [("скачок", j) for j in jumps(oldS, S, dt, g, slack, skip_ench=bool(bought and bought["ench"]), caps_out=caps)]
+        if MODE == "on" and caps and all(k in CLAMPABLE and v is not None for k, v in caps.items()):
+            # только лом и ядра: срезаем лишнее до допустимого, остальное сохранение принимаем
+            for k, v in caps.items():
+                S[k] = max(0, min(int(S.get(k, 0)), v))
+                slack[k] = 0
+                if fix_out is not None:
+                    fix_out[k] = S[k]
+            notes = [("исправлено" if a == "скачок" else a, b) for a, b in notes]
     rejected = MODE == "on" and any(a == "скачок" for a, _ in notes)
     if not rejected:
         commit_slack(uid, slack)                     # запас тратится, только если сохранение принято
@@ -295,6 +319,8 @@ def check(uid, nick, old_data, new_data, dt, granted):
         return None, notes
     fix_structure(S)
     metrics.inc("saveguard.fixed")
+    if fix_out:
+        metrics.inc("saveguard.clamped")
     return new_data, notes
 
 

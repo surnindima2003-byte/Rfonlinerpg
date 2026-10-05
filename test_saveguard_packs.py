@@ -60,15 +60,13 @@ class SlackAndPurchase(unittest.TestCase):
         saveguard._purchases.clear()
 
     def test_rapid_saves_cannot_print_scrap(self):
-        # раньше каждое сохранение давало +20 000 лома «из воздуха»: 10 сохранений подряд = +200 000
-        uid, cur, rejected = 77, 0, 0
+        # раньше каждое сохранение давало +20 000 лома «из воздуха»: 10 сохранений подряд = +200 000.
+        # Теперь лишний лом срезается: за 10 сохранений по 1 с набирается не больше запаса + скорости фарма
+        uid, cur = 77, 0
         for _ in range(10):
             data, notes = saveguard.check(uid, "x", save(scrap=cur), save(scrap=cur + 19_000), 1, {})
-            if data is None:
-                rejected += 1
-            else:
-                cur += 19_000
-        self.assertGreaterEqual(rejected, 8)
+            cur = data["S"]["scrap"]
+        self.assertLessEqual(cur, saveguard.SCRAP_BASE + saveguard.SCRAP_PER_SEC * 10)
 
     def test_rapid_saves_cannot_print_materials(self):
         uid, cur, rejected = 78, 0, 0
@@ -89,14 +87,23 @@ class SlackAndPurchase(unittest.TestCase):
 
     def test_rejected_save_does_not_spend_slack(self):
         uid = 80
-        saveguard.check(uid, "x", save(scrap=0), save(scrap=9_000_000), 1, {})     # отклонено
+        saveguard.check(uid, "x", save(scrap=0, inv=[{"id": "chip", "n": 0}]),
+                        save(scrap=0, inv=[{"id": "chip", "n": 9_000}]), 1, {})            # отклонено (материалы)
         self.assertEqual(saveguard.check(uid, "x", save(scrap=0), save(scrap=19_000), 1, {})[1], [])
+
+    def test_clamped_scrap_spends_slack(self):
+        uid = 85
+        saveguard.check(uid, "x", save(scrap=0), save(scrap=9_000_000), 1, {})           # срезано — запас израсходован
+        data, notes = saveguard.check(uid, "x", save(scrap=0), save(scrap=19_000), 1, {})
+        self.assertLess(data["S"]["scrap"], 19_000)
 
     def test_purchase_allows_only_pack_contents(self):
         uid = 81
         saveguard.note_purchase(uid, "p_start")                # +10 000 лома
         data, notes = saveguard.check(uid, "x", save(scrap=0), save(scrap=5_000_000), 10, {})
-        self.assertIsNone(data)                               # раньше покупка отключала проверку целиком
+        # раньше покупка отключала проверку целиком; теперь лом сверх пака и запаса срезается
+        self.assertLessEqual(data["S"]["scrap"], 10_000 + saveguard.SCRAP_BASE + saveguard.SCRAP_PER_SEC * 10)
+        saveguard._slack.clear()
         saveguard.note_purchase(uid, "p_legend")               # +1 000 000 лома
         data, notes = saveguard.check(uid, "x", save(scrap=0), save(scrap=1_000_000), 10, {})
         self.assertEqual(notes, [])
@@ -111,7 +118,7 @@ class SlackAndPurchase(unittest.TestCase):
     def test_first_save_checked_against_empty(self):
         # сервер теперь сравнивает первое сохранение с пустым (api_save передаёт {"S": {}})
         data, notes = saveguard.check(83, "x", {"S": {}}, save(scrap=5_000_000), 60, {})
-        self.assertIsNone(data)
+        self.assertLessEqual(data["S"]["scrap"], saveguard.SCRAP_BASE + saveguard.SCRAP_PER_SEC * 60)
         data, notes = saveguard.check(84, "x", {"S": {}}, save(scrap=30, cores=0), 60, {})
         self.assertEqual(notes, [])
 

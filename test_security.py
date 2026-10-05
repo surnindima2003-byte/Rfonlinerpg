@@ -77,6 +77,21 @@ class Cleanup(unittest.TestCase):
         self.assertIn("_flush_lock.locked()", fn)
 
 
+class SaveRejectHandling(unittest.TestCase):
+    def test_server_passes_fix_and_reason(self):
+        fn = WEB[WEB.index("async def api_save"):WEB.index("async def api_ack")]
+        self.assertIn("fix_out=fix", fn)
+        self.assertIn('"what": what', fn)
+        self.assertIn('{"ok": True, "fix": fix}', fn)
+
+    def test_client_applies_fix_and_explains_reject(self):
+        game = (ROOT / "game.html").read_text(encoding="utf-8")
+        self.assertIn("if(r && r.ok && r.fix)", game)
+        self.assertIn("Сервер не принял сохранение", game)
+        self.assertIn("rejUntil = Date.now() + 60000", game)
+        self.assertIn("adSaves(adStats.saves)", game)
+
+
 class ClientErrors(unittest.TestCase):
     def test_dt_never_negative(self):
         game = (ROOT / "game.html").read_text(encoding="utf-8")

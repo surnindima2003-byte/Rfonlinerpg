@@ -37,8 +37,19 @@ class SaveGuardTest(unittest.TestCase):
         data, notes = saveguard.check(1, "a", save(), save(scrap=200_000), 10, {"scrap": 200_000})
         self.assertEqual(notes, [])
 
-    def test_scrap_jump_rejected_in_on_mode(self):
-        data, notes = saveguard.check(1, "a", save(), save(scrap=5_000_000), 10, {})
+    def test_scrap_jump_clamped_in_on_mode(self):
+        # лом сверх допустимого срезается, остальное сохранение принимается (раньше отклонялось целиком)
+        fix = {}
+        data, notes = saveguard.check(1, "a", save(), save(scrap=5_000_000), 10, {}, fix_out=fix)
+        self.assertIsNotNone(data)
+        limit = 1000 + saveguard.SCRAP_PER_SEC * 10 + saveguard.SCRAP_BASE
+        self.assertLessEqual(data["S"]["scrap"], limit)
+        self.assertEqual(fix, {"scrap": data["S"]["scrap"]})
+        self.assertTrue(any(a == "исправлено" for a, _ in notes))
+
+    def test_sphere_jump_still_rejected(self):
+        # сферы (и материалы, заточку) срезать нельзя — такое сохранение по-прежнему отклоняется
+        data, notes = saveguard.check(1, "a", save(), save(sph=500), 10, {})
         self.assertIsNone(data)
         self.assertTrue(any(a == "скачок" for a, _ in notes))
 
