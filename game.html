@@ -4283,6 +4283,15 @@ async function guildAction(a, b){
     const me = myMember(); if(!me) return;
     const amt = v === "all" ? S.scrap : Math.min(+v, S.scrap);
     if(amt <= 0){ toast("Нет лома для пожертвования"); return; }
+    if(!gLocal){
+      // вклад делает сервер: списывает лом из сохранения и прибавляет вклад (подделать казну со страницы нельзя)
+      if(NET.push) await NET.push(true);                  // сервер должен видеть тот же лом, что и телефон
+      const r = await NET.api("/api/guild/donate", {amount:v === "all" ? "all" : amt});
+      if(!r || !r.ok){ toast((r && r.error) || "Не получилось"); return; }
+      S.scrap = Math.max(0, S.scrap - r.amount);
+      if(r.craftN) S.craftN = +r.craftN;                  // сохранения без этого списания сервер не примет
+      save(); toast("Спасибо! +" + r.amount + " в казну"); return;
+    }
     S.scrap -= amt; save();
     await gCol(S.guildId, "members").doc(gUid).update({donated:(+me.donated || 0) + amt});
     await glog(S.name + " пожертвовал " + amt + " лома"); toast("Спасибо! +" + amt + " в казну"); return;

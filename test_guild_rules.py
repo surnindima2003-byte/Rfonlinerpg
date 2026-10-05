@@ -95,8 +95,16 @@ async def main():
     check("open join", await w("set", P + "/members/2", member("2", donated=5_000_000), "2"), "OK")
     check("join donated reset", str(STORE[P + "/members/2"]["donated"]), "0")
     check("count by server", str(STORE[P]["count"]), "2")
-    check("donate", await w("update", P + "/members/2", {"donated": 3000}, "2"), "OK")
-    check("donate cannot decrease", await w("update", P + "/members/2", {"donated": 10}, "2"), "DENY")
+    # вклад со страницы больше не проходит — его делает сервер (/api/guild/donate), списав лом из сохранения
+    check("client cannot write donated", await w("update", P + "/members/2", {"donated": 3000}, "2"), "DENY")
+    check("client cannot lower donated", await w("update", P + "/members/2", {"donated": 0, "xp": 1}, "2"), "DENY")
+    S_ = {"scrap": 5000}
+    amt, err = ns["donate_in_save"](S_, 3000)
+    check("server donate", f"{amt}/{S_['scrap']}/{S_['craftN']}/{err}", "3000/2000/1/None")
+    check("server donate capped by scrap", str(ns["donate_in_save"](S_, "all")[0]), "2000")
+    check("server donate nothing left", str(ns["donate_in_save"](S_, 10)[1]), "Нет лома")
+    check("server donate bad amount", str(ns["donate_in_save"]({"scrap": 9}, -5)[1]), "Неверная")
+    STORE[P + "/members/2"]["donated"] = 3000                 # как записал бы сервер
     check("flushXp", await w("update", P + "/members/2", {"xp": 50, "lvl": 15, "nick": "B", "bm": 120}, "2"), "OK")
     check("log add by member", await w("add", P + "/log/a1", {"text": "hi", "ts": 1}, "2"), "OK")
     # улучшение: казна 3000, цена 500

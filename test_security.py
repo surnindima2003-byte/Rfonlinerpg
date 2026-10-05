@@ -92,6 +92,16 @@ class SaveRejectHandling(unittest.TestCase):
         self.assertIn("adSaves(adStats.saves)", game)
 
 
+class GuildDonate(unittest.TestCase):
+    def test_server_side_donation(self):
+        self.assertIn('app.router.add_post("/api/guild/donate", api_guild_donate)', WEB)
+        fn = WEB[WEB.index("async def api_guild_donate"):WEB.index("async def guild_delete_all")]
+        self.assertIn("saveguard.player_lock(uid)", fn)
+        self.assertIn("donate_in_save(S,", fn)
+        game = (ROOT / "game.html").read_text(encoding="utf-8")
+        self.assertIn('NET.api("/api/guild/donate"', game)
+
+
 class ClientErrors(unittest.TestCase):
     def test_dt_never_negative(self):
         game = (ROOT / "game.html").read_text(encoding="utf-8")

@@ -768,11 +768,11 @@ async def check_write(s, op, path, data, uid):
             _, target = await doc_get(s, path)
             if not target:
                 raise web.HTTPNotFound(text="no doc")
-            if did == uid and keys <= {"donated", "xp", "lvl", "nick", "bm", "role"}:
+            if did == uid and keys <= {"xp", "lvl", "nick", "bm", "role"}:
+                # вклад (donated) со страницы не меняется: его пишет только сервер (/api/guild/donate),
+                # списав лом из сохранения. Раньше телефон сам прибавлял себе вклад — казну можно было «нарисовать».
                 if "role" in keys and not (is_leader or data.get("role") == my_role):
                     deny()
-                if "donated" in data and data["donated"] < (target.get("donated") or 0):
-                    deny("вклад не уменьшается")         # иначе казна росла бы за счёт «возврата» вклада
                 return data
             if is_leader and keys <= {"role"}:
                 return data
@@ -801,6 +801,70 @@ async def check_write(s, op, path, data, uid):
             return data
         deny()
     deny()
+
+
+def donate_in_save(S, amount):
+    """Списать лом на вклад в казну. Возвращает (сколько списано, ошибка). amount — число или "all"."""
+    try:
+        have = max(0, int(S.get("scrap") or 0))
+    except (TypeError, ValueError, OverflowError):
+        have = 0
+    if amount == "all":
+        amt = have
+    else:
+        try:
+            amt = int(amount)
+        except (TypeError, ValueError, OverflowError):
+            return 0, "Неверная сумма"
+        if amt <= 0 or amt > 1_000_000_000:
+            return 0, "Неверная сумма"
+        amt = min(amt, have)
+    if amt <= 0:
+        return 0, "Нет лома для пожертвования"
+    S["scrap"] = have - amt
+    try:
+        S["craftN"] = int(S.get("craftN", 0) or 0) + 1   # сохранение, собранное до вклада, сервер не примет
+    except (TypeError, ValueError, OverflowError):
+        S["craftN"] = 1
+    return amt, None
+
+
+async def api_guild_donate(request):
+    """Вклад в казну гильдии: лом списывается из сохранения на сервере (как крафт), вклад и запись в журнал —
+    тоже сервер. Строго по очереди с сохранениями игрока (saveguard.player_lock)."""
+    body, user = await read_auth(request)
+    uid = user["id"]
+    async with saveguard.player_lock(uid):
+        async with SessionLocal() as s:
+            g = await guild_of(s, uid)
+            if not g:
+                return web.json_response({"ok": False, "error": "Ты не в гильдии"})
+            gid = g[0]
+            row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid, GameSave.epoch == DATA_EPOCH))).scalar_one_or_none()
+            try:
+                data = json.loads(row.data) if row and row.data else None
+            except ValueError:
+                data = None
+            S = data.get("S") if isinstance(data, dict) else None
+            if not isinstance(S, dict):
+                return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
+            amt, err = donate_in_save(S, body.get("amount"))
+            if err:
+                return web.json_response({"ok": False, "error": err})
+            row.data = json.dumps(data, ensure_ascii=False)
+            row.updated = int(time.time())
+            mpath = f"guilds/{gid}/members/{uid}"
+            _, m = await doc_get(s, mpath)
+            if not isinstance(m, dict):
+                return web.json_response({"ok": False, "error": "Ты не в гильдии"})
+            m["donated"] = (m.get("donated") or 0) + amt
+            await doc_put(s, mpath, m)
+            nick = (row.nick or user["name"])[:16]
+            await doc_put(s, f"guilds/{gid}/log/a{int(time.time()*1000):x}{secrets.token_hex(3)}",
+                          {"text": f"{nick} пожертвовал {amt} лома", "ts": int(time.time() * 1000)})
+            await s.commit()
+    metrics.inc("guild.donate")
+    return web.json_response({"ok": True, "amount": amt, "scrap": S["scrap"], "craftN": S["craftN"], "donated": m["donated"]})
 
 
 async def guild_delete_all(s, gid):
@@ -2368,6 +2432,7 @@ async def start_web(port: int):
     app.router.add_post("/api/admin/grant", api_admin_grant)
     app.router.add_post("/api/admin/name", api_admin_name)
     app.router.add_post("/api/db", api_db)
+    app.router.add_post("/api/guild/donate", api_guild_donate)
     app.router.add_post("/api/top", api_top)
     app.router.add_post("/api/name", api_name)
     app.router.add_post("/api/presence", api_presence)
