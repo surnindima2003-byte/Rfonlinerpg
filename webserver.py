@@ -38,6 +38,7 @@ import seasonpts
 import worldboss
 import tower
 import vip
+import ledger
 from config import WEBAPP_URL
 
 GAME_FILE = Path(__file__).parent / "game.html"
@@ -337,6 +338,16 @@ async def api_save(request):
                         granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
                     except (ValueError, TypeError, AttributeError):
                         pass
+                # учёт ресурсов по подтверждённым событиям (ledger.py): пока режим shadow — только наблюдение
+                if old is not None:
+                    lg = dict(granted)
+                    bought = saveguard._purchases.get(user["id"])
+                    if bought and time.time() - bought["t"] <= saveguard.PURCHASE_TTL:
+                        for k in ("scrap", "cores"):          # паки магазина за GRAM — тоже приход
+                            lg[k] = lg.get(k, 0) + bought.get(k, 0)
+                    lnotes = ledger.check(user["id"], user["username"] or user["name"], base.get("S"), s_, lg)
+                    if lnotes:
+                        log.info("Учёт ресурсов uid=%s (%s): %s", user["id"], ledger.MODE, "; ".join(f"{k} +{g} при приходе {a}" for k, g, a in lnotes))
                 data, notes = saveguard.check(user["id"], user["username"] or user["name"], base, data, dt, granted, fix_out=fix)
                 if notes:
                     log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
@@ -349,6 +360,7 @@ async def api_save(request):
             raw = json.dumps(data, ensure_ascii=False)
             row.epoch = DATA_EPOCH
             row.username, row.name, row.data, row.updated = user["username"], user["name"], raw, int(time.time())
+            ledger.reset(user["id"])                         # приход учтён в принятом сохранении
             try:
                 # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
                 cap = 999 if user["admin"] else await progress.cap_of(s, user["id"])
@@ -2400,6 +2412,7 @@ async def cleanup_loop():
                 report_t.pop(uid, None)
             mobguard.cleanup(online_ids)
             mobworld.cleanup(online_ids)
+            ledger.cleanup(online_ids)
             saveguard.cleanup(online_ids)
             # временные словари модулей: без этого они росли с каждым новым игроком до перезапуска
             items.cleanup(online_ids)

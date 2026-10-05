@@ -468,6 +468,8 @@ async def api_items(request):
                 vals, result = ({"e": e0 - 1} if e0 > 0 else {}), "fail"          # безопасная заточка: при неудаче −1, не ниже +0
             else:
                 vals, result = {"status": "gone"}, "broken"
+                import ledger                                                    # обломки: половина цены продажи, не меньше 5
+                ledger.add(uid, {"scrap": max(5, round(ledger.gear_sell(x.item, x.g, e0) * 0.5))})
             if vals:
                 # вещь меняется, только если с момента чтения её никто не тронул (двойное нажатие, другая вкладка)
                 res = await s.execute(update(ItemInst).where(ItemInst.uid == x.uid, ItemInst.owner == uid, ItemInst.status == "inv", ItemInst.e == e0)
@@ -483,8 +485,14 @@ async def api_items(request):
             # вещь продана торговцу, вложена в кодекс или разрушена — больше не существует
             uids = [str(u)[:24] for u in (body.get("uids") or [])][:50]
             if uids:
+                gone = (await s.execute(select(ItemInst.item, ItemInst.g, ItemInst.e).where(
+                    ItemInst.uid.in_(uids), ItemInst.owner == uid, ItemInst.status == "inv"))).all()
                 await s.execute(update(ItemInst).where(ItemInst.uid.in_(uids), ItemInst.owner == uid, ItemInst.status == "inv")
                                 .values(status="gone").execution_options(synchronize_session=False))
+                # учёт ресурсов: проданная торговцу вещь даёт лом по цене продажи (вложенная в кодекс — ничего,
+                # но сервер их не различает: берём наибольшее)
+                import ledger
+                ledger.add(uid, {"scrap": sum(ledger.gear_sell(it, g, e) for it, g, e in gone)})
             sp = body.get("sph") or {}
             for sid in REG_IDS:
                 try:
@@ -572,6 +580,11 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         if ticket is None:
             import seasonpts
             ticket = await seasonpts.has_ticket(uid)
+        # учёт ресурсов: сколько лома/материалов/ядер мог дать этот моб (ledger.py)
+        import ledger
+        vrow = vip.LEVELS[vip_lv - 1] if vip_lv else (0, 0, 0, 0)
+        ledger.add(uid, ledger.kill_income(mob, loc, vip_scrap=vrow[2],
+                                           drop_bonus=vrow[3] + (0.6 if ticket else 0) + (0.5 if loc == "season1" else 0)))
         for d in roll(lv, mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)):   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i

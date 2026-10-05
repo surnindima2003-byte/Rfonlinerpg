@@ -124,6 +124,9 @@ def on_pick(info, d, hub):
     if not it or info.get("loc") != LOC or (info.get("x", 0) - it["x"]) ** 2 + (info.get("y", 0) - it["y"]) ** 2 > 90 ** 2:
         return
     st["loot"].pop(it["id"], None)                                 # кто первый — того и предмет
+    if it.get("kind") == "cores":
+        import ledger
+        ledger.add(info["id"], {"cores": it.get("n", 1)})          # учёт ресурсов: ядра с мирового босса
     hub.to_uid(info["id"], {"t": "wbgot", **it})
     hub.to_loc(LOC, {"t": "wbrm", "id": it["id"]})
 

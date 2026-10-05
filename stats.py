@@ -80,6 +80,7 @@ async def api_stats(request):
         raise web.HTTPForbidden()
     import metrics
     import saveguard
+    import ledger
     now = int(time.time())
     day, week = now - 86400, now - 7 * 86400
     async with SessionLocal() as s:
@@ -131,6 +132,9 @@ async def api_stats(request):
         # не ловит ли она честных игроков, без /metrics
         "saves": {"mode": saveguard.MODE, "counts": {k: metrics.counters.get(f"saveguard.{k}", 0) for k in ("flagged", "rejected", "clamped")},
                   "recent": list(saveguard.recent)[-15:][::-1]},
+        # учёт ресурсов по подтверждённым событиям: в режиме shadow — что новая проверка срезала бы
+        "ledger": {"mode": ledger.MODE, "counts": {k: metrics.counters.get(f"ledger.{k}", 0) for k in ("checked", "over")},
+                   "recent": list(ledger.recent)[-15:][::-1]},
         "errors": [{"msg": e.msg, "stack": e.stack[:600], "count": e.count, "users": e.users, "last": e.last * 1000, "ua": e.ua} for e in errs]})
 
 
