@@ -125,7 +125,10 @@ ARTIFACTS = ("a_reactor", "a_lens", "a_servo", "a_plate", "a_crown", "a_eye", "a
 WINGS = ("wg_scrap", "wg_servo", "wg_ion", "wg_titan", "wg_seraph", "wg_void", "wg_phoenix", "wg_storm")
 # плащи (как в game.html → CLOAKS): надевается один, виден другим игрокам, продаются на маркете
 CLOAKS = ("ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_night", "ck_ember", "ck_aurora")
-REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS      # всё, что учитывается штуками (без номера)
+# осколки (как в game.html → SHARD): выпадают с мобов от 15 уровня по решению сервера, из них Кузнец собирает
+# уникальные сеты классов. Учитываются штуками, продаются на маркете за GRAM.
+SHARDS = ("sh_plasma", "sh_ion", "sh_solar", "sh_void", "sh_magma", "sh_cryo", "sh_toxin", "sh_blood")
+REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS + SHARDS      # всё, что учитывается штуками (без номера)
 SOCKET_PREFIX = "s:"            # учёт рун, вставленных в вещи (строка «s:r_fortune» влезает в 12 символов столбца)
 
 # Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
@@ -156,6 +159,18 @@ CRAFT = {
     "ck_scout":  (32, {"scrap": 120000, "cores": 420, "wire": 35, "chip": 20}),
     "ck_bastion": (42, {"scrap": 230000, "cores": 720, "plate": 65, "chip": 25}),
 }
+# Уникальные сеты классов (зеркало game.html → UNIQ_LVL, UNIQ_COST, CLASS_SHARDS; совпадение проверяет test_craft_contract.py).
+# 5 вещей на класс: сенсор, корпус, модуль, реактор, ходовая. Цена вещи: лом, ядра и по n каждого из трёх осколков класса.
+# Собранная вещь — снаряжение с номером (золотой грейд), её можно заточить и продать на маркете за GRAM.
+UNIQ_LVL = 40
+UNIQ_COST = {"head": [60000, 200, 80], "legs": [60000, 200, 80], "module": [80000, 300, 100], "core": [100000, 400, 120], "armor": [120000, 500, 150]}
+CLASS_SHARDS = {"guard": ["sh_magma", "sh_solar", "sh_cryo"], "reaper": ["sh_blood", "sh_void", "sh_magma"],
+                "sniper": ["sh_ion", "sh_solar", "sh_cryo"], "techno": ["sh_plasma", "sh_ion", "sh_void"],
+                "ghost": ["sh_void", "sh_toxin", "sh_plasma"], "glyph": ["sh_solar", "sh_plasma", "sh_blood"],
+                "medic": ["sh_toxin", "sh_cryo", "sh_ion"]}
+UNIQ_GRADE = 3
+UNIQ = {f"u_{cls}_{slot}": (UNIQ_LVL, {"scrap": c[0], "cores": c[1], **{sh: c[2] for sh in shards}})
+        for cls, shards in CLASS_SHARDS.items() for slot, c in UNIQ_COST.items()}
 INV_MAX_SRV = 60
 # Сколько вещей можно собрать на сервере за сутки (UTC). Собранное продаётся за GRAM, а ресурсы для крафта
 # берутся из сохранения с телефона, которое сервер проверяет лишь по скорости прироста. Лимит — потолок
@@ -220,6 +235,54 @@ def craft_in_save(S, item_id, level):
     else:
         inv.append({"id": item_id, "n": 1})
     return None
+def _have_any(S, item_id):
+    """Сколько штук предмета в сумке и на складе сохранения."""
+    return sum(int(x.get("n", 1) or 0) for key in ("inv", "store") for x in (S.get(key) or [])
+               if isinstance(x, dict) and x.get("id") == item_id)
+
+
+def _take_any(S, item_id, n):
+    """Списать n штук: сначала из сумки, остаток — со склада."""
+    left = n - min(n, _inv_count(S, item_id))
+    _inv_take(S, item_id, n - left)
+    if left > 0:
+        store = S.get("store") or []
+        for i in range(len(store) - 1, -1, -1):
+            x = store[i]
+            if left <= 0:
+                break
+            if not isinstance(x, dict) or x.get("id") != item_id:
+                continue
+            take = min(left, int(x.get("n", 1) or 0))
+            x["n"] = int(x.get("n", 1) or 0) - take
+            left -= take
+            if x["n"] <= 0:
+                store.pop(i)
+
+
+def uniq_check(S, item_id, level):
+    """Можно ли собрать уникальную вещь по данным сохранения. Текст ошибки или None (S не меняется)."""
+    lvl, need = UNIQ[item_id]
+    if level < lvl:
+        return f"Нужен {lvl} уровень"
+    for k, n in need.items():
+        have = S.get(k, 0) if k in ("scrap", "cores") else _have_any(S, k)
+        if not isinstance(have, (int, float)) or have < n:
+            return "Сервер не видит нужных ресурсов. Подожди пару секунд и попробуй ещё раз"
+    if len(S.get("inv") or []) >= INV_MAX_SRV:
+        return "Освободи место в сумке"
+    return None
+
+
+def uniq_spend(S, item_id):
+    """Списать в сохранении лом, ядра и осколки за уникальную вещь (после uniq_check)."""
+    for k, n in UNIQ[item_id][1].items():
+        if k in ("scrap", "cores"):
+            S[k] = S.get(k, 0) - n
+        else:
+            _take_any(S, k, n)
+
+
 from mobguard import BASE_MOBS, LOC_MIN, DUNGEON_RANGE, mob_level      # таблицы мобов — в mobguard (без базы)
 SEASON_DROP = {"season1": 1.5}                  # сезонная зона: +50% к ценному дропу
 ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5]   # как в игре
@@ -237,6 +300,9 @@ def gear_per(lv):
     return [0, 0, P(0.0001), P(0.00001)]
 
 
+SHARD_MIN_LVL = 15
+SHARD_BASE = env_float("SHARD_BASE_PCT", 4.0)          # шанс осколка за моба 15 ур., %
+SHARD_STEP = env_float("SHARD_STEP_PCT", 0.1)          # прибавка за каждый уровень моба выше 15, %
 BOSS_LOOT, BOSS_GAP = 150, 40                   # главарь: шансы ×150, не чаще одного на игрока раз в 40 с
 _boss_t = {}
 
@@ -253,6 +319,10 @@ def roll(lv, mult=1):
         out.append({"kind": "sph", "id": "sph_cu", "n": 1})
     if random.random() < min(0.9, P(0.00033 + 0.0000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_ti", "n": 1})
+    # осколки: с 15 уровня мобов, 4% на 15-м и +0,1% за каждый уровень выше; главарь — пачка побольше
+    if lv >= SHARD_MIN_LVL and random.random() < min(0.6, P(SHARD_BASE + SHARD_STEP * (lv - SHARD_MIN_LVL)) * mult):
+        n = random.randint(4, 9) if mult >= BOSS_LOOT else 1 + (random.random() < 0.35) + (random.random() < 0.1)
+        out.append({"kind": "sph", "id": random.choice(SHARDS), "n": n})
     return out
 
 
@@ -386,6 +456,8 @@ async def api_items(request):
         if op == "craft":
             # руна или дрон собираются по последнему сохранению: ресурсы списываются там, вещь учитывается
             item_id = str(body.get("id", ""))
+            if item_id in UNIQ:
+                return await craft_uniq(s, uid, user, item_id)
             if item_id not in CRAFT:
                 return web.json_response({"ok": False, "error": "Такое нельзя собрать"})
             import progress
@@ -506,6 +578,59 @@ async def api_items(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
+async def craft_uniq(s, uid, user, item_id):
+    """Кузнец: уникальная вещь класса из осколков. Осколки списываются с серверного учёта (их нельзя нарисовать
+    на телефоне), лом и ядра — из последнего сохранения; вещь получает номер и пишется в сохранение."""
+    import progress
+    import saveguard
+    async with saveguard.player_lock(uid):
+        row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+        try:
+            data = json.loads(row.data) if row and row.data else None
+        except ValueError:
+            data = None
+        S = data.get("S") if isinstance(data, dict) else None
+        if not isinstance(S, dict):
+            return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
+        try:
+            level = int(S.get("level", 1))
+        except (TypeError, ValueError, OverflowError):
+            level = 1
+        if not user.get("admin"):
+            level = min(level, await progress.cap_of(s, uid))
+        err = uniq_check(S, item_id, level)
+        if err:
+            return web.json_response({"ok": False, "error": err})
+        for sh, n in UNIQ[item_id][1].items():
+            if sh in SHARDS:
+                ok, bal = await take_spheres(s, uid, sh, n)
+                if not ok:
+                    await s.rollback()
+                    return web.json_response({"ok": False, "error": f"Учтённых осколков ({sh}) только {bal.n or 0} из {n}. "
+                                                                    "Осколки должны выпасть с мобов или быть куплены на маркете"})
+        if not user.get("admin") and not await take_craft_slot(s, uid):
+            await s.rollback()
+            return web.json_response({"ok": False, "error": f"На сегодня собрано максимум ({CRAFT_DAILY_MAX}). Завтра можно снова"})
+        uniq_spend(S, item_id)
+        item = await mint_gear(s, uid, item_id, UNIQ_GRADE, 0, source="craft")
+        S.setdefault("inv", []).append({"id": item_id, "n": 1, "g": UNIQ_GRADE, "e": 0, "uid": item["uid"]})
+        try:
+            craft_n = int(S.get("craftN", 0) or 0) + 1
+        except (TypeError, ValueError, OverflowError):
+            craft_n = 1
+        S["craftN"] = craft_n
+        res = await s.execute(update(GameSave).where(GameSave.tg_id == uid, GameSave.updated == row.updated)
+                              .values(data=json.dumps(data, ensure_ascii=False), updated=int(time.time()))
+                              .execution_options(synchronize_session=False))
+        if res.rowcount != 1:
+            await s.rollback()
+            return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
+        await s.commit()
+    metrics.inc("craft.uniq")
+    log.info("Кузнец: игрок %s собрал %s (%s)", uid, item_id, item["uid"])
+    return web.json_response({"ok": True, "id": item_id, "item": item, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0), "craftN": craft_n})
+
+
 # ---------- для маркета ----------
 async def escrow_for_market(s, uid, item):
     """Проверить и заблокировать предмет под лот. Возвращает (данные предмета с сервера, ошибка).
@@ -519,10 +644,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
+            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы с мобов, руны, дронов и артефакты"
+    return None, "За GRAM можно продавать только снаряжение, сферы и осколки с мобов, руны, дронов и артефакты"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):

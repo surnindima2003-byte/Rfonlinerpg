@@ -89,5 +89,60 @@ class CraftContract(unittest.TestCase):
         self.assertEqual(items.craft_in_save(S, "d_spark", 10), "Этот дрон уже есть")
 
 
+
+class UniqContract(unittest.TestCase):
+    """Кузнец: уникальные сеты из осколков — таблицы сервера и игры совпадают, списание идёт из сумки и склада."""
+
+    def _js_const(self, name):
+        import json
+        return json.loads(re.search(rf"const {name} = (\{{.*?\}});", GAME).group(1))
+
+    def test_tables_match_client(self):
+        self.assertEqual(self._js_const("UNIQ_COST"), items.UNIQ_COST)
+        self.assertEqual(self._js_const("CLASS_SHARDS"), items.CLASS_SHARDS)
+        self.assertEqual(int(re.search(r"const UNIQ_LVL = (\d+);", GAME).group(1)), items.UNIQ_LVL)
+
+    def test_shards_known_to_client_and_fit_column(self):
+        body = re.search(r"const SHARD = \{(.*?)\n\};", GAME, re.S).group(1)
+        self.assertEqual(set(re.findall(r"^\s*(sh_\w+):", body, re.M)), set(items.SHARDS))
+        for sid in items.SHARDS:
+            self.assertIn(sid, items.REG_IDS)
+            self.assertLessEqual(len(sid), 12)
+        for cls, shards in items.CLASS_SHARDS.items():
+            self.assertEqual(len(set(shards)), 3, cls)
+            self.assertTrue(set(shards) <= set(items.SHARDS))
+            self.assertIn(cls, items.CLASS_WPN)
+
+    def test_uniq_ids_fit_item_column(self):
+        self.assertEqual(len(items.UNIQ), 35)
+        for uid in items.UNIQ:
+            self.assertLessEqual(len(uid), 24)
+
+    def test_uniq_spends_from_bag_then_store(self):
+        S = {"level": 40, "scrap": 100000, "cores": 300, "inv": [{"id": "sh_magma", "n": 50}, {"id": "sh_solar", "n": 80}],
+             "store": [{"id": "sh_magma", "n": 40}, {"id": "sh_cryo", "n": 90}]}
+        self.assertIsNone(items.uniq_check(S, "u_guard_head", 40))
+        items.uniq_spend(S, "u_guard_head")
+        self.assertEqual((S["scrap"], S["cores"]), (40000, 100))
+        self.assertEqual(S["inv"], [])
+        self.assertEqual(S["store"], [{"id": "sh_magma", "n": 10}, {"id": "sh_cryo", "n": 10}])
+
+    def test_uniq_refuses(self):
+        S = {"level": 39, "scrap": 10**6, "cores": 10**4, "inv": [{"id": sh, "n": 999} for sh in items.CLASS_SHARDS["guard"]]}
+        self.assertIn("40", items.uniq_check(S, "u_guard_head", 39))
+        self.assertIsNone(items.uniq_check(S, "u_guard_head", 40))
+        S["inv"][0]["n"] = 10
+        self.assertIsNotNone(items.uniq_check(S, "u_guard_head", 40))
+
+    def test_shard_drops_only_from_level_15(self):
+        import random as _r
+        _r.seed(1)
+        low = [d for _ in range(3000) for d in items.roll(14) if d["id"] in items.SHARDS]
+        high = [d for _ in range(3000) for d in items.roll(30) if d["id"] in items.SHARDS]
+        self.assertEqual(low, [])
+        self.assertGreater(len(high), 60)
+        self.assertTrue(all(1 <= d["n"] <= 3 and d["kind"] == "sph" for d in high))
+
+
 if __name__ == "__main__":
     unittest.main()
