@@ -50,16 +50,55 @@ body.dbg-ok .h2-av{pointer-events:auto;cursor:pointer}
 #dbgPanel[hidden]{display:none}
 /* руны: точка на ячейке вещи и гнёзда в карточке */
 .cell .rn-dot{position:absolute;right:4px;bottom:4px;width:7px;height:7px;border-radius:2px;transform:rotate(45deg);box-shadow:0 0 0 1px #141A21}
-.rn-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.rn-row>small{color:var(--muted);font-size:12px;margin-right:2px}
-.rn-sock{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 140px;border:1px dashed var(--line);border-radius:10px;background:rgba(0,0,0,.04);padding:5px 8px;font-size:12px;text-align:left;color:inherit}
-.rn-sock.on{border-style:solid}
-.rn-sock svg{width:26px;height:26px;flex:none}
-.rn-sock span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rn-pick{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
-.rn-pick button{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--panel);color:inherit;text-align:left;font-size:12px}
-.rn-pick button svg{width:28px;height:28px;flex:none}
-.rn-pick small{display:block;color:var(--muted)}
+.stx{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 5px;font-size:12px;line-height:1.35;margin-top:2px}
+.stx i{font-style:normal;font-weight:600;white-space:nowrap;color:var(--sc)}
+.stx em{font-style:normal;color:#5C6B78}
+.rar{display:inline-block;font-size:10.5px;font-weight:700;color:var(--rc);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent);background:color-mix(in srgb,var(--rc) 12%,transparent);border-radius:5px;padding:0 5px;margin:2px 6px 1px 0;line-height:15px}
+.rn-nm{color:var(--rc);font-weight:700}.rn-nm em{font-style:normal;color:var(--muted);font-weight:500;font-size:12px}
+.rn-li .ic,.art-li .ic{border:1px solid color-mix(in srgb,var(--rc) 55%,transparent);background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--rc) 18%,#1B232C),#141B22 75%)}
+.rn-li .ic svg,.art-li .ic svg{width:32px;height:32px}
+.art-li .ic.lock{opacity:.5;filter:saturate(.5)}
+.art-li.art-on{border-color:color-mix(in srgb,var(--rc) 60%,var(--line));box-shadow:inset 3px 0 0 var(--rc)}
+.art-li .art-fr{width:48px;height:48px}.art-li .art-fr svg{width:38px;height:38px}
+.art-cls{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}.li .tx .art-cls.on{color:#E0A800;font-weight:600}
+.rn-row{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.rn-row>small{color:var(--muted);font-size:12px}
+.rn-sock{display:flex;align-items:center;gap:10px;width:100%;border:1px dashed #7C8A97;border-radius:12px;background:rgba(124,138,151,.08);padding:8px 10px;text-align:left;color:inherit;font-size:13px}
+.rn-sock.open{border-color:var(--faction);border-style:solid}
+.rn-sock.on{border:1px solid color-mix(in srgb,var(--rc) 55%,transparent);background:linear-gradient(90deg,color-mix(in srgb,var(--rc) 12%,transparent),transparent 70%)}
+.rn-si{flex:none;width:40px;height:40px;display:grid;place-items:center}.rn-si svg{width:40px;height:40px}
+.rn-si.empty{border:1.5px dashed #7C8A97;border-radius:10px;color:#7C8A97;width:36px;height:36px;margin:2px}.rn-si.empty svg{width:16px;height:16px}
+.rn-st{flex:1;min-width:0}.rn-st b{display:block;color:var(--rc,var(--text));font-size:13px}.rn-st small{display:block;color:var(--muted);font-size:11.5px}
+.rn-st .rn-warn{color:#FF8A6B}
+.rn-x{flex:none;font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+.rn-pick{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.rn-ph{display:flex;align-items:center;justify-content:space-between}.rn-ph b{font-size:14px;color:#FFC94D}
+.rn-ph button{border:0;background:none;color:var(--muted);font-size:16px;padding:2px 6px}
+.rn-opt{display:flex;align-items:center;gap:10px;border:1px solid color-mix(in srgb,var(--rc) 35%,var(--line));border-radius:11px;padding:7px 9px;background:var(--panel-2);color:inherit;text-align:left}
+.rn-opt:active{transform:scale(.98)}
+.rn-oi{flex:none;width:36px;height:36px}.rn-oi svg{width:36px;height:36px}
+.rn-ot{flex:1;min-width:0}.rn-ot b{display:block;color:var(--rc);font-size:13px}.rn-ot b em{font-style:normal;color:var(--muted);font-weight:500;margin-left:6px}
+.rn-ot small{display:block;color:var(--muted);font-size:11px;margin-top:1px}.rn-ot small.warn{color:#E0553A}
+.pk-rn{display:block;margin-top:3px}.pk-rn .stx{display:inline-flex}
+.cmp-ov{position:fixed;inset:0;z-index:9999;background:rgba(5,8,12,.6);display:flex;align-items:flex-end;justify-content:center;padding:0 10px calc(10px + env(safe-area-inset-bottom,0px))}
+.cmp-p{width:100%;max-width:440px;background:#131A21;border:1px solid #2A3846;border-radius:18px;padding:14px;animation:cmpUp .2s ease-out}
+@keyframes cmpUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.cmp-p{animation:none}}
+.cmp-t{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.cmp-t b{color:#7EE08F;font-size:16px}
+.cmp-t button{border:0;background:#1F2833;color:#93A0AC;border-radius:8px;width:30px;height:30px}
+.cmp-c{background:#18212A;border:1px solid #243140;border-radius:12px;padding:10px;margin-bottom:8px}
+.cmp-c>small{display:block;color:var(--muted);font-size:11px;font-weight:700;margin-bottom:6px}
+.cmp-h{display:flex;align-items:center;gap:8px;margin-bottom:4px}.cmp-h span{width:32px;height:32px}.cmp-h svg{width:32px;height:32px}.cmp-h b{color:var(--rc)}
+.cmp-empty{color:var(--muted);text-align:center;padding:6px 0;font-size:13px}
+.cmp-r{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}.cmp-r span{flex:1;color:#C7D0D8}
+.cmp-r b{min-width:52px;text-align:right}.cmp-r i{font-style:normal;font-size:11px;font-weight:700;min-width:54px;text-align:right}.cmp-r i.up{color:#7EE08F}.cmp-r i.dn{color:#FF6A5A}
+.cmp-lost{color:#FF8A6B;font-size:12px;margin:2px 0 0}.cmp-res{color:#FFD15C;font-size:12px;margin:4px 0 0}
+.rn-nm+.rar{margin-left:6px}
+/* светлая тема: те же цвета, но темнее — иначе жёлтое и голубое на светлой панели не читается */
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .stx i{color:color-mix(in srgb,var(--sc) 62%,#14191F)}:root:not([data-theme="dark"]) .rn-nm,:root:not([data-theme="dark"]) .rn-st b,:root:not([data-theme="dark"]) .rn-ot b,:root:not([data-theme="dark"]) .rar{color:color-mix(in srgb,var(--rc) 62%,#14191F)}:root:not([data-theme="dark"]) .li .tx .art-cls.on{color:#9A6A00}}
+:root[data-theme="light"] .stx i{color:color-mix(in srgb,var(--sc) 62%,#14191F)}:root[data-theme="light"] .rn-nm,:root[data-theme="light"] .rn-st b,:root[data-theme="light"] .rn-ot b,:root[data-theme="light"] .rar{color:color-mix(in srgb,var(--rc) 62%,#14191F)}:root[data-theme="light"] .li .tx .art-cls.on{color:#9A6A00}
+/* окна с постоянно тёмным фоном (Кузнец/Мастерская) — исходные яркие цвета */
+.sheet.smith .card .stx i{color:var(--sc)}.sheet.smith .card .rn-nm,.sheet.smith .card .rar{color:var(--rc)}.sheet.smith .card .li .tx .art-cls.on{color:#FFD15C}
 .hud-card{background:rgba(20,27,34,.82);border:1px solid #34414E;border-radius:12px;padding:7px 10px}
 .hud-top{display:flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap}
 .hud-top b{font:14px 'Russo One',sans-serif}
@@ -1637,37 +1676,101 @@ const SHARD = {
 };
 const SHARD_IDS = Object.keys(SHARD), SHARD_MIN_LVL = 15;
 for(const id of SHARD_IDS) ITEMS[id] = {name:SHARD[id].name, type:"shard", sell:0, nosell:true, desc:"Осколок для уникальных сетов Кузнеца · падает с врагов от 15 уровня"};
+// ===================== РЕДКОСТЬ И ХАРАКТЕРИСТИКИ РУН И АРТЕФАКТОВ =====================
+// Пять ступеней редкости (цвет названия и рамки), у каждой характеристики свой цвет — строки бонусов читаются
+// с одного взгляда. Значения хранятся в b: atk/def/hp/spd/rate/cpow/xp/scrap — доли (0.04 = +4%),
+// crit — проценты шанса крита, regen — прочность в секунду.
+const RARITY = [
+  {n:"Обычная",     m:"Обычный",     c:"#B9C3CD", d:"#56616C"},
+  {n:"Необычная",   m:"Необычный",   c:"#6FD27C", d:"#1F6B2E"},
+  {n:"Редкая",      m:"Редкий",      c:"#55AEFF", d:"#14508C"},
+  {n:"Эпическая",   m:"Эпический",   c:"#B98BFF", d:"#4B2591"},
+  {n:"Легендарная", m:"Легендарный", c:"#FFC94D", d:"#8A5A08"}
+];
+const STAT_META = {
+  atk:  {n:"Атака",          c:"#FF8A6B"}, def:  {n:"Броня",          c:"#AFC6DC"},
+  hp:   {n:"Прочность",      c:"#7EE08F"}, crit: {n:"Шанс крита",     c:"#FFD15C"},
+  cpow: {n:"Сила крита",     c:"#5FB2FF"}, spd:  {n:"Скорость бега",  c:"#FFA64D"},
+  rate: {n:"Скорость атаки", c:"#62E0F0"}, regen:{n:"Ремонт",         c:"#3FE0A0"},
+  xp:   {n:"Опыт",           c:"#C9A2FF"}, scrap:{n:"Добыча лома",    c:"#F0CF72"}
+};
+const numRu = x => { const r = Math.round(x*10)/10; return (Number.isInteger(r) ? String(r) : r.toFixed(1)).replace(".", ","); };
+const statVal = (k, v) => k === "regen" ? numRu(v) + "/с" : k === "crit" ? numRu(v) + "%" : numRu(v*100) + "%";
+// текст бонусов: «Атака +4% · Шанс крита +2%» (m — множитель, например резонанс артефакта с классом)
+const runeText = (R, m) => Object.entries(R.b).map(([k, v]) => (STAT_META[k] ? STAT_META[k].n : k) + " +" + statVal(k, v*(m || 1))).join(" · ");
+// те же бонусы цветными строками, как на маркете LIBERTY
+const statChips = (B, m) => `<span class="stx">${Object.entries(B).map(([k, v]) => `<i style="--sc:${(STAT_META[k] || {}).c || "currentColor"}">${(STAT_META[k] || {n:k}).n} +${statVal(k, v*(m || 1))}</i>`).join(`<em>·</em>`)}</span>`;
+const rarTag = (q, masc) => `<b class="rar" style="--rc:${RARITY[q].c}">${masc ? RARITY[q].m : RARITY[q].n}</b>`;
+let svgUid = 0;                       // у каждой иконки свои id градиентов (иначе копия в скрытом окне ломает заливку)
+
 // ===================== РУНЫ =====================
-// У каждой вещи 2 гнезда. Руну можно вставить и вынуть бесплатно; одинаковые руны в одну вещь не ставятся.
-// Прокачки нет: руны отличаются видом. Бонус работает, пока вещь надета.
+// У каждой вещи одно гнездо (как в LIBERTY). Руну можно вставить и вынуть бесплатно.
+// В старых сохранениях бывало по две руны в вещи: вторая работать перестаёт и сама возвращается в сумку (runeExtraFix).
+// Прокачки нет: руны отличаются видом и редкостью. Действуют не больше RUNE_STACK одинаковых рун на всём роботе —
+// лишние копии не дают бонуса (раньше шесть «Рун войны» давали +42% атаки и забивали весь баланс).
 // src "craft" — собирается в Мастерской (такие же руны бывают и в паках); src "gram" — только из паков магазина GRAM.
-// b: atk/def/hp/spd/rate/xp/scrap — доли (0.04 = +4%), crit — пункты крита, cpow — к силе крита, regen — прочность в секунду.
 // За GRAM на маркете продаются руны, учтённые сервером (Мастерская, паки, маркет). Учёт не теряется при вставке:
 // сервер переносит руну в «гнездо» (s:<id>) и обратно при выемке, так что вынутую руну снова можно продать.
 // x.rg — флаги учтённых рун в гнёздах вещи (параллельно x.r). Паки рун дублируются в gram.py и items.py (rn_*).
+// q — редкость (RARITY), col — цвет символа, gl — символ, st — форма камня (0 круглый, 1 гранёный, 2 кристалл).
 const RUNES = {
-  r_atk:    {name:"Руна ярости",    src:"craft", lvl:10, col:"#E0694A", gl:"blade",  b:{atk:0.04},           need:{scrap:8000, cores:30, chip:4}},
-  r_def:    {name:"Руна брони",     src:"craft", lvl:10, col:"#A7B0B8", gl:"shield", b:{def:0.05},           need:{scrap:8000, cores:30, plate:6}},
-  r_hp:     {name:"Руна корпуса",   src:"craft", lvl:10, col:"#7BC98A", gl:"cross",  b:{hp:0.05},            need:{scrap:8000, cores:30, plate:4, wire:4}},
-  r_crit:   {name:"Руна точности",  src:"craft", lvl:15, col:"#F2C14B", gl:"eye",    b:{crit:2},             need:{scrap:15000, cores:60, chip:8}},
-  r_spd:    {name:"Руна скорости",  src:"craft", lvl:15, col:"#5FD4E8", gl:"chev",   b:{spd:0.03},           need:{scrap:15000, cores:60, wire:10}},
-  r_aspd:   {name:"Руна разгона",   src:"craft", lvl:20, col:"#4EA8F5", gl:"bolt",   b:{rate:0.04},          need:{scrap:25000, cores:100, chip:10, wire:6}},
-  r_cpow:   {name:"Руна пробоя",    src:"craft", lvl:20, col:"#FF8A7A", gl:"star",   b:{cpow:0.10},          need:{scrap:25000, cores:100, chip:10, plate:6}},
-  r_regen:  {name:"Руна ремонта",   src:"craft", lvl:25, col:"#3FB56B", gl:"gear",   b:{regen:1},            need:{scrap:40000, cores:150, plate:12, wire:12}},
-  r_war:    {name:"Руна войны",     src:"gram", col:"#FF4A3A", gl:"blade",  b:{atk:0.07, crit:3}},
-  r_bastion:{name:"Руна бастиона",  src:"gram", col:"#F2A93B", gl:"shield", b:{hp:0.08, def:0.08}},
-  r_storm:  {name:"Руна бури",      src:"gram", col:"#9B7BFF", gl:"bolt",   b:{rate:0.06, spd:0.05}},
-  r_fortune:{name:"Руна удачи",     src:"gram", col:"#FFD700", gl:"star",   b:{xp:0.10, scrap:0.10}}
+  r_atk:    {name:"Руна ярости",    src:"craft", lvl:10, q:0, col:"#FF7A55", gl:"blade",  st:0, b:{atk:0.02},
+             need:{scrap:8000, cores:30, chip:4}},
+  r_def:    {name:"Руна брони",     src:"craft", lvl:10, q:0, col:"#B9CCE0", gl:"shield", st:0, b:{def:0.03},
+             need:{scrap:8000, cores:30, plate:6}},
+  r_hp:     {name:"Руна корпуса",   src:"craft", lvl:10, q:0, col:"#78E08A", gl:"cross",  st:0, b:{hp:0.03},
+             need:{scrap:8000, cores:30, plate:4, wire:4}},
+  r_crit:   {name:"Руна точности",  src:"craft", lvl:15, q:1, col:"#FFD15C", gl:"eye",    st:0, b:{crit:2},
+             need:{scrap:15000, cores:60, chip:8}},
+  r_spd:    {name:"Руна скорости",  src:"craft", lvl:15, q:1, col:"#FFA64D", gl:"chev",   st:0, b:{spd:0.03},
+             need:{scrap:15000, cores:60, wire:10}},
+  r_aspd:   {name:"Руна разгона",   src:"craft", lvl:20, q:2, col:"#62E0F0", gl:"bolt",   st:1, b:{rate:0.03, spd:0.02},
+             need:{scrap:25000, cores:100, chip:10, wire:6}},
+  r_cpow:   {name:"Руна пробоя",    src:"craft", lvl:20, q:2, col:"#5FB2FF", gl:"pierce", st:1, b:{cpow:0.08, crit:1},
+             need:{scrap:25000, cores:100, chip:10, plate:6}},
+  r_regen:  {name:"Руна ремонта",   src:"craft", lvl:25, q:2, col:"#3FE0A0", gl:"gear",   st:1, b:{regen:1, hp:0.02},
+             need:{scrap:40000, cores:150, plate:12, wire:12}},
+  r_war:    {name:"Руна войны",     src:"gram", q:3, col:"#FF5A45", gl:"axes",   st:2, b:{atk:0.04, crit:2}},
+  r_bastion:{name:"Руна бастиона",  src:"gram", q:3, col:"#FFB14A", gl:"tower",  st:2, b:{hp:0.05, def:0.05}},
+  r_storm:  {name:"Руна бури",      src:"gram", q:3, col:"#A98BFF", gl:"storm",  st:2, b:{rate:0.04, spd:0.04}},
+  r_fortune:{name:"Руна удачи",     src:"gram", q:4, col:"#FFD54A", gl:"star",   st:2, b:{xp:0.08, scrap:0.10}}
 };
-const RUNE_IDS = Object.keys(RUNES), RUNE_SLOTS = 2;
-const RUNE_STAT = {atk:"атаки", def:"брони", hp:"прочности", crit:"крита", spd:"скорости", rate:"скорости атаки", cpow:"силы крита", regen:"прочности/сек", xp:"опыта", scrap:"лома"};
-const runeText = R => Object.entries(R.b).map(([k, v]) => k === "regen" ? "+" + v + " " + RUNE_STAT[k] : "+" + (k === "crit" ? v : Math.round(v*100)) + "% " + RUNE_STAT[k]).join(" · ");
-for(const id of RUNE_IDS){ const R = RUNES[id]; ITEMS[id] = {name:R.name, type:"rune", sell:R.src === "gram" ? 2000 : 400, desc:runeText(R) + " · вставляется в гнездо вещи"}; }
-// сумма бонусов рун со всех надетых вещей
+const RUNE_IDS = Object.keys(RUNES), RUNE_SLOTS = 1, RUNE_STACK = 3;
+for(const id of RUNE_IDS){ const R = RUNES[id]; ITEMS[id] = {name:R.name, type:"rune", sell:R.src === "gram" ? 2000 : 400, desc:RARITY[R.q].n + " руна · " + runeText(R) + " · вставляется в гнездо вещи"}; }
+// сколько таких рун стоит во всех надетых вещах
+function runeOnCount(id){ let n = 0; for(const e of Object.values(S.eq || {})) if(e && e.r) e.r.slice(0, RUNE_SLOTS).forEach(r => { if(r === id) n++; }); return n; }
+// сумма бонусов рун со всех надетых вещей; одинаковых считается не больше RUNE_STACK
 function runeTotals(){
-  const t = {};
-  for(const e of Object.values(S.eq || {})) if(e && e.r) for(const id of e.r){ const R = id && RUNES[id]; if(R) for(const [k, v] of Object.entries(R.b)) t[k] = (t[k] || 0) + v; }
+  const t = {}, seen = {};
+  for(const e of Object.values(S.eq || {})) if(e && e.r) for(const id of e.r.slice(0, RUNE_SLOTS)){
+    const R = id && RUNES[id]; if(!R) continue;
+    seen[id] = (seen[id] || 0) + 1; if(seen[id] > RUNE_STACK) continue;
+    for(const [k, v] of Object.entries(R.b)) t[k] = (t[k] || 0) + v;
+  }
   return t;
+}
+// старые вещи с двумя рунами: лишние руны возвращаются в сумку (или на склад). Учтённую сервером руну
+// трогаем только когда связь с сервером есть — иначе она потеряла бы продаваемость; тогда ждём следующего раза.
+function runeExtraFix(){
+  let moved = 0;
+  const fix = x => {
+    if(!x || !Array.isArray(x.r) || x.r.length <= RUNE_SLOTS) return;
+    for(let k = x.r.length - 1; k >= RUNE_SLOTS; k--){
+      const id = x.r[k];
+      if(id && RUNES[id]){
+        const reg = x.rg && x.rg[k];
+        if(reg && !(typeof REG !== "undefined" && REG.on)) continue;
+        if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)) continue;
+        if(reg) runeUnsocketReg(id);
+        moved++;
+      }
+      x.r.splice(k, 1); if(x.rg) x.rg.splice(k, 1);
+    }
+    if(!x.r.some(Boolean)){ delete x.r; delete x.rg; }
+  };
+  for(const e of Object.values(S.eq || {})) fix(e);
+  for(const list of [S.inv, S.store]) for(const x of list || []) if(x && ITEMS[x.id] && ITEMS[x.id].type === "gear") fix(x);
+  if(moved){ toast("Теперь в вещи одно гнездо: лишние руны (" + moved + ") вернулись в сумку"); save(); }
 }
 // вещь ушла (продана, вложена, разрушена) — руны из неё возвращаются в сумку или на склад
 function runesBack(x){
@@ -2017,28 +2120,36 @@ for(const id of DRONE_IDS){ const D = DRONES[id]; ITEMS[id] = {name:"Дрон «
 
 // ===================== АРТЕФАКТЫ: ДАННЫЕ =====================
 // Артефакт — предмет в сумке или на складе; надет может быть только один (S.art). Даёт пассивный бонус к характеристикам.
-// Прокачки нет: артефакты отличаются видом. src "craft" — собирается сервером в Мастерской, src "gram" — паки магазина.
+// Прокачки нет: артефакты отличаются видом и редкостью. src "craft" — собирается сервером в Мастерской, src "gram" — паки магазина.
 // Собранные и купленные артефакты учтены сервером и продаются на маркете за GRAM.
-// b — как у рун (atk/def/hp/spd/rate/xp/scrap — доли, crit — пункты, cpow — сила крита, regen — прочность в секунду).
+// cls — классы, с которыми артефакт входит в резонанс: тогда все его бонусы ×ART_RES (как классовые артефакты LIBERTY).
+// «Реликвия первых» — общая для всех, без резонанса.
+// b — как у рун (atk/def/hp/spd/rate/cpow/xp/scrap — доли, crit — проценты, regen — прочность в секунду).
 // Рецепты дублируются в items.py → CRAFT, цены паков — в gram.py → PACK_PRICES (ar_*).
+const ART_RES = 1.2;
 const ARTS = {
-  a_reactor:{name:"Сердце реактора",    src:"craft", lvl:25, g:1, col:"#3FB56B", ic:"core",  b:{hp:0.06, regen:2},
+  a_reactor:{name:"Сердце реактора",    src:"craft", lvl:25, q:1, col:"#4FE08A", ic:"core",  cls:["medic", "guard"], b:{hp:0.05, regen:2},
              need:{scrap:60000, cores:200, plate:20, wire:20}},
-  a_lens:   {name:"Линза прицела",      src:"craft", lvl:30, g:2, col:"#F2C14B", ic:"lens",  b:{crit:4, cpow:0.15},
+  a_lens:   {name:"Линза прицела",      src:"craft", lvl:30, q:2, col:"#FFD15C", ic:"lens",  cls:["sniper", "ghost"], b:{crit:3, cpow:0.12},
              need:{scrap:90000, cores:300, chip:30}},
-  a_servo:  {name:"Сервопривод «Вихрь»", src:"craft", lvl:35, g:2, col:"#5FD4E8", ic:"gear",  b:{rate:0.06, spd:0.05},
+  a_servo:  {name:"Сервопривод «Вихрь»", src:"craft", lvl:35, q:2, col:"#62E0F0", ic:"gear",  cls:["techno", "reaper"], b:{rate:0.06, spd:0.05},
              need:{scrap:140000, cores:450, wire:40, chip:20}},
-  a_plate:  {name:"Пластина титана",    src:"craft", lvl:40, g:2, col:"#A7B0B8", ic:"plate", b:{def:0.10, hp:0.06},
+  a_plate:  {name:"Пластина титана",    src:"craft", lvl:40, q:2, col:"#B9CCE0", ic:"plate", cls:["guard", "glyph"], b:{def:0.08, hp:0.07},
              need:{scrap:200000, cores:600, plate:60}},
-  a_crown:  {name:"Корона командира",   src:"gram", price:40,  g:3, col:"#F2A93B", ic:"crown", b:{atk:0.08, hp:0.08, crit:3}},
-  a_eye:    {name:"Око бури",           src:"gram", price:60,  g:3, col:"#9B7BFF", ic:"eye",   b:{atk:0.10, crit:5, cpow:0.20}},
-  a_heart:  {name:"Сердце титана",      src:"gram", price:60,  g:3, col:"#E0463A", ic:"heart", b:{hp:0.12, def:0.12, regen:3}},
-  a_relic:  {name:"Реликвия первых",    src:"gram", price:100, g:3, col:"#FFD700", ic:"relic", b:{atk:0.12, hp:0.10, crit:5, xp:0.15, scrap:0.15}}
+  a_crown:  {name:"Корона командира",   src:"gram", price:40,  q:3, col:"#FFB14A", ic:"crown", cls:["glyph", "techno", "medic"], b:{atk:0.05, hp:0.06, crit:2, xp:0.06}},
+  a_eye:    {name:"Око бури",           src:"gram", price:60,  q:3, col:"#B98BFF", ic:"eye",   cls:["ghost", "sniper"], b:{atk:0.07, crit:4, cpow:0.15}},
+  a_heart:  {name:"Сердце титана",      src:"gram", price:60,  q:3, col:"#FF5A6A", ic:"heart", cls:["guard", "reaper", "medic"], b:{hp:0.09, def:0.09, regen:3}},
+  a_relic:  {name:"Реликвия первых",    src:"gram", price:100, q:4, col:"#FFD54A", ic:"relic", cls:[], b:{atk:0.07, hp:0.07, def:0.05, crit:3, xp:0.12, scrap:0.12}}
 };
 const ART_IDS = Object.keys(ARTS);
-for(const id of ART_IDS){ const A = ARTS[id]; ITEMS[id] = {name:A.name, type:"artifact", sell:0, nosell:true, desc:runeText(A) + " · надевается в слот артефакта"}; }
+for(const id of ART_IDS){ const A = ARTS[id]; A.g = Math.min(3, A.q);   // g — грейд для старых мест (цвет плитки в профиле)
+  ITEMS[id] = {name:A.name, type:"artifact", sell:0, nosell:true, desc:RARITY[A.q].m + " артефакт · " + runeText(A) + " · надевается в слот артефакта"}; }
 const artOwned = id => !!ARTS[id] && count(S.inv, id) + count(S.store, id) > 0;
 function artOn(){ const id = S.art; return id && ARTS[id] && artOwned(id) ? ARTS[id] : null; }
+// резонанс: артефакт своего класса работает в ART_RES раза сильнее
+const artRes = A => !!(A && A.cls && A.cls.length && S.cls && A.cls.includes(S.cls));
+const artMul = A => artRes(A) ? ART_RES : 1;
+const artClsText = A => A.cls && A.cls.length ? A.cls.map(c => CLASSES[c] ? CLASSES[c].name : c).join(", ") : "все классы";
 
 // ===================== КРЫЛЬЯ: ДАННЫЕ =====================
 // Крылья — предмет в сумке или на складе; надеты могут быть одни (S.wing). Видны за спиной робота всем игрокам.
@@ -2110,7 +2221,7 @@ function stat(){
   crit += DB.crit || 0; spd += DB.spd || 0;
   // руны в надетых вещах
   const RB = runeTotals(), AO = artOn();
-  if(AO) for(const [k, v] of Object.entries(AO.b)) RB[k] = (RB[k] || 0) + v;      // артефакт складывается с рунами
+  if(AO){ const am = artMul(AO); for(const [k, v] of Object.entries(AO.b)) RB[k] = (RB[k] || 0) + v*am; }      // артефакт (с резонансом класса) складывается с рунами
   const WO = typeof wingOn === "function" ? wingOn() : null;
   if(WO) for(const [k, v] of Object.entries(WO.b)) RB[k] = (RB[k] || 0) + v;      // крылья — тоже
   const CO = typeof cloakOn === "function" ? cloakOn() : null;
@@ -3467,7 +3578,7 @@ function bagDetail(){
     if(it.type === "wings") btn = S.wing === x.id ? `<button class="act alt" type="button" disabled>Надеты</button>` : `<button class="act" type="button" data-bwset="${x.id}">Надеть</button>`;
     if(it.type === "artifact") btn = S.art === x.id ? `<button class="act alt" type="button" disabled>Надет</button>` : `<button class="act" type="button" data-baset="${x.id}">Надеть</button>`;
     if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}" ${it.lvl && S.level < it.lvl ? "disabled" : ""}>${it.lvl && S.level < it.lvl ? "Нужен ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
-    h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
+    h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${RUNES[x.id] ? rarTag(RUNES[x.id].q) + statChips(RUNES[x.id].b) : ARTS[x.id] ? rarTag(ARTS[x.id].q, true) + statChips(ARTS[x.id].b, artMul(ARTS[x.id])) : itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
   return h;
 }
 function renderItem(){
@@ -7916,7 +8027,9 @@ const PACKS = [
 ];
 for(const pk of PACKS) if(pk.tab === "cloaks"){ const Cd = CLOAKS[pk.rew[0].id]; pk.desc = runeText(Cd); }
 for(const pk of PACKS) if(pk.tab === "wings"){ const Wd = WINGS[pk.rew[0].id]; pk.desc = runeText(Wd); }
-for(const pk of PACKS) if(pk.tab === "artifacts"){ const A = ARTS[pk.rew[0].id]; pk.desc = runeText(A); }
+for(const pk of PACKS) if(pk.tab === "artifacts"){ const A = ARTS[pk.rew[0].id]; pk.desc = rarTag(A.q, true) + statChips(A.b) + `<span class="art-cls">Резонанс: ${artClsText(A)}</span>`; }
+for(const pk of PACKS) if(pk.tab === "runes"){ const ids = [...new Set(pk.rew.map(r => r.id))].filter(id => RUNES[id]);
+  pk.desc = ids.length === 1 ? rarTag(RUNES[ids[0]].q) + statChips(RUNES[ids[0]].b) : ids.map(id => `<span class="pk-rn"><b class="rn-nm" style="--rc:${RARITY[RUNES[id].q].c}">${RUNES[id].name}</b> ${statChips(RUNES[id].b)}</span>`).join(""); }
 // цена со скидкой (сервер считает так же — см. gram.py)
 for(const pk of PACKS) if(pk.price == null) pk.price = ["boost", "drones", "runes", "artifacts", "wings", "cloaks"].includes(pk.tab) ? pk.base : Math.round(pk.base*SHOP_SALE*100)/100;
 const saleEnd = () => { const e = new Date(); e.setMonth(e.getMonth() + 1, 1); e.setHours(0, 0, 0, 0); return e.getTime(); };
@@ -8208,8 +8321,8 @@ codexReady = true;
 const MK_FEE = 0.05;
 let mkTab = "lots", mkQ = "", mkCat = "all", mkSort = "new", mkData = null, mkBusy = false;
 const mkOnline = () => typeof NET !== "undefined" && NET.on && NET.id;
-const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["shard", "Осколки"], ["book", "Книги"], ["ench", "Сферы"], ["mat", "Материалы"]];
-const mkCatOf = id => { const it = ITEMS[id]; return it.type === "gear" ? (it.slot === "weapon" ? "weapon" : "gear") : it.type === "book" ? "book" : it.type === "ench" ? "ench" : it.type === "shard" ? "shard" : "mat"; };
+const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["art", "Артефакты"], ["rune", "Руны"], ["shard", "Осколки"], ["book", "Книги"], ["ench", "Сферы"], ["mat", "Материалы"]];
+const mkCatOf = id => { const it = ITEMS[id]; return it.type === "gear" ? (it.slot === "weapon" ? "weapon" : "gear") : it.type === "book" ? "book" : it.type === "ench" ? "ench" : it.type === "shard" ? "shard" : it.type === "artifact" ? "art" : it.type === "rune" ? "rune" : "mat"; };
 function mkLocal(){
   if(!S.mkLocal || !S.mkLocal.gram){
     const bots = ["VasyanGamer", "GoodLikeGJ", "IronFang", "Nova_7", "ChromeWolf"], pool = [...GEAR_IDS.filter(i => !ITEMS[i].starter), "sph_cu", "sph_ti", "wire", "chip", ...BOOK_IDS.slice(0, 6)];
@@ -8234,11 +8347,30 @@ function openMarket(){ openSheet("Маркет", "Торговля между и
 const mkItemName = x => (x.e ? "+" + x.e + " " : "") + ITEMS[x.id].name;
 function mkRow(lot, mine){
   const x = lot.item, it = ITEMS[x.id]; if(!it) return "";
-  const gc = it.type === "gear" ? gradeColor(x.g) : "var(--text)";
+  const sp = it.type === "rune" ? RUNES[x.id] : it.type === "artifact" ? ARTS[x.id] : null;
+  const gc = it.type === "gear" ? gradeColor(x.g) : sp ? RARITY[sp.q].c : "var(--text)";
   return `<div class="mkrow"><div class="ic" style="position:relative">${icon(x.id, x.g)}${encBadge(x)}</div>
-    <div class="tx"><b style="color:${gc}">${mkItemName(x)}${x.n > 1 ? " ×" + x.n : ""}</b><small>${it.type === "gear" ? gearDesc(x.id, x.g, x.e) : "@" + esc(lot.seller || S.name)}</small>
-    ${mine ? `<button class="act danger" type="button" data-mkcancel="${lot.id}">Снять</button>` : `<div class="mk-btns"><button class="act" type="button" data-mkbuy="${lot.id}" ${gramBal() < lot.price ? "disabled" : ""}>Купить</button>${it.type === "gear" ? `<button class="act alt" type="button" data-mkcmp="${lot.id}">Сравнить</button>` : ""}</div>`}</div>
+    <div class="tx"><b style="color:${gc}">${mkItemName(x)}${x.n > 1 ? " ×" + x.n : ""}</b>${sp ? statChips(sp.b) : ""}<small>${it.type === "gear" ? gearDesc(x.id, x.g, x.e) : "@" + esc(lot.seller || S.name)}</small>
+    ${mine ? `<button class="act danger" type="button" data-mkcancel="${lot.id}">Снять</button>` : `<div class="mk-btns"><button class="act" type="button" data-mkbuy="${lot.id}" ${gramBal() < lot.price ? "disabled" : ""}>Купить</button>${it.type === "gear" || it.type === "artifact" ? `<button class="act alt" type="button" data-mkcmp="${lot.id}">Сравнить</button>` : ""}</div>`}</div>
     <div class="mk-price"><b>${gramF(lot.price)}</b><small>GRAM</small></div></div>`;
+}
+// сравнение артефактов, как на маркете LIBERTY: что надето сейчас и что на рынке (с учётом резонанса класса)
+function artCompare(id){
+  const B = ARTS[id], A = artOn(); if(!B) return;
+  const keys = [...new Set([...(A ? Object.keys(A.b) : []), ...Object.keys(B.b)])];
+  const val = (X, k) => X && X.b[k] ? X.b[k]*artMul(X) : 0;
+  const card = (X, aid, title) => `<div class="cmp-c"><small>${title}</small>${X ? `<div class="cmp-h" style="--rc:${RARITY[X.q].c}"><span>${artIcon(aid)}</span><b>${X.name}</b></div>` : `<div class="cmp-empty">Слот пуст</div>`}
+    ${X ? keys.filter(k => X.b[k]).map(k => { const d = X === B ? val(B, k) - val(A, k) : 0;
+      return `<div class="cmp-r"><span>${STAT_META[k].n}</span><b style="color:${STAT_META[k].c}">+${statVal(k, val(X, k))}</b>${X === B && Math.abs(d) > 1e-9 ? `<i class="${d > 0 ? "up" : "dn"}">${d > 0 ? "▲" : "▼"} ${statVal(k, Math.abs(d))}</i>` : ""}</div>`; }).join("") : ""}</div>`;
+  const lost = A ? Object.keys(A.b).filter(k => !B.b[k]) : [];
+  let ov = document.getElementById("cmpOv"); if(ov) ov.remove();
+  ov = document.createElement("div"); ov.id = "cmpOv"; ov.className = "cmp-ov";
+  ov.innerHTML = `<div class="cmp-p" role="dialog" aria-label="Сравнение артефактов"><div class="cmp-t"><b>Сравнение артефактов</b><button type="button" aria-label="Закрыть">✕</button></div>
+    ${card(A, S.art, "Надето сейчас")}${card(B, id, "Лот на рынке")}
+    ${lost.length ? `<p class="cmp-lost">Пропадёт: ${lost.map(k => STAT_META[k].n + " +" + statVal(k, val(A, k))).join(", ")}</p>` : ""}
+    ${artRes(B) ? `<p class="cmp-res">⚡ Резонанс с твоим классом уже учтён</p>` : ""}</div>`;
+  ov.addEventListener("click", e => { if(e.target === ov || e.target.closest(".cmp-t button")) ov.remove(); });
+  document.body.appendChild(ov); Sfx.play("ui");
 }
 function renderMarket(){
   const d = mkData || {lots:[], mine:[], hist:[]};
@@ -8385,6 +8517,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.mksort){ mkSort = d.mksort; renderMarket(); }
   else if(d.mkbuy) mkBuy(d.mkbuy);
   else if(d.mkcancel) mkCancel(d.mkcancel);
+  else if(d.mkcmp && ARTS[(mkData.lots.find(l => String(l.id) === String(d.mkcmp)) || {item:{}}).item.id]) artCompare(mkData.lots.find(l => String(l.id) === String(d.mkcmp)).item.id);
   else if(d.mkcmp){ const lot = mkData.lots.find(l => String(l.id) === String(d.mkcmp)); if(lot){ const cur = S.eq[ITEMS[lot.item.id].slot]; toast("Лот: " + gearDesc(lot.item.id, lot.item.g, lot.item.e) + " · надето: " + (cur ? gearDesc(cur.id, cur.g, cur.e) : "ничего")); } }
   else if(d.mknew) mkNewSheet();
   else if(d.mkpick !== undefined) mkForm(+d.mkpick);
@@ -9970,6 +10103,7 @@ async function regSync(){
     const byUid = Object.fromEntries(r.items.map(x => [x.uid, x]));
     const fix = x => { if(!x || !x.uid) return; const s = byUid[x.uid]; if(!s || s.id !== x.id){ delete x.uid; return; } x.g = s.g; x.e = s.e; };
     [...S.inv, ...S.store, ...Object.values(S.eq)].forEach(fix);
+    runeExtraFix();
     save();
   }catch(e){}
 }
@@ -11588,40 +11722,86 @@ const Music = (() => {
   return {apply, start};
 })();
 // ===================== АРТЕФАКТЫ: ИКОНКИ, СЛОТ, КРАФТ =====================
-// иконка: камень-оправа в цвете артефакта и рисунок по виду (ic)
+// иконка: предмет с объёмной заливкой (светлый край → цвет → тень) на ауре цвета артефакта;
+// у эпических — искры, у легендарных — лучи. g — заливка цветом артефакта, s — сталь, h — стекло/свечение.
 const ART_PIC = {
-  core: c => `<circle cx="16" cy="16" r="7" fill="${c}"/><circle cx="16" cy="16" r="10" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="3 2"/><circle cx="14" cy="14" r="2" fill="#fff" opacity=".7"/>`,
-  lens: c => `<circle cx="15" cy="15" r="7" fill="#1B232C" stroke="${c}" stroke-width="2.5"/><path d="M15 9v12M9 15h12" stroke="${c}" stroke-width="1.3"/><path d="M20 20l5 5" stroke="${c}" stroke-width="3" stroke-linecap="round"/>`,
-  gear: c => `<path d="M14.5 7h3l.6 2.6 2.3 1 2.2-1.5 2.1 2.1-1.5 2.2 1 2.3 2.6.6v3l-2.6.6-1 2.3 1.5 2.2-2.1 2.1-2.2-1.5-2.3 1-.6 2.6h-3l-.6-2.6-2.3-1-2.2 1.5-2.1-2.1 1.5-2.2-1-2.3L7 17.5v-3l2.6-.6 1-2.3-1.5-2.2 2.1-2.1 2.2 1.5 2.3-1zM16 13a3 3 0 1 0 .01 0z" fill="${c}" fill-rule="evenodd"/>`,
-  plate: c => `<path d="M16 6l9 4v7c0 5-4 8-9 10-5-2-9-5-9-10v-7z" fill="${c}"/><path d="M16 10l5 2v5c0 3-2 5-5 6-3-1-5-3-5-6v-5z" fill="#1B232C" opacity=".35"/>`,
-  crown: c => `<path d="M7 22l-1-11 5 4 5-7 5 7 5-4-1 11z" fill="${c}"/><rect x="7" y="22" width="18" height="3" rx="1" fill="${c}"/><circle cx="16" cy="18" r="1.8" fill="#fff" opacity=".85"/>`,
-  eye:   c => `<path d="M5 16c4-7 18-7 22 0-4 7-18 7-22 0z" fill="#1B232C" stroke="${c}" stroke-width="2"/><circle cx="16" cy="16" r="4.5" fill="${c}"/><path d="M17 11l-3 5h3l-2 5" stroke="#1B232C" stroke-width="1.4" fill="none"/>`,
-  heart: c => `<path d="M16 26C9 21 6 17 6 13a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 4-3 8-10 13z" fill="${c}"/><path d="M11 15h3l2-3 2 6 2-3h2" stroke="#1B232C" stroke-width="1.5" fill="none"/>`,
-  relic: c => `<path d="M16 5l4 7-4 15-4-15z" fill="${c}"/><path d="M8 12h16l-8 15z" fill="${c}" opacity=".55"/><path d="M12 12l4-7 4 7" fill="#fff" opacity=".45"/>`
+  core: (c, g, s, h) => `<ellipse cx="16" cy="16" rx="12.5" ry="4.6" fill="none" stroke="${c}" stroke-opacity=".45" stroke-width="1.1" transform="rotate(-28 16 16)"/>
+    <circle cx="16" cy="16" r="7.6" fill="url(#${g})" stroke="#0E141A" stroke-opacity=".6" stroke-width=".8"/>
+    <circle cx="16" cy="16" r="4.4" fill="url(#${h})"/><circle cx="16" cy="16" r="1.8" fill="#FFFFFF"/>
+    <path d="M7.4 21.6c3.6 2.9 13.6-.8 17.6-7.8" fill="none" stroke="${c}" stroke-width="1.3" stroke-linecap="round" transform="rotate(4 16 16)"/>
+    <circle cx="24.6" cy="12.8" r="1.4" fill="#FFFFFF"/><path d="M12.4 11.6a5 5 0 0 1 4-2" stroke="#FFFFFF" stroke-opacity=".75" stroke-width="1.2" stroke-linecap="round" fill="none"/>`,
+  lens: (c, g, s, h) => `<path d="M19.6 19.6l6.4 6.4" stroke="url(#${s})" stroke-width="4.2" stroke-linecap="round"/><path d="M20.8 20.8l1.6 1.6" stroke="#0E141A" stroke-width="4.4"/>
+    <circle cx="14" cy="14" r="9" fill="url(#${s})" stroke="#0E141A" stroke-opacity=".55" stroke-width=".8"/>
+    <circle cx="14" cy="14" r="6.6" fill="url(#${h})" stroke="#0E141A" stroke-opacity=".5" stroke-width=".7"/>
+    <path d="M14 8.6v3.6M14 15.8v3.6M8.6 14h3.6M15.8 14h3.6" stroke="#FFFFFF" stroke-opacity=".9" stroke-width="1"/><circle cx="14" cy="14" r="1" fill="#FF4A3A"/>
+    <path d="M9.8 11a5 5 0 0 1 3-2.6" stroke="#FFFFFF" stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round" fill="none"/>`,
+  gear: (c, g, s, h) => `<path d="M14.3 4.5h3.4l.6 2.9 2.6 1.1 2.5-1.7 2.4 2.4-1.7 2.5 1.1 2.6 2.9.6v3.4l-2.9.6-1.1 2.6 1.7 2.5-2.4 2.4-2.5-1.7-2.6 1.1-.6 2.9h-3.4l-.6-2.9-2.6-1.1-2.5 1.7-2.4-2.4 1.7-2.5-1.1-2.6-2.9-.6v-3.4l2.9-.6 1.1-2.6-1.7-2.5 2.4-2.4 2.5 1.7 2.6-1.1z" fill="url(#${s})" stroke="#0E141A" stroke-opacity=".55" stroke-width=".8"/>
+    <circle cx="16" cy="16" r="6.2" fill="#18212A" stroke="${c}" stroke-width="1.2"/>
+    <path d="M16 11.2v9.6M11.2 16h9.6M12.6 12.6l6.8 6.8M19.4 12.6l-6.8 6.8" stroke="${c}" stroke-opacity=".55" stroke-width="1"/>
+    <circle cx="16" cy="16" r="3" fill="url(#${h})"/><circle cx="15.2" cy="15.2" r=".9" fill="#FFFFFF"/>`,
+  plate: (c, g, s, h) => `<path d="M16 4l10.4 3.8v8.4c0 6.4-4.6 10-10.4 12.2C10.2 26.2 5.6 22.6 5.6 16.2V7.8z" fill="url(#${s})" stroke="#0E141A" stroke-opacity=".6" stroke-width=".8"/>
+    <path d="M16 7.4l7.4 2.7v6.2c0 4.6-3.3 7.3-7.4 9-4.1-1.7-7.4-4.4-7.4-9v-6.2z" fill="url(#${g})"/>
+    <path d="M16 7.4v17.9c-4.1-1.7-7.4-4.4-7.4-9v-6.2z" fill="#FFFFFF" opacity=".16"/>
+    <path d="M11.6 13.6l4.4 3.2 4.4-3.2v2.8l-4.4 3.2-4.4-3.2z" fill="#0E141A" opacity=".55"/>
+    <circle cx="8.2" cy="9" r=".9" fill="#E6EDF3"/><circle cx="23.8" cy="9" r=".9" fill="#E6EDF3"/><circle cx="16" cy="5.9" r=".9" fill="#E6EDF3"/>`,
+  crown: (c, g, s, h) => `<path d="M5.2 11.4l5.6 4.4L16 7.4l5.2 8.4 5.6-4.4-1.6 11.4H6.8z" fill="url(#${g})" stroke="#0E141A" stroke-opacity=".55" stroke-width=".8" stroke-linejoin="round"/>
+    <rect x="6.6" y="22.4" width="18.8" height="3.8" rx="1.2" fill="url(#${g})" stroke="#0E141A" stroke-opacity=".55" stroke-width=".8"/>
+    <path d="M6.8 22.8h18.4" stroke="#FFFFFF" stroke-opacity=".5" stroke-width=".8"/>
+    <circle cx="5.2" cy="11.2" r="1.6" fill="url(#${g})"/><circle cx="26.8" cy="11.2" r="1.6" fill="url(#${g})"/><circle cx="16" cy="6.8" r="1.8" fill="url(#${g})"/>
+    <path d="M16 15.6l2 2.6-2 2.6-2-2.6z" fill="#FF4A6A"/><circle cx="10.6" cy="24.3" r="1" fill="#62E0F0"/><circle cx="21.4" cy="24.3" r="1" fill="#62E0F0"/><circle cx="16" cy="24.3" r="1" fill="#FF4A6A"/>
+    <path d="M9.4 14.6l1.4 1.2" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="1" stroke-linecap="round"/>`,
+  eye: (c, g, s, h) => `<path d="M3.6 16C7.4 9 24.6 9 28.4 16 24.6 23 7.4 23 3.6 16z" fill="url(#${s})" stroke="#0E141A" stroke-opacity=".6" stroke-width=".8"/>
+    <path d="M6.4 16c3.4-4.8 15.8-4.8 19.2 0-3.4 4.8-15.8 4.8-19.2 0z" fill="#10161D"/>
+    <circle cx="16" cy="16" r="5.4" fill="url(#${g})"/><circle cx="16" cy="16" r="5.4" fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width=".6"/>
+    <path d="M17.2 11.8l-3 4.6h2.6l-1.8 4" stroke="#10161D" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+    <circle cx="14" cy="14" r="1.1" fill="#FFFFFF"/>
+    <path d="M7 9.6l1.6 1.8M25 9.6l-1.6 1.8M16 5.6v2.4" stroke="${c}" stroke-width="1.2" stroke-linecap="round"/>`,
+  heart: (c, g, s, h) => `<path d="M12.2 7.4V4.6M19.8 7.4V4.6" stroke="url(#${s})" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M16 27.4C8.2 22.2 4.8 17.8 4.8 13.1a5.9 5.9 0 0 1 11.2-2.6 5.9 5.9 0 0 1 11.2 2.6c0 4.7-3.4 9.1-11.2 14.3z" fill="url(#${g})" stroke="#0E141A" stroke-opacity=".6" stroke-width=".8"/>
+    <path d="M16 10.5v16.9C8.2 22.2 4.8 17.8 4.8 13.1a5.9 5.9 0 0 1 11.2-2.6z" fill="#FFFFFF" opacity=".12"/>
+    <path d="M7.6 16.4h4l1.8-3.6 2.8 7.2 2.2-4.6 1.4 1h4.6" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+    <path d="M8.4 11.6a3.4 3.4 0 0 1 2.8-2.2" stroke="#FFFFFF" stroke-opacity=".75" stroke-width="1.2" stroke-linecap="round" fill="none"/>`,
+  relic: (c, g, s, h) => `<path d="M16 2.8l5.6 8.4L16 29.2l-5.6-18z" fill="url(#${g})" stroke="#0E141A" stroke-opacity=".55" stroke-width=".8" stroke-linejoin="round"/>
+    <path d="M16 2.8l-5.6 8.4h11.2z" fill="#FFFFFF" opacity=".55"/><path d="M16 11.2v18l5.6-18z" fill="#000" opacity=".2"/>
+    <path d="M7.2 14.4l2.4 3.4-2.4 5.6-2.4-5.6z" fill="url(#${g})" opacity=".9"/><path d="M24.8 14.4l2.4 3.4-2.4 5.6-2.4-5.6z" fill="url(#${g})" opacity=".9"/>
+    <path d="M13 9.2l1.6-2.4" stroke="#FFFFFF" stroke-width="1.1" stroke-linecap="round"/>`
 };
 function artIcon(id){
   const A = ARTS[id]; if(!A) return "";
-  return `<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2.5" y="2.5" width="27" height="27" rx="7" fill="#151C24" stroke="${A.col}" stroke-width="${A.src === "gram" ? 2.2 : 1.4}"/>
-    <rect x="5" y="5" width="22" height="22" rx="5" fill="${A.col}" opacity=".12"/>${ART_PIC[A.ic](A.col)}</svg>`;
+  const u = "ar" + (++svgUid), c = A.col, L = mixHex(c, "#FFFFFF", .6), D = mixHex(c, "#000000", .58), q = A.q;
+  const rays = q >= 4 ? `<g stroke="${c}" stroke-opacity=".5" stroke-width="1" stroke-linecap="round">${[0, 45, 90, 135, 180, 225, 270, 315].map(a => `<path d="M16 1.6v3" transform="rotate(${a} 16 16)"/>`).join("")}</g>` : "";
+  const spark = q >= 3 ? `<path d="M26.4 3.6l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="#FFFFFF"/><circle cx="5" cy="26.6" r=".9" fill="${L}"/>` : "";
+  return `<svg viewBox="0 0 32 32" aria-hidden="true" class="art-ic" style="overflow:visible">
+    <defs><linearGradient id="${u}g" x1="0" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="${L}"/><stop offset=".45" stop-color="${c}"/><stop offset="1" stop-color="${D}"/></linearGradient>
+    <linearGradient id="${u}s" x1="0" y1="0" x2=".8" y2="1"><stop offset="0" stop-color="#EEF3F7"/><stop offset=".5" stop-color="#8B98A5"/><stop offset="1" stop-color="#36414C"/></linearGradient>
+    <radialGradient id="${u}h" cx=".4" cy=".38" r=".7"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="${L}"/><stop offset="1" stop-color="${c}"/></radialGradient>
+    <radialGradient id="${u}a"><stop offset="0" stop-color="${c}" stop-opacity="${(0.32 + 0.08*q).toFixed(2)}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="16" cy="16" r="15.5" fill="url(#${u}a)"/>${rays}${ART_PIC[A.ic](c, u + "g", u + "s", u + "h")}${spark}</svg>`;
 }
 function artGot(id){
   const A = ARTS[id]; if(!A) return;
   if(!artOn()){ S.art = id; toast("Собрано и надето: " + A.name); }
   else toast("Собрано: " + A.name + ". Надеть можно в Персонаже, продать — на маркете");
 }
+// строка артефакта: иконка в рамке редкости, название, редкость, цветные бонусы, классы резонанса
+function artLine(id, extra, btn, cls){
+  const X = ARTS[id], res = artRes(X), m = artMul(X), mine = artOwned(id) || (cls || "").includes("craft");
+  return `<div class="li art-li ${cls || ""}" style="--rc:${RARITY[X.q].c}"><div class="ic art-fr ${mine ? "" : "lock"}">${artIcon(id)}</div>
+    <div class="tx"><span class="rn-nm">${X.name}${mine ? "" : " 🔒"}</span>${rarTag(X.q, true)}${statChips(X.b, m)}
+    <small class="art-cls ${res ? "on" : ""}">${res ? "⚡ Резонанс с твоим классом: ×" + numRu(ART_RES) : X.cls.length ? "Резонанс: " + artClsText(X) : "Подходит всем классам"}</small>${extra || ""}</div>${btn || ""}</div>`;
+}
 // карточка слота артефакта во вкладке «Снаряжение»
 let artShowAll = false;
 function artCardHtml(){
   const A = artOn(), own = ART_IDS.filter(artOwned);
-  let h = `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${A ? GRADES[A.g].color : "var(--line)"}">${A ? artIcon(S.art) : `<i class="empty-ic"></i>`}</div>
-    <div class="tx"><span${A ? ` style="color:${A.col}"` : ""}>${A ? A.name : "Слот артефакта пуст"}</span><small>${A ? runeText(A) : "Артефакт даёт постоянный бонус. Собери его в Мастерской или купи в магазине GRAM"}</small></div>
-    ${A ? `<button class="act alt" type="button" data-aoff="1">Снять</button>` : ""}</div>`;
+  let h = `<section class="pcard">` + (A ? artLine(S.art, "", `<button class="act alt" type="button" data-aoff="1">Снять</button>`, "art-on")
+    : `<div class="cdetail"><div class="ic"><i class="empty-ic"></i></div><div class="tx"><span>Слот артефакта пуст</span><small>Артефакт даёт постоянный бонус. Собери его в Мастерской или купи в магазине GRAM</small></div></div>`);
   const rows = (artShowAll ? ART_IDS : own.filter(id => id !== S.art)).map(id => {
     const X = ARTS[id], mine = artOwned(id), on = S.art === id && mine;
     const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(X.price)} GRAM`;
     const btn = on ? `<button class="act alt" type="button" disabled>Надет</button>` : mine ? `<button class="act" type="button" data-aset="${id}">Надеть</button>`
       : X.src === "gram" ? `<button class="act alt" type="button" data-ashop="1">Купить</button>` : `<button class="act alt" type="button" data-dcraftgo="1">Мастерская</button>`;
-    return `<div class="li"><div class="ic" style="border-color:${GRADES[X.g].color};${mine ? "" : "opacity:.45"}">${artIcon(id)}</div><div class="tx"><span style="color:${X.col}">${X.name}${mine ? "" : " 🔒"}</span><small>${runeText(X)}</small><small>${mine ? "Есть ×" + (count(S.inv, id) + count(S.store, id)) : how}</small></div>${btn}</div>`;
+    return artLine(id, `<small>${mine ? "Есть ×" + (count(S.inv, id) + count(S.store, id)) : how}</small>`, btn);
   }).join("");
   if(rows) h += `<div class="list" style="margin-top:10px">${rows}</div>`;
   return h + `<button class="act alt" type="button" data-aall="1" style="margin-top:8px;width:100%">${artShowAll ? "Только мои артефакты" : "Все артефакты (" + own.length + " из " + ART_IDS.length + ")"}</button></section>`;
@@ -11631,14 +11811,14 @@ function artCraftHtml(){
   let h = `<h3 class="bag-h">Артефакты</h3><div class="list">`;
   for(const id of ART_IDS){
     const A = ARTS[id]; if(A.src !== "craft") continue;
-    const lvlOk = S.level >= A.lvl, gc = GRADES[A.g].color;
+    const lvlOk = S.level >= A.lvl;
     const parts = Object.entries(A.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(A.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic" style="border-color:${gc}">${artIcon(id)}</div><div class="tx"><span style="color:${A.col}">${A.name}${artOwned(id) ? " · есть" : ""}</span><small>${runeText(A)} · с ${A.lvl} ур.</small><div class="need">${parts}</div></div>
-      <button class="act" type="button" data-acraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + A.lvl}</button></div>`;
+    h += artLine(id, `<small>с ${A.lvl} ур.${artOwned(id) ? " · уже есть" : ""}</small><div class="need">${parts}</div>`,
+      `<button class="act" type="button" data-acraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + A.lvl}</button>`, "craft");
   }
-  return h + `</div><p class="hint">Надет может быть один артефакт. Собранный артефакт учтён сервером — его можно продать на маркете за GRAM</p>`;
+  return h + `</div><p class="hint">Надет может быть один артефакт. Артефакт своего класса работает в ${numRu(ART_RES)} раза сильнее. Собранный артефакт учтён сервером — его можно продать на маркете за GRAM</p>`;
 }
 // ===================== КРАФТ РУН И ДРОНОВ НА СЕРВЕРЕ =====================
 // В игре через бота руны и дроны собирает сервер: он проверяет лом, ядра и материалы в последнем сохранении,
@@ -12208,39 +12388,73 @@ function droneIconFill(id){
   droneIconCache.set(key, html); return html;
 }
 // ===================== РУНЫ: ИКОНКИ, ГНЁЗДА, КРАФТ =====================
-// иконка: шестигранный камень цвета руны с символом
+// иконка: резной камень (форма — по редкости), рамка цвета редкости, в центре светящийся символ руны
+const mixHex = (a, b, t) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b);
+  return "#" + A.map((v, i) => Math.round(v + (B[i] - v)*t).toString(16).padStart(2, "0")).join(""); };
+// [путь, вид] — символы в квадрате 8…24; вид: 0 заливка, 1 заливка с вырезами (evenodd), 2 линии
 const RUNE_GLYPH = {
-  blade:"M11 22l9-12 2 2-12 9zM10 20l2 2-2 2-2-2z", shield:"M16 9l6 2v4c0 4-3 7-6 8-3-1-6-4-6-8v-4z",
-  cross:"M14 9h4v5h5v4h-5v5h-4v-5H9v-4h5z", eye:"M8 16c3-5 13-5 16 0-3 5-13 5-16 0zM16 13.5a2.5 2.5 0 1 0 .01 0z",
-  chev:"M9 10l5 6-5 6h3l5-6-5-6zM15 10l5 6-5 6h3l5-6-5-6z", bolt:"M18 7l-8 11h5l-2 8 8-11h-5z",
-  star:"M16 8l2.2 5 5.3.4-4 3.5 1.3 5.2L16 19.3l-4.8 2.8 1.3-5.2-4-3.5 5.3-.4z", gear:"M14.5 8h3l.5 2.5 2.2 1 2.1-1.4 2.1 2.1-1.4 2.1 1 2.2 2.5.5v3l-2.5.5-1 2.2 1.4 2.1-2.1 2.1-2.1-1.4-2.2 1-.5 2.5h-3l-.5-2.5-2.2-1-2.1 1.4-2.1-2.1 1.4-2.1-1-2.2L8 17.5v-3l2.5-.5 1-2.2-1.4-2.1 2.1-2.1 2.1 1.4 2.2-1zM16 13a3 3 0 1 0 .01 0z"
+  blade:["M16 7.5l1.8 2.7v8.6h2.4v1.8h-3.1v2.4l.9 1.4-2 1.6-2-1.6.9-1.4v-2.4h-3.1v-1.8h2.4v-8.6z", 0],
+  shield:["M16 8.3l6.2 2.3v4.7c0 4-2.7 6.6-6.2 8.1-3.5-1.5-6.2-4.1-6.2-8.1v-4.7zM16 10.9v10.2c2.3-1.2 4-3.1 4-5.8v-3.1z", 1],
+  cross:["M14 8.5h4v5.5h5.5v4H18v5.5h-4V18H8.5v-4H14z", 0],
+  eye:["M7.5 16c3.2-5.2 13.8-5.2 17 0-3.2 5.2-13.8 5.2-17 0zM16 12.4a3.6 3.6 0 1 0 .01 0zM16 14.5a1.5 1.5 0 1 0 .01 0z", 1],
+  chev:["M8.5 10h3.4l5 6-5 6H8.5l5-6zM14.6 10H18l5 6-5 6h-3.4l5-6z", 0],
+  bolt:["M18.6 7L10 17.6h5.2L13.2 25l8.8-10.8h-5.3z", 0],
+  pierce:["M23.5 8.5l-1.7 6.9-2.1-2.1-9.4 9.4-1.5-1.5 9.4-9.4-2.1-2.1zM9.6 19.6l2.8 2.8-3.3.9-.4-.4z", 0],
+  gear:["M14.5 8h3l.5 2.5 2.2 1 2.1-1.4 2.1 2.1-1.4 2.1 1 2.2 2.5.5v3l-2.5.5-1 2.2 1.4 2.1-2.1 2.1-2.1-1.4-2.2 1-.5 2.5h-3l-.5-2.5-2.2-1-2.1 1.4-2.1-2.1 1.4-2.1-1-2.2L8 17.5v-3l2.5-.5 1-2.2-1.4-2.1 2.1-2.1 2.1 1.4 2.2-1zM16 13a3 3 0 1 0 .01 0z", 1],
+  axes:["M9.2 9.2l10.6 10.6M22.8 9.2L12.2 19.8M17.6 22l4.4-4.4M14.4 22L10 17.6M20.4 20.4l2.6 2.6M11.6 20.4L9 23", 2],
+  tower:["M9.8 8.6h2.6v2h2.2v-2h2.8v2h2.2v-2h2.6v5.2l-1.6 1.6v8.2h-9.2v-8.2l-1.6-1.6zM14.6 23.6v-3.1a1.4 1.4 0 0 1 2.8 0v3.1z", 1],
+  storm:["M8.5 9.5h15l-1 2.4h-14zM10.8 13.6h11.4l-1.2 2.4h-9.4zM12.9 17.7h8l-1.3 2.4h-6zM15 21.8h4.2l-1.6 2.7h-2.4z", 0],
+  star:["M16 7.6l2.4 5.3 5.8.5-4.4 3.8 1.3 5.7L16 19.9l-5.1 3 1.3-5.7-4.4-3.8 5.8-.5z", 0]
 };
+const RUNE_STONE = [
+  "M16 3.2c6.7 0 12.6 5.1 12.6 12.5 0 7.5-5.7 13.1-12.6 13.1S3.4 23.2 3.4 15.7C3.4 8.3 9.3 3.2 16 3.2z",
+  "M11 3.4h10l7.6 7.6v10L21 28.6H11L3.4 21V11z",
+  "M16 2.4l12.2 6.9v13.4L16 29.6 3.8 22.7V9.3z"
+];
+const rnInset = (d, k) => `<path d="${d}" transform="translate(16 16) scale(${k}) translate(-16 -16)"`;
 function runeIcon(id){
   const R = RUNES[id]; if(!R) return "";
-  const prem = R.src === "gram";
-  return `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l12 7v14l-12 7-12-7V9z" fill="#1B232C" stroke="${R.col}" stroke-width="${prem ? 2.4 : 1.6}"/>
-    <path d="M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z" fill="${R.col}" opacity=".18"/><path d="${RUNE_GLYPH[R.gl]}" fill="${R.col}" fill-rule="evenodd"/>
-    ${prem ? `<circle cx="25" cy="7" r="2.2" fill="#FFF1B8"/>` : ""}</svg>`;
+  const Q = RARITY[R.q], u = "rn" + (++svgUid), shape = RUNE_STONE[R.st] || RUNE_STONE[0], [gd, eo] = RUNE_GLYPH[R.gl] || RUNE_GLYPH.star;
+  const stone = mixHex("#626C76", Q.c, 0.12 + 0.07*R.q), fr = eo === 1 ? ` fill-rule="evenodd"` : "";
+  const facets = R.st === 2 ? `<path d="M16 2.4V9.5M28.2 9.3l-6 3.6M3.8 9.3l6 3.6M16 29.6v-7M28.2 22.7l-6-3.6M3.8 22.7l6-3.6" stroke="#000" stroke-opacity=".28" stroke-width=".8"/>`
+    : R.st === 1 ? `<path d="M11 3.4l2 3.6M21 3.4l-2 3.6M28.6 11l-3.6 2M28.6 21l-3.6-2M21 28.6l-2-3.6M11 28.6l2-3.6M3.4 21l3.6-2M3.4 11l3.6 2" stroke="#000" stroke-opacity=".25" stroke-width=".8"/>` : "";
+  return `<svg viewBox="0 0 32 32" aria-hidden="true" class="rune-ic">
+    <defs><linearGradient id="${u}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${mixHex(stone, "#FFFFFF", .42)}"/><stop offset=".5" stop-color="${stone}"/><stop offset="1" stop-color="${mixHex(stone, "#000000", .62)}"/></linearGradient>
+    <radialGradient id="${u}b" cx=".5" cy=".42" r=".62"><stop offset="0" stop-color="${mixHex(stone, "#000000", .28)}"/><stop offset="1" stop-color="${mixHex(stone, "#000000", .66)}"/></radialGradient>
+    <radialGradient id="${u}c"><stop offset="0" stop-color="${R.col}" stop-opacity=".55"/><stop offset="1" stop-color="${R.col}" stop-opacity="0"/></radialGradient></defs>
+    <path d="${shape}" fill="url(#${u}a)" stroke="${R.q ? Q.c : "#8E99A4"}" stroke-width="${(1 + 0.25*R.q).toFixed(2)}"/>
+    ${facets}${rnInset(shape, .74)} fill="url(#${u}b)" stroke="#000" stroke-opacity=".35" stroke-width=".9"/>
+    <circle cx="16" cy="16" r="9" fill="url(#${u}c)"/>
+    <g transform="translate(16 16) scale(.88) translate(-16 -16)">${eo === 2
+      ? `<path d="${gd}" stroke="#000" stroke-opacity=".55" stroke-width="2.6" stroke-linecap="round" fill="none" transform="translate(0 .9)"/><path d="${gd}" stroke="${R.col}" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="${gd}" stroke="#FFFFFF" stroke-opacity=".3" stroke-width=".8" stroke-linecap="round" fill="none" transform="translate(-.3 -.4)"/>`
+      : `<path d="${gd}" fill="#000" opacity=".55" transform="translate(0 .9)"${fr}/><path d="${gd}" fill="${R.col}"${fr}/><path d="${gd}" fill="#FFFFFF" opacity=".28" transform="translate(16 16) scale(.94) translate(-16 -16.4)"${fr}/>`}</g>
+    <path d="M9 7.4c2-1.6 4.4-2.4 7-2.4" stroke="#FFFFFF" stroke-opacity=".45" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+    ${R.q >= 3 ? `<path d="M25.6 4.2l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z" fill="#FFFFFF" opacity=".95"/>` : ""}</svg>`;
 }
 // вещь по ссылке «inv:номер» или «eq:слот»
 const runeItem = ref => { if(!ref) return null; const [w, k] = ref.split(":"); const x = w === "inv" ? S.inv[+k] : S.eq[k]; return x && ITEMS[x.id] && ITEMS[x.id].type === "gear" ? x : null; };
 const RS = {ref:null, k:0};          // открытый выбор руны для гнезда
+// строка выбора руны: камень, название в цвете редкости, цветные бонусы
+function runePickRow(id, note, dis){
+  const R = RUNES[id], n = have(id);
+  return `<button type="button" class="rn-opt" data-rins="${id}" ${dis === true ? "disabled" : ""} style="--rc:${RARITY[R.q].c}">
+    <span class="rn-oi">${runeIcon(id)}</span><span class="rn-ot"><b>${R.name}<em>×${n}</em></b>${statChips(R.b)}${note ? `<small class="${dis === "warn" ? "warn" : ""}">${note}</small>` : ""}</span></button>`;
+}
 function runeRow(ref){
   const x = runeItem(ref); if(!x) return "";
-  const r = x.r || [];
-  let h = `<div class="rn-row"><small>Руны</small>`;
-  for(let k = 0; k < RUNE_SLOTS; k++){
-    const id = r[k], R = id && RUNES[id];
-    h += R ? `<button type="button" class="rn-sock on" style="border-color:${R.col}" data-rsock="${ref}|${k}" aria-label="${R.name}: вынуть">${runeIcon(id)}<span>${runeText(R)}</span></button>`
-           : `<button type="button" class="rn-sock" data-rsock="${ref}|${k}" aria-label="Пустое гнездо">${`<svg viewBox="0 0 32 32"><path d="M16 3l11 6.5v13L16 29 5 22.5v-13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/><path d="M16 11v10M11 16h10" stroke="currentColor" stroke-width="2" opacity=".6"/></svg>`}<span>Пустое гнездо</span></button>`;
-  }
+  if(x.r && x.r.length > RUNE_SLOTS) runeExtraFix();
+  const id = (x.r || [])[0], R = id && RUNES[id];
+  let h = `<div class="rn-row"><small>Гнездо руны</small>`;
+  h += R ? `<button type="button" class="rn-sock on" style="--rc:${RARITY[R.q].c}" data-rsock="${ref}|0" aria-label="${R.name}: вынуть">
+      <span class="rn-si">${runeIcon(id)}</span><span class="rn-st"><b>${R.name}</b>${statChips(R.b)}${runeOnCount(id) > RUNE_STACK && S.eq[(ref.split(":")[1])] === x ? `<small class="rn-warn">Больше ${RUNE_STACK} таких рун не действуют</small>` : ""}</span><span class="rn-x">Вынуть</span></button>`
+    : `<button type="button" class="rn-sock ${RS.ref === ref ? "open" : ""}" data-rsock="${ref}|0" aria-label="Пустое гнездо: вставить руну"><span class="rn-si empty"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span class="rn-st"><b>Пустое гнездо</b><small>Нажми, чтобы вставить руну</small></span></button>`;
   h += `</div>`;
-  if(RS.ref === ref){
-    const used = new Set(r.filter(Boolean)), list = RUNE_IDS.filter(id => have(id) > 0);
-    h += `<div class="rn-pick">${list.length ? list.map(id => { const R = RUNES[id], dup = used.has(id);
-      return `<button type="button" data-rins="${id}" ${dup ? "disabled style=\"opacity:.45\"" : ""}>${runeIcon(id)}<div><b style="color:${R.col}">${R.name} ×${have(id)}</b><small>${dup ? "Такая руна уже стоит в этой вещи" : runeText(R)}</small></div></button>`; }).join("")
-      : `<div class="hint">В сумке нет рун. Собери их в Мастерской или купи в магазине GRAM на вкладке «Руны»</div>`}
-      <button type="button" data-rclose="1" style="justify-content:center">Закрыть</button></div>`;
+  if(RS.ref === ref && !R){
+    const list = RUNE_IDS.filter(r => have(r) > 0).sort((a, b) => RUNES[b].q - RUNES[a].q);
+    h += `<div class="rn-pick"><div class="rn-ph"><b>Выбери руну</b><button type="button" data-rclose="1" aria-label="Закрыть">✕</button></div>${list.length ? list.map(r => {
+        const on = runeOnCount(r), over = on >= RUNE_STACK;
+        return runePickRow(r, over ? `Уже стоит ${on} — четвёртая не даст бонуса` : on ? `Уже стоит в ${on} ${on === 1 ? "вещи" : "вещах"} из ${RUNE_STACK}` : "", over ? "warn" : false); }).join("")
+      : `<div class="hint">В сумке нет рун. Собери их в Мастерской или купи в магазине GRAM на вкладке «Руны»</div>`}</div>`;
   }
   return h;
 }
@@ -12260,14 +12474,14 @@ function runeSocketClick(v){
     if(!x.r.some(Boolean)){ delete x.r; delete x.rg; }
     toast("Руна «" + RUNES[id].name + "» вынута"); Sfx.play("ui"); RS.ref = null; save(); return;
   }
-  RS.ref = RS.ref === ref && RS.k === +k ? null : ref; RS.k = +k; Sfx.play("ui");
+  RS.ref = RS.ref === ref ? null : ref; RS.k = 0; Sfx.play("ui");
 }
 function runeInsert(id){
   const x = runeItem(RS.ref), R = RUNES[id]; if(!x || !R) return;
   if(have(id) < 1){ toast("Этой руны нет в сумке"); return; }
   x.r = x.r || []; while(x.r.length < RUNE_SLOTS) x.r.push(null);
-  if(x.r.includes(id)){ toast("Такая руна уже стоит в этой вещи"); return; }
-  let k = RS.k; if(x.r[k]) k = x.r.indexOf(null); if(k < 0) return;
+  if(x.r.slice(0, RUNE_SLOTS).some(Boolean)){ toast("В вещи уже есть руна — сначала вынь её"); return; }
+  const k = 0;
   // какую руну ставим: если есть неучтённая — её, а учтённые остаются продаваемыми; иначе учтённую — сервер
   // переносит её учёт в гнездо и вернёт при выемке
   const total = count(S.inv, id) + count(S.store, id), regFree = typeof REG !== "undefined" && REG.on ? (REG.sph[id] || 0) : 0;
@@ -12286,10 +12500,10 @@ function runeCraftHtml(){
     const parts = Object.entries(R.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(R.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic">${runeIcon(id)}</div><div class="tx"><span style="color:${R.col}">${R.name}${have(id) ? " · есть " + have(id) : ""}</span><small>${runeText(R)} · с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
+    h += `<div class="li rn-li" style="--rc:${RARITY[R.q].c}"><div class="ic">${runeIcon(id)}</div><div class="tx"><span class="rn-nm">${R.name}${have(id) ? ` <em>есть ${have(id)}</em>` : ""}</span>${rarTag(R.q)}${statChips(R.b)}<small>с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-rcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + R.lvl}</button></div>`;
   }
-  return h + `</div><p class="hint">У каждой вещи 2 гнезда для рун. Вставить и вынуть можно в Персонаже, нажав на вещь. Руны войны, бастиона, бури и удачи — только в магазине GRAM. Собранные руны можно продать на маркете — и сразу, и после того как вынешь их из вещи</p>`;
+  return h + `</div><p class="hint">В каждой вещи одно гнездо для руны. Вставить и вынуть можно в Персонаже, нажав на вещь. Действуют не больше ${RUNE_STACK} одинаковых рун. Эпические и легендарные руны — только в магазине GRAM. Собранные руны можно продать на маркете — и сразу, и после того как вынешь их из вещи</p>`;
 }
 // ===================== ДРОНЫ-КОМПАНЬОНЫ: ПОЛЁТ, СБОР ЛУТА, ОТРИСОВКА, ОКНА =====================
 function droneGive(id, announce, given){
@@ -12467,10 +12681,10 @@ function bayDrone(){
     <span class="btx"><small>Дрон</small><b ${D ? `style="color:${gc}"` : ""}>${D ? D.name : "Не выпущен"}</b><i>${D ? droneBonusText(D) : "нажми, чтобы выбрать"}</i></span></span></button>`;
 }
 function bayArt(){
-  const A = artOn(), gc = A ? A.col : "#2A3846";
+  const A = artOn(), gc = A ? RARITY[A.q].c : "#2A3846";
   return `<button type="button" class="bslot ${A ? "" : "empty"} ${cSlot === "art" ? "sel" : ""}" data-cslot="art" style="--gc:${gc}" aria-label="Артефакт${A ? ": " + A.name : ", пусто"}">
     <span class="in"><span class="bic ${A ? "glow" : ""}">${A ? artIcon(S.art) : `<span class="bplus">+</span>`}</span>
-    <span class="btx"><small>Артефакт</small><b ${A ? `style="color:${gc}"` : ""}>${A ? A.name : "Пусто"}</b><i>${A ? runeText(A) : "нажми, чтобы выбрать"}</i></span></span></button>`;
+    <span class="btx"><small>Артефакт</small><b ${A ? `style="color:${gc}"` : ""}>${A ? A.name : "Пусто"}</b><i>${A ? runeText(A, artMul(A)) : "нажми, чтобы выбрать"}</i></span></span></button>`;
 }
 function bayWing(){
   const Wd = wingOn(), gc = Wd ? Wd.col : "#2A3846";
@@ -12514,14 +12728,14 @@ function bayDetail(kind){
       <div style="display:flex;flex-direction:column;gap:5px">${own.length ? `<button class="act" type="button" data-rpopen="drone">Выбрать</button>` : `<button class="act" type="button" data-dshop="1">Магазин</button><button class="act alt" type="button" data-ctab="dr">Каталог</button>`}</div></div></section>`;
   }
   const A = artOn(), own = ART_IDS.filter(artOwned);
-  if(A) return `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${A.col}">${artIcon(S.art)}</div>
-    <div class="tx"><span style="color:${A.col}">${A.name}</span><small>${runeText(A)}</small><small>Своих артефактов: ${own.length} · надет может быть только один</small></div>
-    <div style="display:flex;flex-direction:column;gap:5px">${own.length > 1 ? `<button class="act" type="button" data-rpopen="art">Сменить</button>` : ""}<button class="act alt" type="button" data-aoff="1">Снять</button></div></div></section>`;
+  if(A) return `<section class="pcard">${artLine(S.art, `<small>Своих артефактов: ${own.length} · надет может быть только один</small>`,
+    `<div style="display:flex;flex-direction:column;gap:5px">${own.length > 1 ? `<button class="act" type="button" data-rpopen="art">Сменить</button>` : ""}<button class="act alt" type="button" data-aoff="1">Снять</button></div>`, "art-on")}</section>`;
   return `<section class="pcard"><div class="cdetail"><div class="ic"><i class="empty-ic"></i></div><div class="tx"><span>Слот артефакта пуст</span>
-    <small>${own.length ? "Надень артефакт из своих — он даёт постоянный бонус" : "Артефакт собирают в Мастерской или покупают в магазине GRAM"}</small></div>
+    <small>${own.length ? "Надень артефакт из своих — он даёт постоянный бонус, а артефакт твоего класса — ещё на 20% больше" : "Артефакт собирают в Мастерской или покупают в магазине GRAM"}</small></div>
     <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-rpopen="art">${own.length ? "Выбрать" : "Все артефакты"}</button>${own.length ? "" : `<button class="act alt" type="button" data-ashop="1">Магазин</button>`}</div></div></section>`;
 }
 renderGearTab = function(){
+  runeExtraFix();
   const st = stat(), el = $("scrChar");
   const C = S.cls && CLASSES[S.cls];
   let h = `<section class="rig">
@@ -12653,10 +12867,9 @@ function renderRigPick(){
     h += `</div><button class="btn wide" type="button" data-rpcat="drone" style="margin-top:10px">Весь каталог дронов</button>`;
   } else {
     const list = artShowAll ? ART_IDS : ART_IDS.filter(artOwned);
-    for(const id of list){ const X = ARTS[id], mine = artOwned(id), on = S.art === id && mine;
+    for(const id of [...list].sort((a, b) => artRes(ARTS[b]) - artRes(ARTS[a]) || ARTS[b].q - ARTS[a].q)){ const X = ARTS[id], mine = artOwned(id), on = S.art === id && mine;
       const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(X.price)} GRAM`;
-      h += `<div class="li ${on ? "on" : ""}"><div class="ic" style="border-color:${GRADES[X.g].color};${mine ? "" : "opacity:.45"}">${artIcon(id)}</div><div class="tx"><span style="color:${X.col}">${X.name}${mine ? "" : " 🔒"}</span><small>${runeText(X)}</small>${mine ? "" : `<small>${how}</small>`}</div>
-        ${on ? `<button class="act alt" type="button" data-rpoff="art">Снять</button>` : mine ? `<button class="act" type="button" data-rp="art:${id}">Надеть</button>` : X.src === "gram" ? `<button class="act alt" type="button" data-ashop="1">Купить</button>` : ""}</div>`; }
+      h += artLine(id, mine ? "" : `<small>${how}</small>`, on ? `<button class="act alt" type="button" data-rpoff="art">Снять</button>` : mine ? `<button class="act" type="button" data-rp="art:${id}">Надеть</button>` : X.src === "gram" ? `<button class="act alt" type="button" data-ashop="1">Купить</button>` : "", on ? "on art-on" : ""); }
     if(!list.length) h += `<div class="empty">Своих артефактов пока нет<small>Посмотри все артефакты и где их взять</small></div>`;
     h += `</div><button class="btn wide" type="button" data-rpcat="art" style="margin-top:10px">${artShowAll ? "Только мои артефакты" : "Все артефакты (" + ART_IDS.filter(artOwned).length + " из " + ART_IDS.length + ")"}</button>`;
   }
