@@ -61,6 +61,8 @@ GAME_WALLET = os.getenv("GAME_WALLET", "").strip()
 TONCENTER_KEY = os.getenv("TONCENTER_KEY", "").strip()
 GRAM_WITHDRAW_MIN = env_float("GRAM_WITHDRAW_MIN", 1)
 GRAM_WITHDRAW_FEE = env_float("GRAM_WITHDRAW_FEE", 0.10)
+# цена одного камня телепортации у Торговца, GRAM (game.html получает её в /api/gram/state)
+TP_STONE_PRICE = env_float("TP_STONE_PRICE", 0.1)
 
 # Пополнение звёздами: 1 ⭐ = STAR_USD долларов (выплата Telegram разработчику), 1 GRAM = GRAM_USD долларов
 STAR_USD = env_float("STAR_USD", 0.013)

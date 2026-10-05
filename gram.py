@@ -16,7 +16,7 @@ from aiohttp import web
 from sqlalchemy import select, func, update
 from sqlalchemy.orm.attributes import set_committed_value
 
-from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE, STAR_USD, GRAM_USD, STAR_PACKS
+from config import TON_NETWORK, GAME_WALLET, TONCENTER_KEY, GRAM_WITHDRAW_MIN, GRAM_WITHDRAW_FEE, STAR_USD, GRAM_USD, STAR_PACKS, TP_STONE_PRICE
 from db import SessionLocal
 from models import GramWallet, GramTx, GramWithdrawal, GameSave, Meta, Referral, RefEarn, StarPayment
 
@@ -352,12 +352,19 @@ async def api_gram(request):
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "memo": w.memo, "address": GAME_WALLET, "network": TON_NETWORK,
                                       "locked": g(min(w.balance, w.locked or 0)), "withdrawable": g(max(0, w.balance - (w.locked or 0))),
                                       "star_rate": STAR_USD / GRAM_USD, "star_packs": STAR_PACKS,
-                                      "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE,
+                                      "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE, "tp_price": TP_STONE_PRICE,
                                       "hist": [{"kind": x.kind, "amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in hist],
                                       "wds": [{"id": x.id, "amount": g(x.amount), "payout": g(x.payout), "address": x.address, "status": x.status, "ts": x.created * 1000} for x in wds]})
         if op == "spend":
             pack = str(body.get("pack", ""))
             price = PACK_PRICES.get(pack)
+            if pack.startswith("tp:"):
+                # камни телепортации у Торговца: «tp:<сколько>», цена — за штуку (камни выдаёт телефон)
+                try:
+                    n = int(pack[3:])
+                except ValueError:
+                    n = 0
+                price = round(TP_STONE_PRICE * n, 4) if 1 <= n <= 999 else None
             if price is None:
                 return web.json_response({"ok": False, "error": "Нет такого пака"})
             import saveguard
