@@ -26,12 +26,12 @@ NANO = 1_000_000_000
 API = "https://testnet.toncenter.com/api/v2" if TON_NETWORK != "mainnet" else "https://toncenter.com/api/v2"
 ADDR_RE = re.compile(r"^(EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$|^-?\d:[0-9a-fA-F]{64}$")
 # цены магазина задаёт только сервер
-# цены паков магазина (как в game.html → PACKS). «Паки» и «Допы» до конца сезона со скидкой 30%, «Усиление» — по полной цене
+# цены паков магазина (как в game.html → PACKS). «Паки» и «Допы» — со скидкой 30% от базовой цены (без срока), «Усиление» — по полной
 SHOP_SALE = 0.7
 _BASE = {"p_start": 1, "p_base": 5, "p_std": 20, "p_elite": 100, "p_legend": 180, "p_epic": 600, "p_cores": 10,
          "d_start": 30, "d_base": 65, "d_adv": 220, "d_sup": 370, "d_top": 550, "d_admin": 700}
 PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots": 1, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
-# дроны-компаньоны: по полной цене, без скидки сезона (как в game.html → DRONES, src "gram")
+# дроны-компаньоны: по полной цене, без скидки (как в game.html → DRONES, src "gram")
 PACK_PRICES.update({"dr_nova": 15, "dr_aegis": 30, "dr_phantom": 60, "dr_sol": 120})
 # руны: по полной цене, без ограничения на число покупок (состав паков — items.py → PACK_ITEMS)
 PACK_PRICES.update({"rn_base": 8, "rn_pro": 15, "rn_war": 20, "rn_bastion": 20, "rn_storm": 20, "rn_fortune": 25})
@@ -441,7 +441,7 @@ async def api_gram(request):
             wds = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.tg_id == uid).order_by(GramWithdrawal.created.desc()).limit(10))).scalars().all()
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "memo": w.memo, "address": GAME_WALLET, "network": TON_NETWORK,
                                       "locked": g(min(w.balance, w.locked or 0)), "withdrawable": g(max(0, w.balance - (w.locked or 0))),
-                                      "star_rate": STAR_USD / GRAM_USD, "star_packs": STAR_PACKS,
+                                      "star_rate": STAR_USD / GRAM_USD, "gram_usd": GRAM_USD, "star_packs": STAR_PACKS,
                                       "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE, "tp_price": TP_STONE_PRICE,
                                       "hist": [{"kind": x.kind, "amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in hist],
                                       "wds": [{"id": x.id, "amount": g(x.amount), "payout": g(x.payout), "address": x.address, "status": x.status, "ts": x.created * 1000} for x in wds]})
