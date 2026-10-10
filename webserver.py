@@ -912,7 +912,7 @@ async def api_guild_donate(request):
             await doc_put(s, mpath, m)
             nick = public_name(row.nick, user["name"])
             await doc_put(s, f"guilds/{gid}/log/a{int(time.time()*1000):x}{secrets.token_hex(3)}",
-                          {"text": f"{nick} пожертвовал {amt} лома", "ts": int(time.time() * 1000)})
+                          {"text": f"{nick} пожертвовал {amt} лома", "ts": int(time.time() * 1000), "srv": 1})   # запись сервера
             await s.commit()
     metrics.inc("guild.donate")
     return web.json_response({"ok": True, "amount": amt, "scrap": S["scrap"], "craftN": S["craftN"], "donated": m["donated"]})
@@ -1005,6 +1005,11 @@ async def api_db(request):
                 path = str(body.get("path", ""))
             data = await check_write(s, "add" if op == "add" else op, path, data, uid)
             gid, sub, did = parse_path(path)
+            if op == "add" and sub == "log":
+                # автора записи подписывает сервер (позывной из сохранения): участник может написать любой текст,
+                # но не от чужого имени — в журнале видно, кто на самом деле добавил запись
+                nick = (await s.execute(select(GameSave.nick).where(GameSave.tg_id == user["id"]))).scalar()
+                data["by"] = public_name(nick, user["name"])
             if op == "delete":
                 row, cur = await doc_get(s, path)
                 if row:

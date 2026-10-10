@@ -4568,7 +4568,7 @@ function guildView(){
         <li><span>Следующий уровень</span><em>+5 мест, +3% опыта</em></li></ul>
         ${role === "leader" ? `<button class="btn pri wide" type="button" data-gs="upgrade" style="margin-top:12px" ${bank < cost ? "disabled" : ""}>Улучшить за ${cost} лома из казны</button>` : `<p class="demo">Улучшить гильдию может лидер за ${cost} лома из казны.</p>`}</section>`;
   } else if(gTab === "log"){
-    body = `<section class="pcard"><div class="glog">${gLog.length ? gLog.map(l => `<div><span>${esc(l.text)}</span><small>${gTime(l.ts)}</small></div>`).join("") : "Событий пока нет"}</div></section>`;
+    body = `<section class="pcard"><div class="glog">${gLog.length ? gLog.map(l => `<div><span>${esc(l.text)}</span><small>${l.srv ? "✓ сервер · " : l.by ? esc(l.by) + " · " : ""}${gTime(l.ts)}</small></div>`).join("") : "Событий пока нет"}</div></section>`;
   } else if(gTab === "settings"){
     body = `<section class="pcard"><h3>Описание</h3><textarea class="field" id="gsDesc" maxlength="120">${esc(g.desc || "")}</textarea>
       <div class="flabel">Вступление</div><div class="seg"><button type="button" data-gs="setopen" data-v="1" aria-pressed="${!!g.open}">Открытое</button><button type="button" data-gs="setopen" data-v="0" aria-pressed="${!g.open}">По заявкам</button></div>
