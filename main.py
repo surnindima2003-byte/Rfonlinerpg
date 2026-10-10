@@ -46,7 +46,10 @@ async def main():
     else:
         logging.warning("WEBAPP_URL не задан: кнопка «Играть» не появится")
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Накопившиеся обновления НЕ выбрасываем: среди них могут быть successful_payment — игрок заплатил звёздами,
+    # пока бот перезапускался. Раньше такие платежи терялись: звёзды списаны, GRAM не зачислен.
+    # Повторно платёж не зачислится — gram.credit_stars проверяет charge_id.
+    await bot.delete_webhook(drop_pending_updates=False)
     try:
         # start_polling сам ловит SIGTERM от Railway и возвращает управление — тогда плавно гасим мир
         await dp.start_polling(bot)
