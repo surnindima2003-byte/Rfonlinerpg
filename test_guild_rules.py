@@ -158,6 +158,16 @@ async def main():
     # лидер удаляет свою запись -> роспуск целиком
     check("leader self-delete", await w("delete", P + "/members/3", {}, "3"), "OK")
     check("guild fully removed", str(sorted(p for p in STORE if p.startswith(P))), "[]")
+    # время — как присылает игра (Date.now(), миллисекунды ≈ 1,7·10¹²): раньше отклонялось как «bad field created»
+    import time as _t
+    now = int(_t.time() * 1000); Q = "guilds/real"
+    check("create with real time", await w("set", Q, {"name": "Реальное время", "tag": "RT", "emblem": {"icon": "gear", "color": "#F2A93B"},
+                                                   "desc": "", "open": True, "minLvl": 1, "level": 1, "spent": 0, "count": 1,
+                                                   "leader": "50", "leaderNick": "L", "created": now}, "50"), "OK")
+    check("leader with real time", await w("set", Q + "/members/50", member("50", "leader", joined=now), "50"), "OK")
+    check("log with real time", await w("add", Q + "/log/x", {"text": "основал", "ts": now}, "50"), "OK")
+    check("rename to taken tag", await w("update", Q, {"tag": "TR"}, "50"), "DENY")
+    check("role as list", await w("update", Q + "/members/50", {"role": ["leader"]}, "50"), "DENY:Bad")
 
 
 class GuildRules(unittest.TestCase):

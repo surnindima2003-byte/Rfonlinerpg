@@ -382,7 +382,8 @@ async def api_save(request):
                                                                       GameSave.tg_id != user["id"]).limit(1))).first()
                 if not clash:
                     row.nick, nick_changed = new_nick, True
-            row.cls = s_.get("cls") if s_.get("cls") in CLASSES and s_.get("cls") else ""
+            cls = s_.get("cls")
+            row.cls = cls if isinstance(cls, str) and cls in CLASSES else ""      # список вместо строки раньше давал 500
             row.guild_id = str(s_.get("guildId", ""))[:64]
             await s.commit()
     if nick_changed:
@@ -392,7 +393,8 @@ async def api_save(request):
 
 async def api_ack(request):
     body, user = await read_auth(request)
-    ids = [int(i) for i in body.get("ids", []) if str(i).isdigit()][:100]
+    raw_ids = body.get("ids")
+    ids = [int(i) for i in (raw_ids if isinstance(raw_ids, list) else []) if str(i).isdigit()][:100]   # не список — раньше 500
     async with SessionLocal() as s:
         rows = (await s.execute(select(Grant).where(Grant.tg_id == user["id"], Grant.id.in_(ids)))).scalars().all()
         for g in rows:
@@ -556,7 +558,7 @@ HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 def valid_emblem(e):
     """Эмблема гильдии: только известный значок и цвет вида #RRGGBB.
     Цвет вставляется в SVG у всех, кто смотрит список гильдий, поэтому произвольная строка здесь — XSS."""
-    return (isinstance(e, dict) and set(e) <= {"icon", "color"} and e.get("icon") in GUILD_ICONS
+    return (isinstance(e, dict) and set(e) <= {"icon", "color"} and isinstance(e.get("icon"), str) and e.get("icon") in GUILD_ICONS
             and isinstance(e.get("color"), str) and HEX_COLOR.fullmatch(e["color"]) is not None)
 
 
@@ -642,16 +644,19 @@ def _clean_fields(data, rules):
 
 _short = lambda n: (lambda v: isinstance(v, str) and len(v) <= n)
 _nonneg = lambda v: _num(v) and 0 <= v <= 1e12
+# Время в миллисекундах (Date.now() в игре ≈ 1,7·10¹²) больше 1e12 уже с 2001 года: раньше поля created, joined и ts
+# не проходили проверку _nonneg — создание гильдии, вступление, заявки и журнал отклонялись с «bad field».
+_ts_ms = lambda v: _num(v) and 0 <= v <= 1e14
 GUILD_FIELDS = {"name": valid_guild_name, "tag": valid_guild_tag, "emblem": valid_emblem, "desc": _short(120),
                 "open": lambda v: isinstance(v, bool), "minLvl": lambda v: _int_in(v, 1, 30), "level": lambda v: _int_in(v, 1, 10_000),
                 # spent бывает меньше нуля: вклад ушедших остаётся в казне (казна = сумма вкладов − spent)
                 "spent": lambda v: _num(v) and abs(v) <= 1e12, "count": _nonneg,
-                "leader": _short(20), "leaderNick": _short(16), "created": _nonneg}
+                "leader": _short(20), "leaderNick": _short(16), "created": _ts_ms}
 MEMBER_FIELDS = {"uid": _short(20), "nick": _short(16), "lvl": lambda v: _int_in(v, 1, 999), "fac": _short(8),
-                 "role": lambda v: v in ROLES, "joined": _nonneg, "donated": _nonneg, "xp": _nonneg, "bm": _nonneg}
+                 "role": lambda v: isinstance(v, str) and v in ROLES, "joined": _ts_ms, "donated": _nonneg, "xp": _nonneg, "bm": _nonneg}
 REQUEST_FIELDS = {"uid": _short(20), "nick": _short(16), "lvl": lambda v: _int_in(v, 1, 999), "fac": _short(8),
-                  "ts": _nonneg, "bm": _nonneg}
-LOG_FIELDS = {"text": _short(200), "ts": _nonneg}
+                  "ts": _ts_ms, "bm": _nonneg}
+LOG_FIELDS = {"text": _short(200), "ts": _ts_ms}
 
 
 async def guild_members(s, gid):
@@ -1669,7 +1674,7 @@ def clean_pos(d, info):
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
-        info["cls"] = d.get("cls") if d.get("cls") in CLASSES else ""
+        info["cls"] = d.get("cls") if isinstance(d.get("cls"), str) and d.get("cls") in CLASSES else ""
         # гильдия над головой: тег, название, эмблема
         info["hp"] = max(0, min(100000, int(d.get("hp", 0))))
         info["mhp"] = max(1, min(100000, int(d.get("mhp", 1))))
@@ -1678,9 +1683,9 @@ def clean_pos(d, info):
         info["bm"] = max(0, min(10_000_000, int(d.get("bm", 0))))
         info["df"] = int(d["df"]) if isinstance(d.get("df"), (int, float)) else None
         info["sth"] = 1 if d.get("sth") and info.get("cls") == "ghost" else 0          # Призрак в тени (видят и другие)
-        info["dr"] = d.get("dr") if d.get("dr") in DRONE_IDS else ""                  # дрон-компаньон рядом с роботом
-        info["wg"] = d.get("wg") if d.get("wg") in WING_IDS else ""                   # крылья за спиной
-        info["ck"] = d.get("ck") if d.get("ck") in CLOAK_IDS else ""                  # плащ
+        info["dr"] = d.get("dr") if isinstance(d.get("dr"), str) and d.get("dr") in DRONE_IDS else ""                  # дрон-компаньон рядом с роботом
+        info["wg"] = d.get("wg") if isinstance(d.get("wg"), str) and d.get("wg") in WING_IDS else ""                   # крылья за спиной
+        info["ck"] = d.get("ck") if isinstance(d.get("ck"), str) and d.get("ck") in CLOAK_IDS else ""                  # плащ
         # гильдия над головой (gt/gn/gi/gc) — от сервера (apply_guild), а не из сообщения
         info["seen"] = time.time()
     except (TypeError, ValueError, OverflowError, AttributeError):
@@ -2075,7 +2080,7 @@ async def api_faction(request):
     """Одноразовый выбор фракции в игре (для тех, кто не выбрал её в боте через /start). Сменить потом нельзя."""
     body, user = await read_auth(request)
     fac = body.get("fac")
-    if fac not in FACTIONS:
+    if not isinstance(fac, str) or fac not in FACTIONS:
         return web.json_response({"ok": False, "error": "Нет такой фракции"})
     uid = user["id"]
     async with SessionLocal() as s:
