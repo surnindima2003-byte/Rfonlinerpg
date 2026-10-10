@@ -92,9 +92,15 @@ class Events(unittest.TestCase):
 
 
 class ShopAndRate(unittest.TestCase):
-    def test_no_fake_sale_deadline(self):
-        for wrong in ("до конца сезона:", "saleLeft", "saleEnd", "saleCd"):
-            self.assertNotIn(wrong, GAME)
+    def test_sale_is_real(self):
+        # раньше «−30%» висело всегда, а таймер «до конца» начинался заново; теперь скидку и срок присылает сервер
+        self.assertNotIn("до конца сезона:", GAME)
+        self.assertNotIn("SHOP_SALE", GAME)
+        self.assertIn("const saleFromServer = v => v && v.left > 0 ? {pct:+v.pct, tabs:v.tabs || [], end:Date.now() + v.left", GAME)
+        self.assertIn("${shopSaleOn() && G.sale.tabs.includes(shopTab) ?", GAME)     # плашка и таймер — только во время распродажи
+        self.assertIn('<span class="sale-tag">−${G.sale.pct}%</span>', GAME)
+        gram = (ROOT / "gram.py").read_text(encoding="utf-8")
+        self.assertIn('"sale": sale_view(sale)', gram)
 
     def test_rate_comes_from_server(self):
         gram = (ROOT / "gram.py").read_text(encoding="utf-8")
@@ -138,7 +144,8 @@ class Translations(unittest.TestCase):
             self.assertEqual(len(tr[k]), 5, k)
             self.assertTrue(all(isinstance(v, str) and v for v in tr[k]), k)
         for gone in ("Безопасная заточка: при неудаче предмет не ломается и сохраняет уровень", "Курс: 1 GRAM = $1.55, 1 ⭐ =",
-                     "Пн, Чт, Сб в 20:00", "Вт и Вс в 22:00", "Все пилоты сервера атакуют огромного босса. Награды по вкладу в урон."):
+                     "Пн, Чт, Сб в 20:00", "Вт и Вс в 22:00", "Все пилоты сервера атакуют огромного босса. Награды по вкладу в урон.",
+                     "Скидка на «Паки» и «Допы»", "Наборы усиления — по обычной цене"):
             self.assertNotIn(gone, tr, gone)                                  # старые неправдивые фразы не висят в словаре
 
 

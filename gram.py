@@ -26,21 +26,125 @@ NANO = 1_000_000_000
 API = "https://testnet.toncenter.com/api/v2" if TON_NETWORK != "mainnet" else "https://toncenter.com/api/v2"
 ADDR_RE = re.compile(r"^(EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$|^-?\d:[0-9a-fA-F]{64}$")
 # цены магазина задаёт только сервер
-# цены паков магазина (как в game.html → PACKS). «Паки» и «Допы» — со скидкой 30% от базовой цены (без срока), «Усиление» — по полной
-SHOP_SALE = 0.7
+# обычные цены паков (как в game.html → PACKS, поле base). Постоянной скидки нет: дешевле бывает только
+# на распродаже, которую запускает администратор (раздел «Распродажа» ниже)
 _BASE = {"p_start": 1, "p_base": 5, "p_std": 20, "p_elite": 100, "p_legend": 180, "p_epic": 600, "p_cores": 10,
          "d_start": 30, "d_base": 65, "d_adv": 220, "d_sup": 370, "d_top": 550, "d_admin": 700}
-PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots": 1, **{k: round(v * SHOP_SALE, 2) for k, v in _BASE.items()}}
-# дроны-компаньоны: по полной цене, без скидки (как в game.html → DRONES, src "gram")
+PACK_PRICES = {"season": 15, "u1": 25, "u2": 40, "u3": 80, "x_books": 5, "x_pots": 1, **_BASE}
+# дроны-компаньоны (как в game.html → DRONES, src "gram")
 PACK_PRICES.update({"dr_nova": 15, "dr_aegis": 30, "dr_phantom": 60, "dr_sol": 120})
-# руны: по полной цене, без ограничения на число покупок (состав паков — items.py → PACK_ITEMS)
+# руны: без ограничения на число покупок (состав паков — items.py → PACK_ITEMS)
 PACK_PRICES.update({"rn_base": 8, "rn_pro": 15, "rn_war": 20, "rn_bastion": 20, "rn_storm": 20, "rn_fortune": 25})
-# артефакты: по полной цене (состав — items.py → PACK_ITEMS)
+# артефакты (состав — items.py → PACK_ITEMS)
 PACK_PRICES.update({"ar_crown": 40, "ar_eye": 60, "ar_heart": 60, "ar_relic": 100})
-# крылья: по полной цене (состав — items.py → PACK_ITEMS, wn_*)
+# крылья (состав — items.py → PACK_ITEMS, wn_*)
 PACK_PRICES.update({"wn_seraph": 45, "wn_void": 70, "wn_phoenix": 90, "wn_storm": 130})
-# плащи: по полной цене (состав — items.py → PACK_ITEMS, cl_*)
+# плащи (состав — items.py → PACK_ITEMS, cl_*)
 PACK_PRICES.update({"cl_royal": 40, "cl_night": 65, "cl_ember": 85, "cl_aurora": 120})
+
+# ---------- распродажа ----------
+# Администратор в игре выбирает скидку, срок и разделы магазина. Распродажа хранится в таблице meta,
+# цену со скидкой считает сервер — и при показе магазина, и при списании. Билет сезона в распродажи не входит.
+SHOP_TABS = {"packs": "Паки", "dops": "Допы", "boost": "Усиление", "drones": "Дроны", "runes": "Руны",
+             "artifacts": "Артефакты", "wings": "Крылья", "cloaks": "Плащи"}          # вкладки game.html → renderShop
+SALE_KEY = "shop_sale"
+SALE_PCT = (5, 90)                 # скидка, %
+SALE_HOURS = (1, 24 * 14)          # срок: от часа до двух недель
+SALE_TTL = 30                      # раз в столько секунд распродажа перечитывается из базы (если серверов несколько)
+_sale = {"v": None, "at": 0.0}
+
+
+def pack_tab(pack):
+    """Вкладка магазина, где лежит пак ("" — билет сезона и камни телепортации: в распродажи не входят)."""
+    if pack in ("u1", "u2", "u3") or pack.startswith("x_"):
+        return "boost"
+    for pre, tab in (("dr_", "drones"), ("p_", "packs"), ("d_", "dops"), ("rn_", "runes"), ("ar_", "artifacts"),
+                     ("wn_", "wings"), ("cl_", "cloaks")):
+        if pack.startswith(pre):
+            return tab
+    return ""
+
+
+def sale_active(sale, now=None):
+    now = time.time() if now is None else now
+    return bool(sale) and sale.get("start", 0) <= now < sale.get("end", 0)
+
+
+def sale_price(pack, sale, now=None):
+    """Цена пака сейчас: обычная или со скидкой распродажи (None — такого пака нет).
+    Считается в целых сотых GRAM с округлением вверх от половины — так же, как game.html → packPrice."""
+    base = PACK_PRICES.get(pack)
+    if base is None or not sale_active(sale, now) or pack_tab(pack) not in sale.get("tabs", ()):
+        return base
+    return (round(base * 100) * (100 - int(sale["pct"])) + 50) // 100 / 100
+
+
+def sale_view(sale, now=None):
+    """Распродажа для игры. left — сколько осталось: по нему игра ведёт таймер (часы телефона могут врать)."""
+    now = time.time() if now is None else now
+    if not sale_active(sale, now):
+        return None
+    return {"pct": int(sale["pct"]), "tabs": list(sale["tabs"]), "end": int(sale["end"] * 1000), "left": int((sale["end"] - now) * 1000)}
+
+
+def sale_parse(body, now=None):
+    """Распродажа из формы админки: (распродажа, None) или (None, что не так)."""
+    try:
+        pct, hours = int(body.get("pct", 0)), float(body.get("hours", 0))
+    except (TypeError, ValueError, OverflowError):
+        return None, "Скидка и срок должны быть числами"
+    if not SALE_PCT[0] <= pct <= SALE_PCT[1]:
+        return None, f"Скидка — от {SALE_PCT[0]} до {SALE_PCT[1]}%"
+    if not (math.isfinite(hours) and SALE_HOURS[0] <= hours <= SALE_HOURS[1]):
+        return None, "Срок — от 1 часа до 14 дней"
+    raw = body.get("tabs")
+    chosen = {t for t in raw if isinstance(t, str)} if isinstance(raw, list) else set()
+    tabs = [t for t in SHOP_TABS if t in chosen]
+    if not tabs:
+        return None, "Выбери хотя бы один раздел магазина"
+    now = time.time() if now is None else now
+    return {"pct": pct, "tabs": tabs, "start": int(now), "end": int(now + hours * 3600)}, None
+
+
+def price_mismatch(price, expect):
+    """Игрок видел другую цену (распродажа началась или закончилась, пока он выбирал) — текст ошибки, иначе None."""
+    try:
+        seen = float(expect)
+    except (TypeError, ValueError, OverflowError):
+        return "Магазин обновился: закрой игру и открой её снова"     # старая версия игры не присылает цену
+    if not math.isfinite(seen) or abs(seen - price) > 0.0001:
+        return "Цена изменилась: теперь " + f"{price:.2f}".rstrip("0").rstrip(".").replace(".", ",") + " GRAM"
+    return None
+
+
+async def sale_get():
+    """Текущая распродажа (или None). Читается из базы не чаще раза в SALE_TTL секунд."""
+    if time.time() - _sale["at"] >= SALE_TTL:
+        _sale["at"] = time.time()
+        try:
+            raw = await _meta_get(SALE_KEY)
+            v = json.loads(raw) if raw else None
+            _sale["v"] = v if isinstance(v, dict) and {"pct", "tabs", "start", "end"} <= set(v) else None
+        except Exception as e:                       # база недоступна: остаётся то, что было
+            log.warning("Распродажа: не удалось прочитать из базы: %s", e)
+    return _sale["v"]
+
+
+async def sale_set(sale):
+    await _meta_set(SALE_KEY, json.dumps(sale) if sale else "")
+    _sale.update(v=sale, at=time.time())
+
+
+def sale_broadcast(sale):
+    """Всем в сети: магазин сразу показывает или убирает скидку, игра сообщает о начале распродажи."""
+    try:
+        from webserver import hub
+        import realtime
+    except Exception:
+        return
+    note = realtime.encode({"t": "sale", "sale": sale_view(sale)})
+    for c in list(hub.conns.values()):
+        c.push(note)
 
 
 def g(nano):
@@ -398,7 +502,7 @@ async def process_transactions(txs):
             await push_to_player(w.tg_id, {"t": "gram", "text": f"Перевод на {g(value)} GRAM вернулся на твой кошелёк, поэтому в игре он не зачислен"})
 
 
-async def _spend(s, w, uid, pack, price, push_to_player):
+async def _spend(s, w, uid, pack, price, push_to_player, sale_pct=0):
     """Покупка пака в магазине GRAM (вызывается под очередью покупок игрока)."""
     nano = int(round(price * NANO))
     if pack == "season":
@@ -406,7 +510,7 @@ async def _spend(s, w, uid, pack, price, push_to_player):
         if await seasonpts.has_ticket(uid):
             return web.json_response({"ok": False, "error": "Билет этого сезона уже куплен"})
     locked_before = (await s.execute(select(GramWallet.locked).where(GramWallet.tg_id == uid))).scalar() or 0
-    if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack):
+    if not await move(s, uid, -nano, "shop", f"shop:{uid}:{pack}:{time.time_ns()}", "Магазин: " + pack + (f" (распродажа −{sale_pct}%)" if sale_pct else "")):
         return web.json_response({"ok": False, "error": "Не хватает GRAM"})
     await adjust_locked(s, uid, -nano)                # сначала тратятся игровые GRAM из звёзд
     from_locked = min(locked_before, nano)            # столько покупки оплачено звёздами
@@ -434,6 +538,7 @@ async def api_gram(request):
     from webserver import read_auth, push_to_player
     body, user = await read_auth(request)
     op, uid = request.match_info["op"], user["id"]
+    sale = await sale_get() if op in ("state", "spend") else None     # до открытия сессии: в SQLite чтение meta не ждёт её
     async with SessionLocal() as s:
         w = await wallet_of(s, uid)
         if op == "state":
@@ -442,12 +547,12 @@ async def api_gram(request):
             return web.json_response({"ok": True, "balance": g(w.balance), "spent": g(w.spent), "memo": w.memo, "address": GAME_WALLET, "network": TON_NETWORK,
                                       "locked": g(min(w.balance, w.locked or 0)), "withdrawable": g(max(0, w.balance - (w.locked or 0))),
                                       "star_rate": STAR_USD / GRAM_USD, "gram_usd": GRAM_USD, "star_packs": STAR_PACKS,
-                                      "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE, "tp_price": TP_STONE_PRICE,
+                                      "min": GRAM_WITHDRAW_MIN, "fee": GRAM_WITHDRAW_FEE, "tp_price": TP_STONE_PRICE, "sale": sale_view(sale),
                                       "hist": [{"kind": x.kind, "amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in hist],
                                       "wds": [{"id": x.id, "amount": g(x.amount), "payout": g(x.payout), "address": x.address, "status": x.status, "ts": x.created * 1000} for x in wds]})
         if op == "spend":
             pack = str(body.get("pack", ""))
-            price = PACK_PRICES.get(pack)
+            price = sale_price(pack, sale)
             if pack.startswith("tp:"):
                 # камни телепортации у Торговца: «tp:<сколько>», цена — за штуку (камни выдаёт телефон)
                 try:
@@ -457,11 +562,17 @@ async def api_gram(request):
                 price = round(TP_STONE_PRICE * n, 4) if 1 <= n <= 999 else None
             if price is None:
                 return web.json_response({"ok": False, "error": "Нет такого пака"})
+            # списываем ровно ту цену, которую игрок видел: если распродажа началась или закончилась, пока он
+            # выбирал, — не покупаем, а присылаем новую цену (магазин перерисуется)
+            wrong = None if pack.startswith("tp:") else price_mismatch(price, body.get("expect"))
+            if wrong:
+                return web.json_response({"ok": False, "error": wrong, "price": price, "sale": sale_view(sale)})
+            pct = int(sale["pct"]) if sale and not pack.startswith("tp:") and price != PACK_PRICES.get(pack) else 0
             import saveguard
             # покупки игрока — по очереди: иначе два одновременных запроса билета сезона оба проходили
             # проверку «билета ещё нет» и списывали GRAM дважды
             async with saveguard.player_lock(("shop", uid)):
-                return await _spend(s, w, uid, pack, price, push_to_player)
+                return await _spend(s, w, uid, pack, price, push_to_player, pct)
         if op == "withdraw":
             address = str(body.get("address", "")).strip()
             try:
@@ -522,12 +633,37 @@ async def api_gram(request):
 
 
 # ---------- API администратора ----------
+async def _admin_sale(body, user):
+    """Распродажа: get — что идёт сейчас; start — новая (заменяет текущую); stop — закончить досрочно."""
+    action = body.get("action")
+    if action == "start":
+        sale, err = sale_parse(body)
+        if err:
+            return web.json_response({"ok": False, "error": err})
+        sale["by"] = user["id"]
+        await sale_set(sale)
+        log.info("Распродажа: −%s%% на %s до %s (админ %s)", sale["pct"], ",".join(sale["tabs"]),
+                 time.strftime("%d.%m %H:%M", time.gmtime(sale["end"] + 3 * 3600)), user["id"])
+        sale_broadcast(sale)
+    elif action == "stop":
+        await sale_set(None)
+        log.info("Распродажа остановлена (админ %s)", user["id"])
+        sale_broadcast(None)
+    elif action != "get":
+        raise web.HTTPBadRequest(text="bad action")
+    _sale["at"] = 0                                   # get и после записи — свежие данные из базы
+    return web.json_response({"ok": True, "sale": sale_view(await sale_get()), "tabs": SHOP_TABS,
+                              "pct": list(SALE_PCT), "hours": list(SALE_HOURS)})
+
+
 async def api_gram_admin(request):
     from webserver import read_auth, push_to_player
     body, user = await read_auth(request)
     if not user["admin"]:
         raise web.HTTPForbidden(text="not admin")
     op = request.match_info["op"]
+    if op == "sale":
+        return await _admin_sale(body, user)
     async with SessionLocal() as s:
         if op == "list":
             wds = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.status == "pending").order_by(GramWithdrawal.created))).scalars().all()
