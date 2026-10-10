@@ -1105,7 +1105,7 @@ def clean_item(it):
         return None
     try:
         return {"id": it["id"], "g": max(0, min(3, int(it.get("g", 0)))), "e": max(0, min(15, int(it.get("e", 0)))), "n": max(1, min(999, int(it.get("n", 1))))}
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -1130,10 +1130,8 @@ async def api_market(request):
                                       "hist": [{"kind": x.kind, "item": json.loads(x.item), "price": gram.g(x.price), "other": x.other, "ts": x.ts * 1000} for x in hist]})
         if op == "create":
             item = clean_item(body.get("item"))
-            try:
-                price = int(round(float(body.get("price", 0)) * gram.NANO))     # цена в GRAM → нано-GRAM
-            except (TypeError, ValueError):
-                price = 0
+            # цена в GRAM → нано-GRAM. Строки "inf"/"nan" раньше давали OverflowError и ошибку 500
+            price = int(round(finite(body.get("price"), 0) * gram.NANO))
             if not item or price < gram.NANO // 100 or price > 100_000 * gram.NANO:
                 return web.json_response({"ok": False, "error": "Неверный лот"})
             count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
