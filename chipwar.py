@@ -154,7 +154,7 @@ class War:
 
 WAR = War()
 BUFF = {"fac": None, "until": 0}
-STATE = {"next": None, "soon_sent": False, "last_all": 0.0}
+STATE = {"next": None, "soon_sent": False, "last_all": 0.0, "done_slot": None}   # done_slot — уже сыгранное окно расписания
 
 
 def loot_mult(fac, now=None):
@@ -270,6 +270,7 @@ async def loop(hub, push, metrics):
     if slot and WAR.phase != "live":
         left = int(slot + DURATION - time.time())
         if left > 60:
+            STATE["done_slot"] = slot
             await start_now(hub, left)
             log.warning("Chip War продолжена после перезапуска: осталось %s с", left)
     while True:
@@ -282,7 +283,16 @@ async def loop(hub, push, metrics):
                     STATE["soon_sent"] = True
                     hub.to_all(status() | {"ann": "soon"})
                 if nxt and now >= nxt:
+                    STATE["done_slot"] = nxt
                     await start_now(hub)
+                    continue
+                # окно по расписанию идёт, а событие в нём ещё не начиналось: в момент старта шла война, запущенная
+                # админом вручную. Раньше плановое событие этого дня тогда пропадало (next уже указывал на следующее)
+                slot = current_slot(now)
+                if slot and STATE["done_slot"] != slot and slot + DURATION - now > 60:
+                    STATE["done_slot"] = slot
+                    log.warning("Chip War по расписанию начинается после ручной: осталось %s с", int(slot + DURATION - now))
+                    await start_now(hub, int(slot + DURATION - now))
                 continue
             infos = [c.info for c in list(hub.by_loc.get(LOC, ())) if not c.closing]
             done = WAR.tick(infos)
