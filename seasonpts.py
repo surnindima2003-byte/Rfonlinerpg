@@ -93,6 +93,12 @@ async def _load(uid):
         row = (await s.execute(select(SeasonPts).where(SeasonPts.tg_id == uid, SeasonPts.season == key))).scalar_one_or_none()
     st = {"season": key, "pts": row.pts if row else 0, "data": json.loads(row.data or "{}") if row else {},
           "pts_t": (getattr(row, "pts_t", 0) or 0) if row else 0}
+    # Пока шёл запрос к базе, другое событие этого игрока (чат, убийство) могло уже загрузить и изменить
+    # его очки. Раньше их состояние здесь перезаписывалось свежим из базы — прибавка терялась. Берём уже
+    # загруженное (между проверкой и записью нет await, поэтому гонки тут нет).
+    cur = _st.get(uid)
+    if cur and cur["season"] == key:
+        return cur
     _st[uid] = st
     return st
 
