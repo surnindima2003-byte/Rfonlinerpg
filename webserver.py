@@ -676,6 +676,26 @@ async def other_guild(s, uid, gid):
     return None
 
 
+async def guild_name_taken(s, gid, name=None, tag=None):
+    """Занято ли название или тег другой гильдией (без учёта регистра). Своя гильдия gid не считается."""
+    name = name.lower() if isinstance(name, str) else None
+    tag = tag.upper() if isinstance(tag, str) else None
+    if not name and not tag:
+        return False
+    for o in (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all():
+        if o.path == f"guilds/{gid}":
+            continue
+        try:
+            od = json.loads(o.data)
+        except ValueError:
+            continue
+        if not isinstance(od, dict):
+            continue
+        if (name and str(od.get("name", "")).lower() == name) or (tag and str(od.get("tag", "")).upper() == tag):
+            return True
+    return False
+
+
 async def player_lvl(s, uid):
     """Уровень для порога гильдии — из сохранения (сервер ограничивает его подтверждённым уровнем)."""
     try:
@@ -705,12 +725,8 @@ async def check_write(s, op, path, data, uid):
                 deny()
             if await other_guild(s, uid, gid):
                 deny("ты уже в гильдии")
-            name, tag = data["name"].lower(), data["tag"].upper()
-            others = (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all()
-            for o in others:
-                od = json.loads(o.data)
-                if str(od.get("name", "")).lower() == name or str(od.get("tag", "")).upper() == tag:
-                    deny("название или тег заняты")
+            if await guild_name_taken(s, gid, data["name"], data["tag"]):
+                deny("название или тег заняты")
             data.update(level=1, spent=0, count=1)       # новая гильдия всегда с нуля, что бы ни прислал телефон
             return data
         if not guild:
@@ -733,6 +749,10 @@ async def check_write(s, op, path, data, uid):
                     bank = sum((m.get("donated") or 0) for m in (await guild_members(s, gid)).values() if _num(m.get("donated"))) - spent
                     if not is_leader or data["level"] != lvl + 1 or data.get("spent") != spent + cost or bank < cost:
                         deny("улучшение не по правилам")
+            if ("name" in data or "tag" in data) and is_leader:
+                # раньше при переименовании занятость не проверялась: можно было взять название или тег чужой гильдии
+                if await guild_name_taken(s, gid, data.get("name"), data.get("tag")):
+                    deny("название или тег заняты")
             if "leader" in data:
                 if not is_leader:
                     deny()
