@@ -196,8 +196,11 @@ async def migrate_locked_column():
 
 # ---------- наблюдатель входящих переводов ----------
 DEP_PAGE = 40                 # транзакций за запрос
-DEP_MAX_PAGES = 25            # больше 1000 транзакций за раз не догоняем (пишем в лог — значит, долгий простой)
-DEP_CURSOR = "dep_last_lt"    # в meta: lt последней обработанной транзакции кошелька
+DEP_MAX_PAGES = 25            # за один круг читаем не больше ~1000 транзакций, остальное — на следующих кругах
+DEP_CURSOR = "dep_last_lt"    # в meta: lt, до которого (включительно) все транзакции кошелька уже обработаны
+DEP_RESUME = "dep_resume"     # в meta: с какой транзакции продолжить догон, если за круг всё не прочитать
+DEP_SLEEP = 15                # пауза между кругами, с
+DEP_SLEEP_CATCHUP = 2         # пауза, пока догоняем накопившуюся очередь, с
 
 
 def _lt(tx):
@@ -207,53 +210,113 @@ def _lt(tx):
         return 0
 
 
-async def _get_cursor():
+def _txid(tx):
+    t = tx.get("transaction_id") or {}
+    return str(t.get("lt") or ""), str(t.get("hash") or "")
+
+
+async def _meta_get(key):
     async with SessionLocal() as s:
-        row = (await s.execute(select(Meta).where(Meta.key == DEP_CURSOR))).scalar_one_or_none()
+        row = (await s.execute(select(Meta).where(Meta.key == key))).scalar_one_or_none()
+    return row.value if row and row.value else ""
+
+
+async def _meta_set(key, value):
+    from db_atomic import insert_ignore
+    async with SessionLocal() as s:
+        await s.execute(insert_ignore(Meta.__table__, key=key, value=value))
+        await s.execute(update(Meta).where(Meta.key == key).values(value=value).execution_options(synchronize_session=False))
+        await s.commit()
+
+
+async def _get_cursor():
     try:
-        return int(row.value) if row and row.value else 0
+        return int(await _meta_get(DEP_CURSOR) or 0)
     except ValueError:
         return 0
 
 
 async def _set_cursor(lt):
-    from db_atomic import insert_ignore
-    async with SessionLocal() as s:
-        await s.execute(insert_ignore(Meta.__table__, key=DEP_CURSOR, value=str(lt)))
-        await s.execute(update(Meta).where(Meta.key == DEP_CURSOR).values(value=str(lt)).execution_options(synchronize_session=False))
-        await s.commit()
+    await _meta_set(DEP_CURSOR, str(lt))
 
 
-async def fetch_new_transactions(http, last_lt):
-    """Все транзакции кошелька новее last_lt (от новых к старым), с листанием страниц.
+async def _get_resume():
+    """Точка продолжения догона: {"lt", "hash", "top"} или None.
+    lt/hash — самая старая уже прочитанная транзакция, top — lt самой новой из окна, которое догоняем."""
+    raw = await _meta_get(DEP_RESUME)
+    try:
+        r = json.loads(raw) if raw else None
+        if isinstance(r, dict) and r.get("lt") and r.get("hash") and int(r.get("top") or 0) > 0:
+            return r
+    except (TypeError, ValueError):
+        pass
+    return None
 
-    Раньше читалась только последняя страница (40 штук): если за 15 секунд приходило больше
-    или toncenter какое-то время не отвечал, более старые переводы не зачислялись никогда."""
-    out, params, pages = [], {"address": GAME_WALLET, "limit": DEP_PAGE, "archival": "true"}, 0
+
+async def _set_resume(r):
+    await _meta_set(DEP_RESUME, json.dumps(r) if r else "")
+
+
+async def fetch_new_transactions(http, last_lt, start=None):
+    """Транзакции кошелька новее last_lt, от новых к старым. Возвращает (список, дочитано).
+
+    start — {"lt", "hash"}: читать не с самой новой транзакции, а с этой (она уже обработана и пропускается).
+    «Дочитано» — дошли до уже обработанного (last_lt) или до начала истории кошелька. Если нет (за круг больше
+    DEP_MAX_PAGES страниц), вызывающий запоминает самую старую прочитанную и в следующий раз продолжает с неё.
+    Раньше в этом случае курсор сразу прыгал на самую новую транзакцию — более старые переводы не зачислялись
+    никогда, хотя лог обещал «догоним на следующем круге». Первый запуск (last_lt = 0): только последняя страница."""
+    params = {"address": GAME_WALLET, "limit": DEP_PAGE, "archival": "true"}
+    if start:
+        params.update(lt=str(start["lt"]), hash=str(start["hash"]))
+    out, pages = [], 0
     while True:
         async with http.get(API + "/getTransactions", params=params, timeout=aiohttp.ClientTimeout(total=20)) as r:
             data = await r.json(content_type=None)
-        if not data.get("ok"):
-            raise RuntimeError(f"toncenter: {str(data.get('error') or data)[:200]}")
-        page = data.get("result") or []
-        if pages:                                      # следующая страница начинается с последней транзакции прошлой
-            page = [tx for tx in page if (tx.get("transaction_id") or {}).get("hash") != params.get("hash")]
+        if not isinstance(data, dict) or not data.get("ok"):
+            err = data.get("error") if isinstance(data, dict) else data
+            raise RuntimeError(f"toncenter: {str(err or data)[:200]}")
+        raw = data.get("result") or []
+        # страница, запрошенная с lt+hash, начинается с этой самой транзакции: она уже прочитана
+        page = [tx for tx in raw if _txid(tx)[1] != params["hash"]] if params.get("hash") else raw
         pages += 1
         for tx in page:
             if last_lt and _lt(tx) <= last_lt:
-                return out                             # дошли до уже обработанного
+                return out, True                       # дошли до уже обработанного
             out.append(tx)
         if not last_lt:
-            return out                                 # первый запуск: как раньше, только последняя страница
-        if len(page) < DEP_PAGE - 1 or not page:
-            return out                                 # история кончилась
+            return out, True                           # первый запуск: как раньше, только последняя страница
+        if len(raw) < DEP_PAGE or not page:
+            return out, True                           # история кошелька кончилась
         if pages >= DEP_MAX_PAGES:
-            log.error("Приём GRAM: больше %s новых транзакций, старые догоним на следующем круге", DEP_PAGE * pages)
-            return out
-        last = page[-1].get("transaction_id") or {}
-        params = {**params, "lt": last.get("lt"), "hash": last.get("hash")}
+            return out, False                          # остальное — на следующем круге, с самой старой прочитанной
+        lt, h = _txid(page[-1])
+        params = {**params, "lt": lt, "hash": h}
         if not TONCENTER_KEY:
             await asyncio.sleep(1.1)                   # без ключа toncenter пускает 1 запрос в секунду
+
+
+async def deposit_step(http):
+    """Один круг приёма пополнений. Возвращает паузу до следующего круга (с)."""
+    last_lt = await _get_cursor()
+    resume = await _get_resume() if last_lt else None
+    txs, complete = await fetch_new_transactions(http, last_lt, start=resume)
+    if txs:
+        await process_transactions(txs)
+    # курсор двигаем только после обработки: упали посередине — на следующем круге пройдём ещё раз,
+    # повторно ничего не зачислится (ref «dep:<hash>» уникален)
+    top = int(resume["top"]) if resume else max((_lt(tx) for tx in txs), default=0)
+    if complete or not txs:
+        if top > last_lt:
+            await _set_cursor(top)
+        if resume:
+            await _set_resume(None)
+            log.warning("Приём GRAM: накопившиеся переводы обработаны, курсор lt=%s", top)
+        return DEP_SLEEP
+    # за круг всё не прочитали: продолжаем с самой старой прочитанной. Курсор не двигаем, пока окно не дочитано
+    lt, h = _txid(txs[-1])
+    await _set_resume({"lt": lt, "hash": h, "top": top})
+    log.warning("Приём GRAM: прочитано %s новых транзакций, догоняю более старые (с lt=%s)", len(txs), lt)
+    return DEP_SLEEP_CATCHUP
 
 
 async def deposit_watcher():
@@ -264,49 +327,75 @@ async def deposit_watcher():
     headers = {"X-API-Key": TONCENTER_KEY} if TONCENTER_KEY else {}
     async with aiohttp.ClientSession(headers=headers) as http:
         while True:
+            pause = DEP_SLEEP
             try:
-                last_lt = await _get_cursor()
-                txs = await fetch_new_transactions(http, last_lt)
-                if txs:
-                    await process_transactions(txs)
-                    # курсор двигаем только после обработки: упали посередине — на следующем круге пройдём ещё раз,
-                    # повторно ничего не зачислится (ref «dep:<hash>» уникален)
-                    newest = max(_lt(tx) for tx in txs)
-                    if newest > last_lt:
-                        await _set_cursor(newest)
+                pause = await deposit_step(http)
             except Exception as e:
                 log.warning("toncenter: %s", e)
-            await asyncio.sleep(15)
+            await asyncio.sleep(pause)
+
+
+def deposit_problem(tx):
+    """Почему входящий перевод нельзя зачислить автоматически, или None.
+
+    Входящий перевод на обычный кошелёк ничего не отправляет в ответ. Если в транзакции есть исходящие сообщения,
+    деньги, скорее всего, ушли обратно: так бывает, когда кошелёк игры ещё ни разу не отправлял переводы
+    (не развёрнут) и на него приходит bounceable-перевод, или когда перевод не прошёл. Раньше такой перевод
+    зачислялся: игрок получал GRAM в игре и свои монеты обратно на кошелёк."""
+    msg = tx.get("in_msg") or {}
+    if msg.get("bounced"):
+        return "возврат нашей же выплаты"
+    outs = [o for o in (tx.get("out_msgs") or []) if isinstance(o, dict)]
+    if not outs:
+        return None
+    if any(o.get("destination") and o.get("destination") == msg.get("source") for o in outs):
+        return "вернулся отправителю"
+    return "в транзакции есть исходящие сообщения"
+
+
+def deposit_info(tx):
+    """Входящий перевод: (сумма в нано, ref, код-комментарий, отправитель, причина не зачислять) или None,
+    если это не входящий перевод (наша выплата, пустое сообщение)."""
+    msg = tx.get("in_msg") or {}
+    try:
+        value = int(msg.get("value") or 0)
+    except (TypeError, ValueError):
+        value = 0
+    src = str(msg.get("source") or "")
+    h = _txid(tx)[1]
+    if value <= 0 or not src or not h:
+        return None
+    comment = str(msg.get("message") or "").strip().upper()
+    return value, "dep:" + h, comment, src, deposit_problem(tx)
 
 
 async def process_transactions(txs):
     from webserver import push_to_player        # поздний импорт, чтобы избежать цикла
     for tx in reversed(txs):
-        msg = tx.get("in_msg") or {}
-        try:
-            value = int(msg.get("value") or 0)
-        except (TypeError, ValueError):
-            value = 0
-        if value <= 0 or not msg.get("source"):
+        info = deposit_info(tx)
+        if not info:
             continue
-        h = (tx.get("transaction_id") or {}).get("hash", "")
-        if not h:
-            continue
-        ref = "dep:" + h
-        comment = str(msg.get("message") or "").strip().upper()
+        value, ref, comment, src, problem = info
         async with SessionLocal() as s:
             if (await s.execute(select(GramTx).where(GramTx.ref == ref))).scalar_one_or_none():
                 continue
             w = (await s.execute(select(GramWallet).where(GramWallet.memo == comment))).scalar_one_or_none() if comment else None
-            if w:
-                await move(s, w.tg_id, value, "deposit", ref, "Пополнение " + str(msg.get("source"))[:48])
+            if w and not problem:
+                await move(s, w.tg_id, value, "deposit", ref, "Пополнение " + src[:48])
                 await s.commit()
                 log.info("Зачислено %s GRAM игроку %s", g(value), w.tg_id)
                 await push_to_player(w.tg_id, {"t": "gram", "text": f"Пополнение: +{g(value)} GRAM"})
-            else:
-                # перевод без кода или с чужим кодом — показываем администратору
-                s.add(GramTx(tg_id=0, kind="unmatched", amount=value, ref=ref, note=(comment or "без комментария")[:40] + " от " + str(msg.get("source"))[:48], ts=int(time.time())))
-                await s.commit()
+                continue
+            # перевод без кода, с чужим кодом или вернувшийся отправителю — показываем администратору
+            # («Переводы без кода» в админке), запись с тем же ref не даст обработать его повторно
+            note = (comment or "без комментария")[:40] + " от " + src[:48]
+            if problem:
+                note = "не зачислен: " + problem + " · " + note
+                log.warning("Приём GRAM: перевод %s на %s GRAM не зачислен (%s), код %s", ref, g(value), problem, comment or "—")
+            s.add(GramTx(tg_id=0, kind="unmatched", amount=value, ref=ref, note=note[:200], ts=int(time.time())))
+            await s.commit()
+        if w and problem == "вернулся отправителю":
+            await push_to_player(w.tg_id, {"t": "gram", "text": f"Перевод на {g(value)} GRAM вернулся на твой кошелёк, поэтому в игре он не зачислен"})
 
 
 async def _spend(s, w, uid, pack, price, push_to_player):
