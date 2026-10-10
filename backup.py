@@ -14,7 +14,9 @@ from db import engine, IS_PG, SQLITE_URL
 from models import Base
 
 log = logging.getLogger("backup")
-MONEY_TABLES = ("gram_wallets", "gram_tx", "gram_withdrawals", "star_payments", "item_inst", "sphere_bal", "market_lots", "referrals", "ref_earn")
+# season_prizes — призы сезона в USDT (ждёт / подтверждён / выдан): таблица переживает вайп, раньше в копию не попадала
+MONEY_TABLES = ("gram_wallets", "gram_tx", "gram_withdrawals", "star_payments", "item_inst", "sphere_bal", "market_lots", "referrals", "ref_earn",
+                "season_prizes")
 KEEP_DAYS = 14
 
 
@@ -68,7 +70,7 @@ async def send_to_admins(made):
         return
     for chat in ids:
         try:
-            await bot.send_document(chat, FSInputFile(money[0]), caption="🗄 Ежедневная резервная копия денежных таблиц MetalWar (GRAM, выводы, звёзды, реестр вещей, маркет, рефералы). Храни этот файл.")
+            await bot.send_document(chat, FSInputFile(money[0]), caption="🗄 Ежедневная резервная копия денежных таблиц MetalWar (GRAM, выводы, звёзды, реестр вещей, маркет, рефералы, призы сезона). Храни этот файл.")
         except Exception as e:
             log.warning("Не удалось отправить копию админу %s: %s", chat, e)
 
