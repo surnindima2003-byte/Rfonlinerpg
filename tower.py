@@ -106,7 +106,7 @@ async def _finish(hub, push, winner):
 
 async def on_hit(info, d, hub, push):
     uid, now = info["id"], time.time()
-    if st["phase"] != "run" or uid not in st["reg"] or uid in st["dead"] or info.get("loc") != "tower" or now - _last.get(uid, 0) < 0.25:
+    if st["phase"] != "run" or uid not in st["reg"] or uid in st["dead"] or info.get("dead") or info.get("loc") != "tower" or now - _last.get(uid, 0) < 0.25:
         return
     _last[uid] = now
     try:

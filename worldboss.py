@@ -86,8 +86,8 @@ def tick(hub):
 
 
 async def on_hit(info, d, hub, seasonpts):
-    if not st["active"] or info.get("loc") != LOC:
-        return
+    if not st["active"] or info.get("loc") != LOC or info.get("dead"):
+        return                                                     # погибший босса не бьёт
     uid, now = info["id"], time.time()
     if now - _last_hit.get(uid, 0) < 0.25:
         return

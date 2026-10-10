@@ -1947,6 +1947,9 @@ async def handle_pvp(d, info):
     tgt = online(to)
     if not tgt or to == info["id"] or info["loc"] in SAFE_LOCS or tgt["loc"] != info["loc"]:
         return
+    if info.get("dead"):
+        metrics.inc("pvp.dead_attacker_drop")
+        return                                   # погибший не стреляет (раньше удар проходил и с dead:true)
     if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
         return
     skill = bool(d.get("skill"))
