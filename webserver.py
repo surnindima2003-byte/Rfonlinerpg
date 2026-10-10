@@ -377,15 +377,19 @@ async def api_save(request):
             new_nick = str(s_.get("name", "")).strip()[:16]
             # раньше ник из сохранения не проверялся вовсе: через него проходили «admin», пробелы и любые символы
             nick_changed = False
-            if new_nick and new_nick != row.nick and valid_nick(new_nick) and not reserved_nick(new_nick):
-                clash = (await s.execute(select(GameSave.tg_id).where(func.lower(GameSave.nick) == new_nick.lower(),
-                                                                      GameSave.tg_id != user["id"]).limit(1))).first()
-                if not clash:
-                    row.nick, nick_changed = new_nick, True
             cls = s_.get("cls")
             row.cls = cls if isinstance(cls, str) and cls in CLASSES else ""      # список вместо строки раньше давал 500
             row.guild_id = str(s_.get("guildId", ""))[:64]
-            await s.commit()
+            if new_nick and new_nick != row.nick and valid_nick(new_nick) and not reserved_nick(new_nick):
+                # проверка занятости и запись — под общим замком позывных (см. NICK_LOCK)
+                async with NICK_LOCK:
+                    clash = (await s.execute(select(GameSave.tg_id).where(func.lower(GameSave.nick) == new_nick.lower(),
+                                                                          GameSave.tg_id != user["id"]).limit(1))).first()
+                    if not clash:
+                        row.nick, nick_changed = new_nick, True
+                    await s.commit()
+            else:
+                await s.commit()
     if nick_changed:
         set_online_nick(user["id"], row.nick)
     return web.json_response({"ok": True, "fix": fix} if fix else {"ok": True})
@@ -433,7 +437,7 @@ async def admin_set_name(user, body):
     if reserved_nick(name):
         return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
     target = str(body.get("target", "")).strip().lstrip("@").lower()
-    async with SessionLocal() as s:
+    async with NICK_LOCK, SessionLocal() as s:
         if target in ("", "me"):
             row = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
         else:
@@ -1086,7 +1090,7 @@ async def api_name(request):
         return web.json_response({"ok": False, "error": "3–16 символов: буквы, цифры, пробел, _ или -"})
     if reserved_nick(name):
         return web.json_response({"ok": False, "error": "Этот позывной нельзя использовать"})
-    async with saveguard.player_lock(user["id"]), SessionLocal() as s:     # по очереди с сохранением: строка создаётся один раз
+    async with saveguard.player_lock(user["id"]), NICK_LOCK, SessionLocal() as s:     # по очереди с сохранением; ник — под общим замком
         taken = (await s.execute(select(GameSave).where(func.lower(GameSave.nick) == name.lower(), GameSave.tg_id != user["id"]).limit(1))).scalars().first()
         if taken:
             return web.json_response({"ok": False, "error": "Этот позывной уже занят"})
@@ -1102,6 +1106,10 @@ async def api_name(request):
 
 # ---------- маркет: торговля между игроками за лом ----------
 MARKET_FEE = 0.05
+MARKET_MAX_LOTS = 10         # лотов одного продавца одновременно
+# Позывные проверяются на занятость и записываются под одним замком (сервер — один процесс): раньше два игрока,
+# нажавшие «сохранить» с одним и тем же ником одновременно, оба проходили проверку и получали одинаковый позывной.
+NICK_LOCK = asyncio.Lock()
 ITEM_ID = re.compile(r"^[a-z0-9_]{2,24}$")
 
 
@@ -1139,18 +1147,20 @@ async def api_market(request):
             price = int(round(finite(body.get("price"), 0) * gram.NANO))
             if not item or price < gram.NANO // 100 or price > 100_000 * gram.NANO:
                 return web.json_response({"ok": False, "error": "Неверный лот"})
-            count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
-            if count >= 20:
-                return web.json_response({"ok": False, "error": "Не больше 20 лотов одновременно"})
             if isinstance(body.get("item"), dict) and body["item"].get("uid"):
                 item["uid"] = str(body["item"]["uid"])[:24]
-            real, err = await items.escrow_for_market(s, uid, item)     # только вещи из реестра сервера
-            if err:
-                return web.json_response({"ok": False, "error": err})
-            save_row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
-            nick = public_name(save_row.nick if save_row else "", user["name"])
-            s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(real), price=price, created=int(time.time())))
-            await s.commit()
+            # выставление лотов одного продавца — по очереди: раньше одновременные запросы все видели «меньше лимита»
+            async with saveguard.player_lock(("market", uid)):
+                count = (await s.execute(select(func.count()).select_from(MarketLot).where(MarketLot.seller_id == uid))).scalar()
+                if count >= MARKET_MAX_LOTS:
+                    return web.json_response({"ok": False, "error": f"Не больше {MARKET_MAX_LOTS} лотов одновременно"})
+                real, err = await items.escrow_for_market(s, uid, item)     # только вещи из реестра сервера
+                if err:
+                    return web.json_response({"ok": False, "error": err})
+                save_row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+                nick = public_name(save_row.nick if save_row else "", user["name"])
+                s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(real), price=price, created=int(time.time())))
+                await s.commit()
             return web.json_response({"ok": True})
         if op in ("buy", "cancel"):
             try:
