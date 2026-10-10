@@ -921,6 +921,7 @@ async def api_guild_donate(request):
 async def guild_delete_all(s, gid):
     """Гильдия удалена — удаляем и её участников, заявки, журнал. Раньше они оставались, и при повторном
     создании гильдии с тем же id старые участники снова получали свои роли (вплоть до офицера)."""
+    guild_history.pop(gid, None)                        # и переписку её чата
     t = Doc.__table__
     for sub in ("members", "requests", "log"):
         await s.execute(t.delete().where(t.c.col == f"guilds/{gid}/{sub}"))
@@ -1313,6 +1314,8 @@ async def api_presence(request):
     return web.json_response({"ok": True, "p": out})
 chat_history = deque(maxlen=60)
 chat_seq = [0]               # монотонный номер сообщения чата
+GUILD_HISTORY = 50           # последние сообщения чата гильдии: вошедший в игру видит, о чём говорили без него
+guild_history = {}           # id гильдии -> deque сообщений (в памяти, как и мировой чат)
 
 # ---------- пати (до 4 игроков, живёт в памяти сервера) ----------
 PARTY_MAX = 4
@@ -1416,9 +1419,14 @@ async def guild_of(s, uid):
 
 
 def apply_guild(uid, g):
+    new_gid = g[0] if g else ""
     for c in list(hub.by_uid.get(uid, [])):
         i = c.info
+        old_gid = i.get("gid") or ""
         i["gid"], i["gt"], i["gn"], i["gi"], i["gc"] = g if g else ("", "", "", "", "")
+        hist = guild_history.get(new_gid) if new_gid and new_gid != old_gid else None
+        if hist:                                         # только что вступил — недавняя переписка гильдии
+            c.push(realtime.encode({"t": "chat_hist", "g": new_gid, "list": list(hist)}))
 
 
 async def refresh_guild(uids):
@@ -1749,7 +1757,7 @@ class Bucket:
 
 chat_limits = {}             # (uid, канал) -> Bucket; живёт по uid, а не по вкладке: новая вкладка лимит не сбрасывает
 chat_cids = {}               # uid -> deque последних клиентских id сообщений (защита от дублей при повторе)
-CHAT_RATES = {"world": (0.5, 3), "dm": (1.0, 4)}
+CHAT_RATES = {"world": (0.5, 3), "dm": (1.0, 4), "guild": (1.0, 4)}
 
 
 def chat_allowed(uid, ch):
@@ -1896,13 +1904,18 @@ def handle_reports(d, info):
 async def handle_chat(d, info):
     text = str(d.get("text", "")).strip()[:200]
     ch = d.get("ch")
-    if not text or ch not in ("world", "dm"):
+    if not text or ch not in ("world", "dm", "guild"):
         return
     uid = info["id"]
     until = muted_until(uid)
     if until:
         hub.to_uid(uid, {"t": "muted", "until": int(until * 1000)})
         metrics.inc("chat.muted_drop")
+        return
+    # гильдию берём из записей участников на сервере (info["gid"], см. guild_of), а не из сообщения телефона
+    gid = info.get("gid") or ""
+    if ch == "guild" and not gid:
+        hub.to_uid(uid, {"t": "pinfo", "text": "Ты не в гильдии: сообщение не отправлено"})
         return
     cid = str(d.get("cid", ""))[:40]
     if cid:
@@ -1923,6 +1936,14 @@ async def handle_chat(d, info):
     if ch == "world":
         chat_history.append(m)
         hub.to_all({"t": "chat", "m": m})
+    elif ch == "guild":
+        # раньше чата гильдии на сервере не было: сообщение оставалось на телефоне отправителя
+        m["g"] = gid
+        guild_history.setdefault(gid, deque(maxlen=GUILD_HISTORY)).append(m)
+        payload = realtime.encode({"t": "chat", "m": m})
+        for c in list(hub.conns.values()):
+            if c.info.get("gid") == gid:
+                c.push(payload)
     else:
         to = str(d.get("to", ""))[:16]
         m["to"] = to
@@ -2222,7 +2243,9 @@ async def ws_handler(request):
                 conn = hub.add(ws, info)
                 clients[ws] = info
                 conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "mod": user.get("mod", False), "mw": 2,
-                                           "muted": int(muted_until(user["id"]) * 1000), "history": list(chat_history), "kr": info["kr"],
+                                           "muted": int(muted_until(user["id"]) * 1000), "kr": info["kr"],
+                                           # мировой чат и чат своей гильдии (гильдию сервер узнал выше, из базы)
+                                           "history": list(chat_history) + list(guild_history.get(info["gid"], ())),
                                            "fac": info["fac_srv"], "cw": chipwar.status()}))
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)

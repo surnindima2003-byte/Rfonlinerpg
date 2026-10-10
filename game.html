@@ -4029,8 +4029,13 @@ async function sendChat(){
   const msg = {ch:chatCh, text:text.slice(0, 200), nick:me(), fac:S.faction, lvl:S.level, uid:chatUid || "", ts:Date.now()};
   if(chatCh === "guild") msg.g = S.guildId;
   if(chatCh === "dm") msg.to = dmTo;
-  if(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1 && chatCh !== "guild"){
+  if(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1){
+    // общий, гильдия и личные — через сервер (гильдию он определяет сам). Раньше сообщение гильдии
+    // оставалось только на этом телефоне: его никто не видел
     NET.ws.send(JSON.stringify({t:"chat", ch:chatCh, text:msg.text, to:msg.to}));
+  } else if(typeof NET !== "undefined" && NET.on){
+    // в Telegram без связи сообщение не уйдёт — не делаем вид, что оно отправлено
+    chatError("Нет связи с сервером, сообщение не отправлено"); inp.value = text; chatLastSend = 0;
   } else if(chatDb){
     try{ await chatDb.collection("chat").add(msg); }
     catch(e){ chatError("Не отправлено, попробуй ещё раз"); inp.value = text; chatLastSend = 0; }
@@ -4967,6 +4972,12 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         chatShared.push(d.m); if(chatShared.length > 300) chatShared.shift();
         if(!isMine(d.m)) Sfx.play("msg");
         if(d.m.ch === "dm" && d.m.to === S.name && d.m.nick !== S.name && !S.dmList.includes(d.m.nick)) S.dmList.push(String(d.m.nick).slice(0, 16));
+        onChatUpdate();
+      } else if(d.t === "chat_hist" && Array.isArray(d.list)){
+        // только что вступил в гильдию: сервер присылает её недавнюю переписку (без звука, повторы отбрасываем)
+        const have = new Set(chatShared.map(m => m.id));
+        for(const m of d.list) if(m && typeof m.text === "string" && !have.has(m.id)) chatShared.push(m);
+        sortTs(chatShared); if(chatShared.length > 300) chatShared.splice(0, chatShared.length - 300);
         onChatUpdate();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
       else if(d.t === "pong"){ dbgPong(d); }
