@@ -4346,18 +4346,42 @@ function makeLocalDb(){
   return {collection:c => query(c), doc:docRef};
 }
 
-// хранилище гильдий на сервере игры (в Telegram): тот же интерфейс, обновление раз в 3 секунды
+// хранилище гильдий на сервере игры (в Telegram): тот же интерфейс.
+// Пока открыта вкладка «Гильдия», подписки обновляются раз в 3 секунды, как раньше. В фоне — только то, что
+// нужно вне вкладки (сама гильдия и состав), раз в минуту; список гильдий, заявки и журнал ({bg:0}) — не опрашиваются.
+// О вступлении, выходе, исключении и правке гильдии сервер сообщает сам (сообщение gdb) — тогда перечитываем сразу.
+// Раньше каждая подписка опрашивала сервер раз в 3 секунды всегда: ~1,7 запроса в секунду на игрока в гильдии.
+const GDB_BG_MS = 60000;
+const gdbFast = () => !document.hidden && !$("scrGuild").hidden;
 function makeRemoteDb(api){
-  const subs = new Set();
+  const subs = new Set(), pending = new Set();
   let refreshT = null;
-  const refreshAll = () => { clearTimeout(refreshT); refreshT = setTimeout(() => subs.forEach(s => s.run()), 150); };
+  const schedule = pick => { subs.forEach(s => { if(pick(s)) pending.add(s); }); clearTimeout(refreshT);
+    refreshT = setTimeout(() => { const due = [...pending]; pending.clear(); due.forEach(s => s.run()); }, 150); };
+  // после своей записи перечитываем только затронутое: сам документ, его коллекцию и документ-родитель
+  // (иначе запись своего опыта раз в минуту перечитывала бы и список всех гильдий, и журнал)
+  const up = p => p.split("/").slice(0, -1).join("/");
+  const refreshFor = path => schedule(s => s.key === path || s.key === up(path) || s.key === up(up(path)));
+  // открыта вкладка или пришёл сигнал сервера: перечитать то, что сейчас нужно
+  const refresh = () => schedule(s => s.bg || gdbFast());
   const call = async body => { const r = await api("/api/db", body); if(!r || !r.ok) throw new Error((r && r.error) || "db"); return r; };
   const snapDoc = (id, data) => ({id, exists:data !== null && data !== undefined, data:() => data ? JSON.parse(JSON.stringify(data)) : undefined});
-  function poll(fetcher, next){
-    let last = "", stop = false;
-    const s = {run:async () => { if(stop) return; try{ const v = await fetcher(); const js = JSON.stringify(v.raw); if(js !== last){ last = js; next(v.snap); } }catch(e){} }};
-    subs.add(s); s.run(); const iv = setInterval(s.run, 3000);
-    return () => { stop = true; clearInterval(iv); subs.delete(s); };
+  function poll(key, fetcher, next, opt){
+    const bg = opt && "bg" in opt ? +opt.bg || 0 : GDB_BG_MS;
+    let last = "", stop = false, busy = false, again = false, at = 0;
+    const s = {key, bg, run:async () => {
+      if(stop) return;
+      if(busy){ again = true; return; }                  // запрос ещё идёт — повторим сразу после него
+      busy = true; at = Date.now();
+      try{ const v = await fetcher(); const js = JSON.stringify(v.raw); if(js !== last){ last = js; next(v.snap); } }catch(e){}
+      busy = false;
+      if(again){ again = false; s.run(); }
+    }};
+    subs.add(s); s.run();
+    // только что перечитали (сигнал сервера, своя запись, открытие вкладки) — очередной опрос пропускаем
+    const iv = setInterval(() => { if(document.hidden) return; const age = Date.now() - at;
+      if(gdbFast() ? age >= 2500 : bg && age >= bg) s.run(); }, 3000);
+    return () => { stop = true; clearInterval(iv); subs.delete(s); pending.delete(s); };
   }
   function query(col, q){
     q = q || {};
@@ -4368,19 +4392,19 @@ function makeRemoteDb(api){
       orderBy:(f, dir) => query(col, {...q, order:[f, dir || "asc"]}),
       limit:n => query(col, {...q, limit:n}),
       get:async () => (await list()).snap,
-      onSnapshot:(next, err) => poll(list, next),
+      onSnapshot:(next, err, opt) => poll(col, list, next, opt),
       doc:id => docRef(col + "/" + (id || newId())),
-      add:async d => { const r = await call({op:"add", col, data:d}); refreshAll(); return docRef(col + "/" + r.id); }};
+      add:async d => { const r = await call({op:"add", col, data:d}); refreshFor(col + "/" + r.id); return docRef(col + "/" + r.id); }};
   }
   function docRef(path){
     const id = path.split("/").pop();
     const get = async () => { const r = await call({op:"get", path}); return {raw:r.data, snap:snapDoc(id, r.exists ? r.data : null)}; };
-    const write = async (op, data) => { await call({op, path, data}); refreshAll(); };
+    const write = async (op, data) => { await call({op, path, data}); refreshFor(path); };
     return {id, path, get:async () => (await get()).snap,
       set:d => write("set", d), update:d => write("update", d), delete:() => write("delete"),
-      onSnapshot:(next, err) => poll(get, next), collection:c => query(path + "/" + c)};
+      onSnapshot:(next, err, opt) => poll(path, get, next, opt), collection:c => query(path + "/" + c)};
   }
-  return {collection:c => query(c), doc:docRef};
+  return {collection:c => query(c), doc:docRef, refresh, refreshFor};
 }
 
 let GDB = null, gUid = null, gLocal = false, gReady = false;
@@ -4417,7 +4441,7 @@ async function recount(gid){ try{ const s = await gCol(gid, "members").get(); aw
   GDB.collection("guilds").orderBy("created", "desc").limit(100).onSnapshot(s => {
     gList = s.docs.map(d => ({id:d.id, ...d.data()})).filter(g => typeof g.name === "string");
     renderGuildIfOpen();
-  }, () => {});
+  }, () => {}, {bg:0});                                    // список гильдий нужен только во вкладке «Гильдия»
   if(S.guildId) attachGuild(S.guildId);
   for(const gid of S.guildReqs) watchRequest(gid);
   renderGuildIfOpen();
@@ -4451,8 +4475,9 @@ function attachGuild(id){
     if(membersLoaded && !gMembers.some(m => m.uid === gUid) && S.guildId === id){ toast("Тебя исключили из гильдии"); leftGuild(); return; }
     membersLoaded = true; renderGuildIfOpen();
   }, () => {}));
-  gUnsubs.push(gCol(id, "requests").onSnapshot(s => { gRequests = s.docs.map(d => ({id:d.id, ...d.data()})); renderGuildIfOpen(); }, () => {}));
-  gUnsubs.push(gCol(id, "log").orderBy("ts", "desc").limit(30).onSnapshot(s => { gLog = s.docs.map(d => d.data()); renderGuildIfOpen(); }, () => {}));
+  // заявки и журнал видны только во вкладке «Гильдия»: в фоне их не опрашиваем ({bg:0})
+  gUnsubs.push(gCol(id, "requests").onSnapshot(s => { gRequests = s.docs.map(d => ({id:d.id, ...d.data()})); renderGuildIfOpen(); }, () => {}, {bg:0}));
+  gUnsubs.push(gCol(id, "log").orderBy("ts", "desc").limit(30).onSnapshot(s => { gLog = s.docs.map(d => d.data()); renderGuildIfOpen(); }, () => {}, {bg:0}));
 }
 function leftGuild(){ detachGuild(); S.guildId = ""; save(); renderGuildIfOpen(); if(typeof onChatUpdate === "function") onChatUpdate(); }
 
@@ -4479,7 +4504,7 @@ async function flushXp(){
 
 // ---- отрисовка ----
 function renderGuildIfOpen(){ if(!$("scrGuild").hidden) renderGuild(); }
-function guildTabOpened(){ renderGuild(); flushXp(); gPresLoad(); }
+function guildTabOpened(){ renderGuild(); flushXp(); gPresLoad(); if(GDB && GDB.refresh) GDB.refresh(); }    // вкладку открыли — свежие данные сразу
 
 // ---- кто в сети и когда заходил ----
 let gPres = {}, gPresT = 0;
@@ -4712,7 +4737,9 @@ async function guildAction(a, b){
       if(!r || !r.ok){ toast((r && r.error) || "Не получилось"); return; }
       S.scrap = Math.max(0, S.scrap - r.amount);
       if(r.craftN) S.craftN = +r.craftN;                  // сохранения без этого списания сервер не примет
-      save(); toast("Спасибо! +" + r.amount + " в казну"); return;
+      save(); toast("Спасибо! +" + r.amount + " в казну");
+      if(GDB && GDB.refresh) GDB.refresh();               // вклад и запись в журнале — сразу, без ожидания опроса
+      return;
     }
     S.scrap -= amt; save();
     await gCol(S.guildId, "members").doc(gUid).update({donated:(+me.donated || 0) + amt});
@@ -4979,6 +5006,9 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         for(const m of d.list) if(m && typeof m.text === "string" && !have.has(m.id)) chatShared.push(m);
         sortTs(chatShared); if(chatShared.length > 300) chatShared.splice(0, chatShared.length - 300);
         onChatUpdate();
+      } else if(d.t === "gdb"){
+        // в гильдии что-то поменялось (вступил, ушёл, исключили, правка гильдии) — перечитываем без ожидания опроса
+        if(typeof GDB !== "undefined" && GDB && GDB.refresh) GDB.refresh();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
       else if(d.t === "pong"){ dbgPong(d); }
       else if(typeof onNetExtra === "function") onNetExtra(d);

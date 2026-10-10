@@ -1043,12 +1043,19 @@ async def api_db(request):
             if sub == "members":
                 await guild_recount(s, gid)
             await s.commit()
+            # кому сообщить об изменении: участникам гильдии в сети (считаем до обновления — при роспуске
+            # и исключении они гильдию уже потеряют) и самому затронутому игроку (принятому, исключённому)
+            notify = [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
+            if did and did.isdigit():
+                notify.append(int(did))
             if sub in (None, "members"):
                 affected = [int(did)] if sub == "members" and did.isdigit() else \
                     [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
                 if sub == "members" or op == "delete":
                     affected += [c.uid for c in list(hub.conns.values()) if c.info.get("gid") == gid]
                 await refresh_guild(affected)              # тег над головой и «союзник или нет» — сразу
+            if guild_change_notifies(op, sub, did, uid, data):
+                notify_guild(gid, notify)
             return web.json_response({"ok": True, "id": path.rsplit("/", 1)[1]})
     raise web.HTTPBadRequest(text="bad op")
 
@@ -1427,6 +1434,32 @@ def apply_guild(uid, g):
         hist = guild_history.get(new_gid) if new_gid and new_gid != old_gid else None
         if hist:                                         # только что вступил — недавняя переписка гильдии
             c.push(realtime.encode({"t": "chat_hist", "g": new_gid, "list": list(hist)}))
+
+
+# Раньше телефон опрашивал данные гильдии раз в 3 секунды всегда (~1,7 запроса в секунду на игрока в гильдии).
+# Теперь, пока вкладка «Гильдия» закрыта, он опрашивает только саму гильдию и состав, раз в минуту, а о важных
+# изменениях сервер сообщает сам — сообщением gdb, по нему телефон перечитывает данные сразу.
+GUILD_STAT_KEYS = {"xp", "lvl", "nick", "bm"}    # участник раз в минуту обновляет свои цифры — гильдию не будим
+
+
+def guild_change_notifies(op, sub, did, uid, data):
+    """Сообщать ли участникам об изменении документа гильдии: да — о самой гильдии и составе (вступил, ушёл,
+    исключён, сменилась роль). Заявки и журнал видны только во вкладке «Гильдия»: пока она открыта,
+    телефон опрашивает их сам."""
+    if sub is None:
+        return True
+    if sub != "members":
+        return False
+    return not (op == "update" and did == uid and set(data or {}) <= GUILD_STAT_KEYS)
+
+
+def notify_guild(gid, uids=()):
+    """Участникам гильдии в сети и затронутым игрокам — сигнал перечитать данные гильдии."""
+    note = realtime.encode({"t": "gdb", "g": gid})
+    uids = set(uids)
+    for c in list(hub.conns.values()):
+        if c.uid in uids or (gid and c.info.get("gid") == gid):
+            c.push(note)
 
 
 async def refresh_guild(uids):
