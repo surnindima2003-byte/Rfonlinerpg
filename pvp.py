@@ -3,7 +3,7 @@ import logging
 import time
 
 from aiohttp import web
-from sqlalchemy import select
+from sqlalchemy import select, update, case
 
 from db import SessionLocal
 from models import PvpStat, GameSave
@@ -131,18 +131,25 @@ async def on_death(victim, killer):
     gain = 0
     async with SessionLocal() as s:
         k, v = await stat_of(s, killer["id"]), await stat_of(s, victim["id"])
-        k.kills += 1
-        v.deaths += 1
+        karma_add = 0
         if guilty:
             if fresh and rating_allowed(killer["id"], victim["id"], k.rating, v.rating, now):
                 gain = rating_change(k.rating, v.rating)
-                k.rating += gain
-                v.rating = max(0, v.rating - gain)
         else:
-            k.pk += 1
-            k.karma += 2 if victim.get("lvl", 1) <= killer.get("lvl", 1) - 10 else 1
+            karma_add = 2 if victim.get("lvl", 1) <= killer.get("lvl", 1) - 10 else 1
+        # счётчики меняются атомарно в базе: раньше «прочитал → прибавил → записал» терял обновления, когда
+        # две смерти с участием одного игрока засчитывались одновременно (убийства, рейтинг, карма)
+        res = await s.execute(update(PvpStat).where(PvpStat.tg_id == killer["id"])
+                              .values(kills=PvpStat.kills + 1, rating=PvpStat.rating + gain,
+                                      pk=PvpStat.pk + (0 if guilty else 1), karma=PvpStat.karma + karma_add)
+                              .returning(PvpStat.karma).execution_options(synchronize_session=False))
+        row = res.first()
+        await s.execute(update(PvpStat).where(PvpStat.tg_id == victim["id"])
+                        .values(deaths=PvpStat.deaths + 1,
+                                rating=case((PvpStat.rating > gain, PvpStat.rating - gain), else_=0))
+                        .execution_options(synchronize_session=False))
         await s.commit()
-        killer["kr"] = k.karma
+        killer["kr"] = row[0] if row else (k.karma or 0) + karma_add
     return ({"t": "pvp_kill", "nick": victim["nick"], "pk": not guilty, "karma": killer["kr"], "rating": gain},
             {"t": "pvp_died", "red": victim.get("kr", 0) > 0})
 
@@ -155,10 +162,14 @@ async def mob_killed(uid, info):
     if _mob_kills[uid] >= KARMA_DECAY_KILLS:
         _mob_kills[uid] = 0
         async with SessionLocal() as s:
-            row = await stat_of(s, uid)
-            row.karma = max(0, row.karma - 1)
+            await stat_of(s, uid)
+            res = await s.execute(update(PvpStat).where(PvpStat.tg_id == uid)
+                                  .values(karma=case((PvpStat.karma > 1, PvpStat.karma - 1), else_=0))
+                                  .returning(PvpStat.karma).execution_options(synchronize_session=False))
+            row = res.first()
             await s.commit()
-            info["kr"] = row.karma
+            if row:
+                info["kr"] = row[0]
 
 
 async def api_pvp(request):
