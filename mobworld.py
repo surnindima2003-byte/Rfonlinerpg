@@ -24,6 +24,7 @@
 поэтому обычная выдача лута (items.process_kills) работает без изменений.
 """
 import itertools
+import math
 import time
 
 import metrics
@@ -156,8 +157,10 @@ def on_pos(info, d):
     for row in d["m"][:60]:
         try:
             i, x, y, a, n = int(row[0]), float(row[1]), float(row[2]), float(row[3]), int(row[4])
-        except (TypeError, ValueError, IndexError):
+        except (TypeError, ValueError, IndexError, OverflowError):
             continue
+        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(a)):
+            continue                                          # "nan"/"inf" строкой: не рассылаем другим
         o = own.get(i)
         if not o or o["uid"] != info["id"]:
             continue                                          # чужого моба двигать нельзя

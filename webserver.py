@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import math
 import time
 from collections import deque
 from pathlib import Path
@@ -1627,13 +1628,24 @@ def clean_card(c):
     return out
 
 
+def finite(v, default):
+    """Число из сообщения или default. Строки "nan"/"inf" проходят через float(), а JSON-разбор их не ловит:
+    NaN в данных игрока делал его «изменившимся» каждый тик (NaN != NaN) — полная рассылка соседям и
+    предупреждение в лог 10 раз в секунду; координата NaN превращалась в 8000 (прыжок на край карты)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return f if math.isfinite(f) else default
+
+
 def clean_pos(d, info):
     """Берём из сообщения только допустимые поля, чтобы нельзя было прислать мусор другим игрокам."""
     try:
         loc = d.get("loc")
         new_loc = loc if loc in LOCS else info.get("loc")
-        nx = round(max(0.0, min(8000.0, float(d.get("x", 0)))), 1)            # 0,1 px хватает, а снимок короче
-        ny = round(max(0.0, min(8000.0, float(d.get("y", 0)))), 1)
+        nx = round(max(0.0, min(8000.0, finite(d.get("x"), info.get("x", 0)))), 1)     # 0,1 px хватает, а снимок короче
+        ny = round(max(0.0, min(8000.0, finite(d.get("y"), info.get("y", 0)))), 1)
         # скорость: прыжок дальше возможного не принимаем, телефону отправим поправку
         if pvpguard.check_move(info, nx, ny, new_loc, d.get("dead")):
             info["x"], info["y"] = nx, ny
@@ -1641,7 +1653,7 @@ def clean_pos(d, info):
             info["pos_fix"] = True
         info["loc"] = new_loc
         for k in ("ang", "aim"):
-            info[k] = round(float(d.get(k, 0)), 2)
+            info[k] = round(max(-1000.0, min(1000.0, finite(d.get(k), info.get(k, 0)))), 2)
         info["moving"] = bool(d.get("moving"))
         dead = bool(d.get("dead"))
         if dead and not info.get("dead"):
