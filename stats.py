@@ -119,7 +119,10 @@ async def api_stats(request):
         if sus:
             for tg_id, nick, lvl in (await cnt(select(GameSave.tg_id, GameSave.nick, GameSave.lvl).where(GameSave.tg_id.in_([u for u, _ in sus])))).all():
                 nicks[tg_id] = (nick or "Пилот", lvl or 1)
-    g = lambda v: round((v or 0) / NANO, 4)
+    # В PostgreSQL SUM(bigint) приходит как Decimal — его не умеет JSON (страница «Статистика» падала с 500).
+    # Поэтому все суммы сначала приводим к int.
+    g = lambda v: round(int(v or 0) / NANO, 4)
+    stars_all, stars_day, pvp_fights = int(stars_all or 0), int(stars_day or 0), int(pvp_fights or 0)
     return web.json_response({"ok": True,
         "players": {"online": len(clients), "dau": dau, "wau": wau, "total": total, "new_day": new_day, "new_week": new_week,
                     "retention": round(c_back * 100 / c_all) if c_all else None, "cohort": c_all, "levels": buckets},

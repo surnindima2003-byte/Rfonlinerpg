@@ -144,6 +144,11 @@ def admin_ids():
     return set(ADMIN_IDS) | {uid for name, uid in _role_pins.items() if name in ADMIN_USERNAMES}
 
 
+def mod_ids():
+    """Все id модераторов: из MOD_IDS и закреплённые username модераторов."""
+    return set(MOD_IDS) | {uid for name, uid in _role_pins.items() if name in MOD_USERNAMES}
+
+
 def _parse_init(init_data):
     if not init_data or len(init_data) > 4096:
         return None
@@ -1740,8 +1745,9 @@ async def handle_mute(d, info):
     if target == info["id"] or (minutes and minutes not in MUTE_CHOICES):
         return
     tgt = online(target)
-    t_admin = bool(tgt and tgt.get("admin"))
-    t_mod = bool(tgt and tgt.get("mod"))
+    # роль цели — по id, а не только у тех, кто сейчас в сети: раньше офлайн-админа или модератора мог замутить кто угодно из модераторов
+    t_admin = bool(tgt and tgt.get("admin")) or target in admin_ids()
+    t_mod = bool(tgt and tgt.get("mod")) or target in mod_ids()
     if t_admin or (t_mod and not info.get("admin")):
         hub.to_uid(info["id"], {"t": "pinfo", "text": "Этого пилота замутить нельзя"})
         return
