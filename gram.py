@@ -7,6 +7,7 @@
 import asyncio
 import json
 import logging
+import math
 import re
 import secrets
 import time
@@ -376,8 +377,10 @@ async def api_gram(request):
             address = str(body.get("address", "")).strip()
             try:
                 amount = float(body.get("amount", 0))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 amount = 0
+            if not math.isfinite(amount):
+                amount = 0                               # "nan" проходил обе проверки ниже и ронял запрос (500)
             if not ADDR_RE.match(address):
                 return web.json_response({"ok": False, "error": "Проверь TON-адрес"})
             if amount < GRAM_WITHDRAW_MIN or amount > 1_000_000:
@@ -445,7 +448,11 @@ async def api_gram_admin(request):
                                       "wds": [{"id": x.id, "nick": x.nick, "address": x.address, "amount": g(x.amount), "payout": g(x.payout), "ts": x.created * 1000} for x in wds],
                                       "unmatched": [{"amount": g(x.amount), "note": x.note, "ts": x.ts * 1000} for x in um]})
         if op == "decide":
-            wd = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.id == int(body.get("id", 0))))).scalar_one_or_none()
+            try:
+                wd_id = int(body.get("id", 0))
+            except (TypeError, ValueError, OverflowError):
+                wd_id = 0
+            wd = (await s.execute(select(GramWithdrawal).where(GramWithdrawal.id == wd_id))).scalar_one_or_none()
             if not wd or wd.status != "pending":
                 return web.json_response({"ok": False, "error": "Заявка уже обработана"})
             action = body.get("action")
@@ -480,7 +487,11 @@ async def api_gram_admin(request):
                 if not row:
                     return web.json_response({"ok": False, "error": "Игрок не найден"})
                 uid = row.tg_id
-            amount = max(0.01, min(10000.0, float(body.get("amount", 10))))
+            try:
+                amount = float(body.get("amount", 10))
+            except (TypeError, ValueError, OverflowError):
+                amount = 10.0
+            amount = max(0.01, min(10000.0, amount if math.isfinite(amount) else 10.0))
             await move(s, uid, int(amount * NANO), "test", f"test:{uid}:{time.time_ns()}", "Тестовое начисление")
             await s.commit()
             await push_to_player(uid, {"t": "gram", "text": f"Тестовое начисление: +{amount} GRAM"})
