@@ -4857,6 +4857,13 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   // ---- выдачи от администратора ----
   const GRANT_NAME = {scrap:"лома", cores:"ядер", exp:"опыта", level:"уровней"};
   function applyGrant(g){
+    // Выдача могла прийти второй раз: подтверждение (ack) не дошло до сервера, или она пришла и при входе,
+    // и сообщением по сети. Раньше в этом случае лом, ядра или вещи начислялись повторно.
+    // Номера применённых выдач хранятся в сохранении (оно уходит и на сервер) — повтор только подтверждаем.
+    const gid = g && g.id != null ? String(g.id) : "";
+    if(!Array.isArray(S.grantsDone)) S.grantsDone = [];
+    if(gid && S.grantsDone.includes(gid)){ api("/api/grants/ack", {ids:[g.id]}); return; }
+    if(gid){ S.grantsDone.push(gid); if(S.grantsDone.length > 300) S.grantsDone.splice(0, S.grantsDone.length - 300); }
     const a = +g.payload.amount || 0;
     if(g.by === "market" && g.kind === "scrap"){ S.scrap += a; toast("Маркет: лот продан, получено " + a + " лома"); if(typeof mkRefresh === "function") mkRefresh(); }
     else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : String(g.by || "").startsWith("special:") ? "Задание выполнено: +" : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
