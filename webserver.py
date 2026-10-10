@@ -1374,6 +1374,10 @@ async def refresh_guild(uids):
 
 
 PVP_COMBAT_SEC = 10          # столько секунд после своего удара или удара по тебе нельзя сменить локацию
+# Погибший в бою возвращается в ангар через 2,2 с (game.html). Уйти из боя «смертью» можно, только если сервер
+# сам засчитал смерть или телефон сообщает о ней не меньше этого времени, стоя на месте (и всё это время
+# его можно добить). Раньше хватало одного сообщения pos с dead:true — так уходили из PvP в безопасную зону.
+DEAD_MIN_SEC = 1.5
 
 
 def pvp_combat_left(info):
@@ -1384,6 +1388,14 @@ def pvp_combat_left(info):
 def in_pvp_combat(info):
     """Игрок недавно бил другого игрока или его били (админов не держим)."""
     return not info.get("admin") and pvp_combat_left(info) > 0
+
+
+def death_confirmed(info, now=None):
+    """Смерть, с которой можно покинуть локацию в бою: засчитана сервером или длится не меньше DEAD_MIN_SEC."""
+    now = now or time.time()
+    if info.get("srv_dead_until", 0) > now:
+        return True
+    return bool(info.get("dead")) and now - info.get("dead_since", now) >= DEAD_MIN_SEC
 
 
 def same_guild(a, b):
@@ -1589,7 +1601,10 @@ def clean_pos(d, info):
         for k in ("ang", "aim"):
             info[k] = round(float(d.get(k, 0)), 2)
         info["moving"] = bool(d.get("moving"))
-        info["dead"] = bool(d.get("dead"))
+        dead = bool(d.get("dead"))
+        if dead and not info.get("dead"):
+            info["dead_since"] = time.time()               # с какого момента телефон сообщает о смерти
+        info["dead"] = dead
         # ник задаёт сервер (set_online_nick): раньше его брали из каждого pos — можно было писать в чат как «Админ»
         info["fac"] = info.get("fac_srv") or ""                                    # фракцию задаёт сервер, а не сообщение
         cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
@@ -2168,7 +2183,7 @@ async def handle_ws_message(d, t, info, conn):
     if t == "pos":
         old_loc = info["loc"]
         new_loc = d.get("loc")
-        if new_loc in LOCS and new_loc != old_loc and in_pvp_combat(info) and not d.get("dead") and not info.get("dead"):
+        if new_loc in LOCS and new_loc != old_loc and in_pvp_combat(info) and not death_confirmed(info):
             # раньше в бою можно было просто прислать loc «lobby» и оказаться в безопасной зоне
             d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
             metrics.inc("pvp.flee_blocked")

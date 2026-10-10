@@ -147,7 +147,10 @@ def check_move(info, nx, ny, nloc, ndead):
         return True
     now = _now()
     mv = info.get("mv")
-    if (not mv or nloc != info.get("loc") or bool(ndead) != bool(info.get("dead"))):
+    # Запас сбрасывается только при смене локации. Раньше его сбрасывала и смена флага dead, который присылает
+    # телефон: чередуя dead, можно было телепортироваться в любую точку даже при MOVE_GUARD=on.
+    # Честному клиенту это не мешает: погибший робот стоит на месте, а возрождается уже в ангаре (смена локации).
+    if not mv or nloc != info.get("loc"):
         info["mv"] = {"tok": MOVE_BURST, "t": now}
         return True
     mv["tok"] = min(MOVE_BURST, mv["tok"] + (now - mv["t"]) * MOVE_RATE)
