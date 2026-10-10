@@ -272,8 +272,13 @@ class Hub:
 
     # ---- поиск ----
     def info_of(self, uid):
+        """Данные игрока по его активной вкладке. Вкладок может быть несколько (WS_MAX_PER_UID): раньше бралась
+        последняя открытая, даже если игрок играет в другой, — PvP, лечение и опыт пати смотрели не туда.
+        Активная — та, что позже всех присылала позицию (при равенстве — открытая позже)."""
         lst = self.by_uid.get(uid)
-        return lst[-1].info if lst else None
+        if not lst:
+            return None
+        return max(enumerate(lst), key=lambda ic: (ic[1].info.get("seen", 0), ic[0]))[1].info
 
     def is_online(self, uid):
         return uid in self.by_uid

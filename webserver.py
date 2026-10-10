@@ -832,8 +832,12 @@ async def check_write(s, op, path, data, uid):
             return data
         deny()
     if sub == "log":
-        if op in ("set", "add") and me:
-            return _clean_fields(data, LOG_FIELDS)
+        # записи журнала только добавляются (id выдаёт сервер). Раньше «set» по id существующей записи позволял
+        # любому участнику переписать чужую запись — например, «X пожертвовал 1 000 000 лома».
+        if op == "add" and me:
+            data = _clean_fields(data, LOG_FIELDS)
+            data["ts"] = int(time.time() * 1000)             # время ставит сервер
+            return data
         if op == "delete" and is_leader:
             return data
         deny()
@@ -2356,7 +2360,15 @@ def world_tick(keepalive, full_tick=False):
         conns = [c for c in members if not c.closing]
         if not conns:
             continue
-        states = [(o, _pub_state(o, keepalive)) for o in conns]
+        # одна запись на игрока: если у него открыто несколько вкладок в этой локации, другим показываем только
+        # активную (позже всех присылала позицию). Раньше уходили обе с одним id — робот прыгал между двумя точками.
+        best = {}
+        for o in conns:
+            st = _pub_state(o, keepalive)
+            cur = best.get(o.uid)
+            if cur is None or o.info.get("seen", 0) >= cur[0].info.get("seen", 0):
+                best[o.uid] = (o, st)
+        states = list(best.values())
         loc_js = json.dumps(loc)
         head = '{"t":"players","loc":' + loc_js + ',"list":['
         for c in conns:
