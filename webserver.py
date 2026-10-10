@@ -876,7 +876,7 @@ async def api_guild_donate(request):
                 return web.json_response({"ok": False, "error": "Ты не в гильдии"})
             m["donated"] = (m.get("donated") or 0) + amt
             await doc_put(s, mpath, m)
-            nick = (row.nick or user["name"])[:16]
+            nick = public_name(row.nick, user["name"])
             await doc_put(s, f"guilds/{gid}/log/a{int(time.time()*1000):x}{secrets.token_hex(3)}",
                           {"text": f"{nick} пожертвовал {amt} лома", "ts": int(time.time() * 1000)})
             await s.commit()
@@ -1036,6 +1036,19 @@ def valid_nick(name):
     return 3 <= len(name) <= 16 and name == name.strip() and "  " not in name and all(ch.isalnum() or ch in "_- " for ch in name)
 
 
+def public_name(nick, tg_name=""):
+    """Имя, которое видят другие игроки (чат, мир, маркет, рейтинг).
+
+    Позывной из сохранения сервер уже проверил. Если его нет, раньше показывалось имя из Telegram как есть —
+    без проверки: можно было писать в чат как «Админ» или «Система». Теперь имя из Telegram очищается так же,
+    как позывной (буквы, цифры, пробел, _ и -), а запрещённое или слишком короткое заменяется на «Пилот»."""
+    if nick:
+        return str(nick)[:16]
+    name = "".join(ch for ch in str(tg_name or "") if ch.isalnum() or ch in "_- ")
+    name = " ".join(name.split())[:16].strip()
+    return name if valid_nick(name) and not reserved_nick(name) else "Пилот"
+
+
 async def api_name(request):
     body, user = await read_auth(request)
     name = str(body.get("name", "")).strip()
@@ -1107,7 +1120,7 @@ async def api_market(request):
             if err:
                 return web.json_response({"ok": False, "error": err})
             save_row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
-            nick = (save_row.nick if save_row and save_row.nick else user["name"])[:16]
+            nick = public_name(save_row.nick if save_row else "", user["name"])
             s.add(MarketLot(seller_id=uid, seller_nick=nick, item=json.dumps(real), price=price, created=int(time.time())))
             await s.commit()
             return web.json_response({"ok": True})
@@ -1131,7 +1144,7 @@ async def api_market(request):
             if lot.seller_id == uid:
                 return web.json_response({"ok": False, "error": "Нельзя купить свой лот"})
             buyer = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
-            buyer_nick = (buyer.nick if buyer and buyer.nick else user["name"])[:16]
+            buyer_nick = public_name(buyer.nick if buyer else "", user["name"])
             # кошельки создаём заранее: создание кошелька — отдельная транзакция, и она не должна
             # оказаться между «забрали лот» и «списали GRAM»
             bw = await gram.wallet_of(s, uid)
@@ -1206,7 +1219,7 @@ async def api_top(request):
                 parts = path.split("/")
                 if len(parts) == 4 and parts[3] in ids and parts[1] in guilds:
                     gid_of.setdefault(parts[3], parts[1])
-            items = [{"id": str(r.tg_id), "nick": r.nick or r.name[:16], "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
+            items = [{"id": str(r.tg_id), "nick": public_name(r.nick, r.name), "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
                       "tag": (guilds.get(gid_of.get(str(r.tg_id))) or {}).get("tag", "")} for r in rows]
             return web.json_response({"ok": True, "items": items, "me": {"rank": my_rank, "bm": me.bm if me else 0}})
         if kind == "guilds":
@@ -1340,7 +1353,7 @@ def online(uid):
 def set_online_nick(uid, nick):
     """Ник над головой и в чате задаёт сервер (из сохранения), а не каждое сообщение телефона."""
     for c in list(hub.by_uid.get(uid, [])):
-        c.info["nick"] = nick or c.info["name"][:16]
+        c.info["nick"] = public_name(nick, c.info["name"])
 
 
 async def guild_of(s, uid):
@@ -2126,7 +2139,7 @@ async def ws_handler(request):
                 except (TypeError, ValueError):
                     proto = 1
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
-                        "nick": user["name"][:16], "fac": "", "fac_srv": "", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
+                        "nick": public_name("", user["name"]), "fac": "", "fac_srv": "", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
                         "proto": proto, "gid": "", "gt": "", "gn": "", "gi": "", "gc": ""}
                 if LOADTEST and user["id"] >= LOADTEST_UID_BASE:
                     info["loadtest"] = True
@@ -2140,7 +2153,7 @@ async def ws_handler(request):
                         await s_.commit()
                     info["fac_srv"] = info["fac"] = fac if fac in FACTIONS else ""
                     if nick:
-                        info["nick"] = nick[:16]
+                        info["nick"] = public_name(nick)
                     if g:
                         info["gid"], info["gt"], info["gn"], info["gi"], info["gc"] = g
                 except Exception:
