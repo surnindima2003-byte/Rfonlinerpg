@@ -197,6 +197,7 @@ class PortalTouch(unittest.TestCase):
         js = "\n".join([
             "let opened = [], sheetOpen = false, firing = false, auto = false, now = 10, locKey = 'scrapfields';",
             "const S = {pvpT: 0}, npcs = [{kind:'back', x:1000, y:1060}];",
+            "const LOCS = {lobby:{safe:true}, scrapfields:{}};",
             "let p = {x:1000, y:1000, dead:false};",
             "const $ = id => ({classList:{contains: () => sheetOpen}});",
             "const UI = {portal: () => opened.push('portal')}; function openBackPortal(){ opened.push('back'); }",
@@ -214,6 +215,9 @@ class PortalTouch(unittest.TestCase):
             "at(1000, 800); r.again = at(1000, 1050);",
             "locKey = 'lobby'; npcs[0] = {kind:'portal', x:0, y:0}; r.newLoc = at(10, 10);",
             "at(0, 300); r.lobby = at(0, 20);",
+            "at(0, 300); auto = true; firing = true; r.lobbyAuto = at(0, 20); auto = false; firing = false;   // АВТО с вылазки",
+            "S.pvpT = 99; at(0, 300); r.lobbyPvp = at(0, 20); S.pvpT = 0;",
+            "at(0, 80); r.stepBack = at(0, 20);        // закрыл окно, шагнул с кольца и обратно — снова открываем",
             "console.log(JSON.stringify({r, opened}));",
         ])
         out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=30)
@@ -227,7 +231,15 @@ class PortalTouch(unittest.TestCase):
         self.assertEqual(r["again"], 2)
         self.assertEqual(r["newLoc"], 2)                                    # новая локация: сначала отъехать
         self.assertEqual(r["lobby"], 3)
-        self.assertEqual(d["opened"], ["back", "back", "portal"])
+        self.assertEqual((r["lobbyAuto"], r["lobbyPvp"]), (4, 5))           # в ангаре боя нет — АВТО/удар не мешают
+        self.assertEqual(r["stepBack"], 6)
+        self.assertEqual(d["opened"], ["back", "back", "portal", "portal", "portal", "portal"])
+
+    def test_stale_pvp_timer_is_dropped(self):
+        # S.pvpT сохраняется с прогрессом, а now после перезапуска идёт с нуля — старая метка держала «в PvP»
+        a = GAME.index("function update(dt){")
+        self.assertIn("if(S.pvpT > now + 8) S.pvpT = 0;", GAME[a:a + 600])
+        self.assertIn("S.pvpT = now + 8;", GAME)                              # удар игрока — максимум на 8 с вперёд
 
     def test_no_top_button_for_portals(self):
         a = GAME.index("// ближайший NPC для кнопки «Поговорить»")

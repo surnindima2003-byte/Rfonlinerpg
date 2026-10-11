@@ -2626,7 +2626,9 @@ $("talkBtn").addEventListener("click", () => { if(nearNpc) UI[nearNpc.kind](); }
 // портала открывается, как только робот наезжает на кольцо портала. Чтобы окно не выскакивало сразу после
 // появления (робот появляется у портала) и снова после закрытия, портал «взводится», только когда робот отъехал
 // от него дальше PORTAL_ARM. В бою (атака, АВТО, PvP) окно само не открывается — не мешает драться у портала.
-const PORTAL_KINDS = ["portal", "back", "season"], PORTAL_TOUCH = 60, PORTAL_ARM = 95;   // сезонная зона — тоже касанием
+// В ангаре боя нет, поэтому там эти проверки не мешают: включённое с прошлой вылазки АВТО больше не глушит портал.
+// PORTAL_ARM — чуть дальше кольца: закрыл окно, шагнул с кольца и обратно — окно открывается снова.
+const PORTAL_KINDS = ["portal", "back", "season"], PORTAL_TOUCH = 60, PORTAL_ARM = 75, PORTAL_KEY = 95;   // сезонная зона — тоже касанием
 const PORTAL = {loc:null, armed:false};
 function nearestPortal(){
   let best = null, dmin = Infinity;
@@ -2648,7 +2650,9 @@ function portalTouch(){
   const np = p && !p.dead ? nearestPortal() : null;
   if(!np || np.d > PORTAL_ARM){ PORTAL.armed = true; return; }
   if(np.d > PORTAL_TOUCH || !PORTAL.armed) return;
-  if($("sheet").classList.contains("open") || firing || auto || S.pvpT > now) return;
+  if($("sheet").classList.contains("open")) return;
+  const safe = LOCS[locKey] && LOCS[locKey].safe;                                  // ангар: драться не с кем
+  if(!safe && (firing || auto || S.pvpT > now)) return;
   PORTAL.armed = false;
   openPortalNpc(np.n);
 }
@@ -2664,7 +2668,7 @@ window.addEventListener("keydown", e => {
   if(paused || !running) return; keys[e.code] = true;
   if(e.code === "Space"){ firing = true; e.preventDefault(); }
   if(e.code === "ShiftLeft") dash();
-  if(e.code === "KeyE"){ const np = nearestPortal(); if(nearNpc) UI[nearNpc.kind](); else if(np && np.d < PORTAL_ARM) openPortalNpc(np.n); }
+  if(e.code === "KeyE"){ const np = nearestPortal(); if(nearNpc) UI[nearNpc.kind](); else if(np && np.d < PORTAL_KEY) openPortalNpc(np.n); }
   if(e.code === "KeyR") useKit();
   if(e.code === "KeyQ") $("skAuto").click();
 });
@@ -2750,6 +2754,10 @@ function nearestEnemy(range){
 
 function update(dt){
   now += dt;
+  // S.pvpT сохраняется вместе с прогрессом, а часы now после перезапуска игры идут с нуля: метка из прошлой
+  // сессии висела «в будущем» и держала игрока «в PvP» (портал не открывался, CP не восстанавливались).
+  // Удар игрока ставит метку максимум на 8 с вперёд — всё, что дальше, осталось от прошлого запуска.
+  if(S.pvpT > now + 8) S.pvpT = 0;
   if(typeof arenaTick === "function") arenaTick(dt);
   const st = stat();
   for(const s of sparks){ s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 300*dt; s.life -= dt; } sparks = sparks.filter(s => s.life > 0);
