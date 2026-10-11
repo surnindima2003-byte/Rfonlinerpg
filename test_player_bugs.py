@@ -397,5 +397,50 @@ class NoAfkUnderUi(unittest.TestCase):
         self.assertGreaterEqual(GAME.count("autoTurn(() =>"), 3)            # Жнец, боевые умения, Ремонтник
 
 
+class TargetCycle(unittest.TestCase):
+    """Кнопка «ЦЕЛЬ»: первое нажатие — ближайшая цель, дальше по очереди от ближних к дальним, потом по кругу."""
+    def test_order(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        a = GAME.index("const TAB = {seen:new Set(), t:0}")
+        block = GAME[a:GAME.index('tapBtn($("skTab"), cycleTarget);', a)]
+        js = "\n".join([
+            "let tgt = null, ms = 0, vw = 800, vh = 800, toasts = [];",
+            "const window = {camX:0, camY:0}, performance = {now: () => ms}, Sfx = {play(){}}, NET = {others:new Map()};",
+            "const p = {x:400, y:400, dead:false};",
+            "const mk = (n, x, y) => ({n, x, y, dead:false});",
+            "const enemies = [mk('far', 400, 700), mk('near', 450, 400), mk('mid', 400, 250), mk('wall', 300, 400), mk('off', 2000, 400)];",
+            "const los = (x1, y1, x2, y2) => !(x2 === 300 && y2 === 400);           // моб 'wall' за стеной",
+            "const lockedEnemy = () => tgt && tgt.kind === 'enemy' && !tgt.e.dead ? tgt.e : null;",
+            "const renderTargetFrame = () => {}, toast = t => toasts.push(t);",
+            "const $ = () => ({classList:{remove(){}, add(){}}, offsetWidth:0});",
+            block,
+            "const press = () => { cycleTarget(); ms += 300; return tgt ? tgt.e.n : '-'; };",
+            "const r = {series:[press(), press(), press(), press()]};",
+            "ms += 5000; r.afterPause = press();                       // новая серия: ближайшая, но не текущая",
+            "ms += 5000; tgt = null; r.fresh = press();",
+            "enemies.forEach(e => e.dead = e.n !== 'near'); ms += 5000; r.single = [press(), press()];",
+            "enemies.forEach(e => e.dead = true); tgt = null; r.none = press();",
+            "console.log(JSON.stringify({r, toasts}));",
+        ])
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        d = json.loads(out.stdout)
+        r = d["r"]
+        self.assertEqual(r["series"], ["near", "mid", "far", "near"])     # за стеной и за экраном — не берём
+        self.assertEqual(r["afterPause"], "mid")
+        self.assertEqual(r["fresh"], "near")
+        self.assertEqual(r["single"], ["near", "near"])
+        self.assertEqual(r["none"], "-")
+        self.assertEqual(d["toasts"], ["Других целей рядом нет"]*2 + ["Нет целей рядом"])   # одна цель — остаётся она
+
+    def test_button_and_keys(self):
+        self.assertIn('id="skTab"', GAME)
+        self.assertIn('"skTab"', GAME[GAME.index("const LAY_IDS = "):GAME.index("const LAY_IDS = ") + 200])   # двигается в редакторе
+        self.assertIn('e.code !== "Tab"', GAME)
+        self.assertIn('pvpBlockReason(o)', GAME[GAME.index("function tabCandidates()"):GAME.index("function cycleTarget()")])
+
+
 if __name__ == "__main__":
     unittest.main()
