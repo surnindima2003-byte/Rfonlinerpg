@@ -363,9 +363,10 @@ async def api_save(request):
                 since = int(row.updated or 0) if old is not None else 0
                 if old is None:
                     # первое сохранение (или первое после вайпа) раньше не проверялось вовсе: сравниваем с пустым,
-                    # время — с первого входа в игру
+                    # время — с первого входа в игру, но не больше FIRST_SAVE_SEC (раньше до часа)
                     first = (await s.execute(select(FirstSeen.ts).where(FirstSeen.tg_id == user["id"]))).scalar()
-                    dt = time.time() - first if first else 60
+                    dt = min(time.time() - first, saveguard.FIRST_SAVE_SEC) if first else 60
+                    metrics.inc("saveguard.first_save")
                     base = {"S": {}}
                 else:
                     dt = time.time() - since
