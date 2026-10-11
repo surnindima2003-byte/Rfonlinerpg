@@ -502,6 +502,19 @@ async def process_transactions(txs):
             await push_to_player(w.tg_id, {"t": "gram", "text": f"Перевод на {g(value)} GRAM вернулся на твой кошелёк, поэтому в игре он не зачислен"})
 
 
+async def bought_points(s, uid):
+    """Очки навыка, купленные паками магазина (по журналу покупок: ref «shop:<uid>:<пак>:<время>»).
+    Нужны пределам PvP (pvpguard): очки из паков законно поднимают прочность и CP выше уровня."""
+    import pvpguard
+    refs = (await s.execute(select(GramTx.ref).where(GramTx.tg_id == uid, GramTx.kind == "shop"))).scalars().all()
+    total = 0
+    for ref in refs:
+        parts = str(ref).split(":")
+        if len(parts) >= 3:
+            total += pvpguard.PACK_PTS.get(parts[2], 0)
+    return total
+
+
 async def _spend(s, w, uid, pack, price, push_to_player, sale_pct=0):
     """Покупка пака в магазине GRAM (вызывается под очередью покупок игрока)."""
     nano = int(round(price * NANO))
@@ -523,6 +536,8 @@ async def _spend(s, w, uid, pack, price, push_to_player, sale_pct=0):
     import saveguard
     saveguard.note_purchase(uid, pack)                                 # большой прирост в следующем сохранении — это покупка
     await s.commit()
+    import pvpguard
+    pvpguard.add_pack(uid, pack)                                       # очки навыка из пака — сразу в пределы PvP
     import vip
     vip.forget(uid)
     if pack == "season":

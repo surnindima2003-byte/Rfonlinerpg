@@ -8,12 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pvpguard  # noqa: E402
 
-BM_CAP_46 = 3000 + 900 * 46 + 20 * 46 * 46     # как progress.bm_cap(46)
+LVL = 46
 
 
 def player(uid=1, hp=1000, mhp=1000, cp=500, mcp=10000, df=20, lvl=46):
     info = {"id": uid, "hp": hp, "mhp": mhp, "cp": cp, "mcp": mcp, "df": df, "lvl": lvl, "x": 100.0, "y": 100.0, "loc": "iron_canyon"}
-    pvpguard.sanitize(info, BM_CAP_46)
+    pvpguard.sanitize(info, LVL)
     return info
 
 
@@ -39,9 +39,9 @@ class PvpGuardTest(unittest.TestCase):
 
     def test_caps(self):
         v = player(mhp=10_000_000, hp=10_000_000, cp=10**9, mcp=10**9, df=10**6)
-        max_hp, _, max_def = pvpguard.caps(BM_CAP_46)
+        max_hp, _, max_def = pvpguard.caps(LVL)
         self.assertEqual(v["mhp"], max_hp)
-        self.assertLessEqual(v["cp"], v["mhp"] * 10)
+        self.assertLessEqual(v["cp"], v["mhp"] * 10 + pvpguard.CP_PER_POINT * pvpguard.UP_MAX)   # + улучшение «CP»
         self.assertEqual(v["df_eff"], max_def)
 
     def test_cp_absorbs_first(self):

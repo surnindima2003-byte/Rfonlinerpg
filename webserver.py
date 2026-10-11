@@ -1822,7 +1822,7 @@ def clean_pos(d, info):
     except (TypeError, ValueError, OverflowError, AttributeError):
         pass
     # пределы прочности/CP/брони по уровню, в бою — серверный учёт CP и прочности
-    pvpguard.sanitize(info, progress.bm_cap(info.get("lvl", 1)))
+    pvpguard.sanitize(info, info.get("lvl", 1))
     pvpguard.on_report(info)
 
 
@@ -2333,6 +2333,7 @@ async def ws_handler(request):
                     await pvp.load_karma(info)
                     async with SessionLocal() as s_:
                         info["lvl_cap"] = await progress.cap_of(s_, user["id"])
+                        pvpguard.set_points(user["id"], await gram.bought_points(s_, user["id"]))   # для пределов PvP
                         fac = (await s_.execute(select(Player.faction).where(Player.tg_id == user["id"]))).scalar()
                         nick = (await s_.execute(select(GameSave.nick).where(GameSave.tg_id == user["id"]))).scalar()
                         g = await guild_of(s_, user["id"])
