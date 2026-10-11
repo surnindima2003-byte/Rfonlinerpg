@@ -140,5 +140,34 @@ class GramFormat(unittest.TestCase):
         self.assertNotIn("toFixed(7)", GAME[GAME.index("function gramHtml"):GAME.index("const gemSvg")])
 
 
+class Toasts(unittest.TestCase):
+    """Тосты: не поверх заголовков и меню, время показа по длине текста, закрываются касанием."""
+    def test_duration_by_length(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        fn = _line("const toastMs = msg =>")
+        out = subprocess.run([node, "-e", fn + "\nconsole.log(JSON.stringify([toastMs('ok'), toastMs('x'.repeat(40)), toastMs('x'.repeat(500))]));"],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        short, mid, long = json.loads(out.stdout)
+        self.assertGreaterEqual(short, 2200)               # было 1,9 с на любое сообщение
+        self.assertEqual(mid, 2200 + 60 * 40)
+        self.assertEqual(long, 7000)
+
+    def test_placement_and_tap(self):
+        fn = GAME[GAME.index("function toast(msg){"):GAME.index("// ---- иконки предметов ----")]
+        self.assertIn("placeToast(t)", fn)
+        self.assertIn("toastMs(msg)", fn)
+        self.assertIn('addEventListener("click"', fn)
+        place = GAME[GAME.index("function placeToast(t)"):GAME.index("function toast(msg){")]
+        for part in ('"tut-top"', '#sheet .card', '"gmList"', '"#gmToggle"', '".nav"'):
+            self.assertIn(part, place)
+        css = _line(".toast{position:fixed")
+        self.assertIn("width:max-content", css)                # длинный текст — на всю ширину, а не узкой колонкой
+        self.assertIn("max-width:calc(100% - 32px)", css)
+        self.assertIn("pointer-events:auto", _line(".toast.show{"))
+
+
 if __name__ == "__main__":
     unittest.main()

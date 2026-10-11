@@ -395,8 +395,10 @@ body.dbg-ok .h2-av{pointer-events:auto;cursor:pointer}
 .detail{margin-top:10px;background:var(--panel-2);border-radius:12px;padding:10px;display:flex;gap:10px;align-items:center;min-height:62px}
 .detail .tx{flex:1;font-size:14px}.detail small{display:block;color:var(--muted);font-size:12px}
 .hint{font-size:12px;color:var(--muted);margin:8px 0 0}
-.toast{position:fixed;left:50%;top:22%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20;max-width:90%;text-align:center}
-.toast.show{opacity:1}
+/* тост: место выбирает placeToast() — не поверх заголовков окон и меню. width:max-content — длинный текст
+   занимает всю ширину экрана, а не сжимается в узкую колонку (раньше left:50% оставлял ему половину ширины) */
+.toast{position:fixed;left:50%;top:22%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 32px);box-sizing:border-box;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;line-height:1.35;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.toast.show{opacity:1;pointer-events:auto;cursor:pointer}
 
 /* ---- профиль ---- */
 .prof{overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
@@ -2298,7 +2300,43 @@ function levelUps(){
   return up;
 }
 
-function toast(msg){ const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1900); }
+// Сколько держать тост: 2,2 с и ещё 60 мс на символ, не дольше 7 с. Раньше всегда 1,9 с — длинное
+// сообщение (например, почему сервер не принял сохранение) не успевали дочитать. Касание закрывает тост.
+const toastMs = msg => Math.max(2200, Math.min(7000, 2200 + 60 * String(msg || "").length));
+// Где показать тост, чтобы он не закрывал главное (раньше всегда 22% сверху — поверх заголовка окна,
+// первого ряда вкладок и кнопки «Меню»):
+//  * открыто окно — в затемнённой полосе над ним, а если там тесно — внизу экрана;
+//  * мир — под HUD и кнопкой «Меню»; если меню раскрыто — внизу, над вкладками;
+//  * другие экраны (Персонаж, Профиль…) — внизу, над вкладками: сверху у них заголовок.
+// Во время обучения место задаёт наставник (body.tut-top в CSS).
+function placeToast(t){
+  t.style.top = ""; t.style.bottom = "";
+  if(document.body.classList.contains("tut-top")) return;
+  const r = el => { const e = typeof el === "string" ? document.querySelector(el) : el; if(!e || e.hidden) return null; const b = e.getBoundingClientRect(); return b.width || b.height ? b : null; };
+  const h = t.offsetHeight, vh = window.innerHeight;
+  const bottomAt = px => { t.style.top = "auto"; t.style.bottom = Math.max(12, Math.round(px)) + "px"; };
+  const nav = r(".nav"), aboveNav = () => bottomAt((nav ? vh - nav.top : 0) + 12);
+  const sh = $("sheet");
+  if(sh && sh.classList.contains("open")){
+    const card = r("#sheet .card");
+    if(card && card.top >= h + 16){ t.style.top = Math.round((card.top - h) / 2) + "px"; return; }
+    bottomAt(16); return;
+  }
+  const game = $("scrGame");
+  if(game && !game.hidden){
+    const list = $("gmList");
+    if(list && !list.hidden){ aboveNav(); return; }
+    const y = Math.max(...[r(".hud"), r("#gmToggle")].filter(Boolean).map(b => b.bottom), 0);
+    if(y && y + h + 8 < vh * 0.6){ t.style.top = Math.round(y + 8) + "px"; return; }
+  }
+  aboveNav();
+}
+function toast(msg){
+  const t = $("toast"); t.textContent = msg;
+  try{ placeToast(t); }catch(_){}
+  t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), toastMs(msg));
+  if(!t._tap){ t._tap = true; t.addEventListener("click", () => { clearTimeout(t._h); t.classList.remove("show"); }); }
+}
 
 // ---- иконки предметов ----
 function icon(id, g){
