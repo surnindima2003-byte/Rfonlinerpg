@@ -294,5 +294,36 @@ class Market(unittest.TestCase):
         self.assertIn("MK_CATS.filter(([k]) => k === \"all\" || k === mkCat || cats[k])", GAME)
 
 
+class ReadableText(unittest.TestCase):
+    """Текст не обрезан и не просвечивает: подписи отсека поддержки в две строки, чат на сплошном фоне."""
+    def test_bay_text_two_lines(self):
+        css = _line(".bslot .btx i{")
+        self.assertIn("-webkit-line-clamp:2", css)
+        self.assertNotIn("white-space:nowrap", css)
+
+    def test_chat_is_opaque(self):
+        css = _line(".chatpanel{position:absolute")
+        self.assertNotIn("rgba(", css.split("background:")[1].split(";")[0])
+
+
+class ProfileAndSeason(unittest.TestCase):
+    """«Звук» → «Настройки»; в сезоне две прогрессии подписаны по-разному: очки сезона и опыт пропуска."""
+    def test_settings_tab_name(self):
+        self.assertIn('data-ptab="sound">Настройки</button>', GAME)
+        self.assertNotIn('data-ptab="sound">Звук</button>', GAME)
+        self.assertIn("@media (max-width:400px){.ptabs{padding:0 2px}", GAME)       # пять вкладок без прокрутки
+
+    def test_season_points_only_where_they_count(self):
+        fn = GAME[GAME.index("function renderSeason(){"):GAME.index("openSeason = function(){")]
+        self.assertIn('${pass ? "" : `<div><small>Очки сезона</small>', fn)          # на вкладке пропуска очков нет
+        self.assertIn('["pass", "Пропуск"]', fn)
+        self.assertIn("Очки сезона — за задания.", fn)
+        p = GAME[GAME.index("function openSeason(){"):GAME.index("// ===================== СОБЫТИЯ")]
+        self.assertIn("Уровень пропуска", p)
+        self.assertIn("Опыт пропуска", p)
+        self.assertNotIn("<small>Опыт сезона</small>", GAME)
+        self.assertIn('toast("Уровень пропуска: " + now)', GAME)
+
+
 if __name__ == "__main__":
     unittest.main()
