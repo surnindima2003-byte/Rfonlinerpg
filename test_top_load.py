@@ -1,4 +1,5 @@
-"""Рейтинг игроков и гильдий не читает сохранения целиком и строится не чаще раза в TOP_TTL секунд.
+"""Нагрузка: рейтинг игроков и гильдий не читает сохранения целиком и строится не чаще раза в TOP_TTL секунд;
+при запуске игры сохранение загружается один раз.
 
 Раньше одно открытие рейтинга читало 100 строк game_saves со всей колонкой data (до ~30 МБ).
 Запуск: python -m unittest test_top_load
@@ -64,6 +65,16 @@ class Cache(unittest.TestCase):
         ns["_top_cache"]["guilds"] = (time.time() - ns["TOP_TTL"] - 1, ["old"])
         self.assertEqual(asyncio.run(ns["_top_cached"]("guilds", build)), ["list"])
         self.assertEqual(len(built), 2)
+
+
+class OneLoadOnStart(unittest.TestCase):
+    """При запуске игры сохранение загружается один раз (раньше метка тестового сервера просила его второй раз)."""
+    def test_single_state_load(self):
+        game = (ROOT / "game.html").read_text(encoding="utf-8")
+        self.assertEqual(game.count('"/api/state/load"'), 1)
+        on = game[game.index("function onLoaded(r)"):game.index("loadState();", game.index("function onLoaded(r)"))]
+        self.assertIn("showEnvBadge(r.env)", on)
+        self.assertIn("function showEnvBadge(env)", game)
 
 
 if __name__ == "__main__":

@@ -4973,7 +4973,8 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
       localStorage.setItem("mw-epoch", r.epoch); sessionStorage.removeItem("mw-synced");
       location.reload(); return;
     }
-    NET.admin = window.NET_ADMIN = !!r.admin; NET.id = r.tg.id; NET._ready();
+    NET.admin = window.NET_ADMIN = !!r.admin; NET.id = r.tg.id; NET.env = r.env; NET._ready();
+    if(typeof showEnvBadge === "function") showEnvBadge(r.env);
     const srv = r.save;
     // на сервере прогресс новее (например, с другого телефона) — берём его
     // или на сервере был крафт, которого нет на телефоне: его сохранения сервер всё равно не примет
@@ -10388,10 +10389,12 @@ new MutationObserver(() => {
 }).observe($("shBody"), {childList:true, subtree:true});
 
 // ---- метка тестового сервера ----
-if(typeof NET !== "undefined" && NET.ready) NET.ready.then(async () => {
-  try{ const r = await NET.api("/api/state/load", {}); if(r && r.env && r.env !== "production"){
-    const b = document.createElement("div"); b.className = "envbadge"; b.textContent = "ТЕСТОВЫЙ СЕРВЕР"; document.body.appendChild(b); } }catch(e){}
-});
+// Имя окружения приходит в ответе на загрузку сохранения (onLoaded). Раньше метка запрашивала /api/state/load
+// второй раз: при каждом запуске игры сервер дважды читал и отправлял всё сохранение (до 300 КБ).
+function showEnvBadge(env){
+  if(!env || env === "production" || document.querySelector(".envbadge")) return;
+  const b = document.createElement("div"); b.className = "envbadge"; b.textContent = "ТЕСТОВЫЙ СЕРВЕР"; document.body.appendChild(b);
+}
 // ===================== ОБУЧЕНИЕ НОВИЧКА =====================
 // Наставник Искра ведёт по трём главам: ангар → первый бой → развитие.
 // Подсветка кнопок, стрелки в мире и на краю экрана, награда за каждый шаг (только один раз на аккаунт).
