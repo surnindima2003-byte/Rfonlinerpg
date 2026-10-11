@@ -1,5 +1,6 @@
 """Баги, которые видят игроки: продажа торговцу не съедает учтённые сферы, вкладка после вайпа не теряет
-прогресс молча, «Сессия устарела» не показывается вытесненной вкладке, в призовом рейтинге нет сырого ника Telegram.
+прогресс молча, «Сессия устарела» не показывается вытесненной вкладке, в призовом рейтинге нет сырого ника Telegram,
+баланс GRAM показан одинаково везде.
 
 Запуск: python -m unittest test_player_bugs
 Проверка продажи запускает настоящую функцию из game.html в node (если node нет — этот тест пропускается).
@@ -105,6 +106,38 @@ class SeasonNames(unittest.TestCase):
         finally:
             if sys.modules.get("webserver") is None:
                 sys.modules.pop("webserver", None)
+
+
+class GramFormat(unittest.TestCase):
+    """Баланс GRAM: один формат (запятая, округление вниз) в HUD, магазине и кошельке."""
+    def run_js(self, expr):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        a = GAME.index("function gramShow(")
+        fn = GAME[a:GAME.index("\nconst gemSvg", a)]
+        out = subprocess.run([node, "-e", fn + "\nconsole.log(JSON.stringify(" + expr + "));"], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout)
+
+    def test_same_digits_everywhere(self):
+        hud, wallet = self.run_js("[gramShow(12.3456), gramHtml(12.3456)]")
+        self.assertEqual(hud, "12,34")                      # вниз, а не 12,35
+        self.assertTrue(wallet.startswith("12<span>,3456</span>"), wallet)
+
+    def test_float_edge_and_thousands(self):
+        r = self.run_js("[gramShow(0.29), gramShow(0.3), gramShow(1234.5), gramShow(5, 4), gramHtml(0.29)]")
+        self.assertEqual(r[0], "0,29")
+        self.assertEqual(r[1], "0,3")
+        self.assertEqual(r[2].replace("\u00a0", " "), "1 234,5")
+        self.assertEqual(r[3], "5")
+        self.assertTrue(r[4].startswith("0<span>,2900</span>"), r[4])
+
+    def test_all_balance_spots_use_it(self):
+        self.assertIn('hudText("hGram", typeof gramBal === "function" ? gramShow(gramBal())', GAME)
+        self.assertIn("Баланс: <b>${gramShow(bal)}</b>", GAME)
+        self.assertIn("Доступно: <b style=\"display:inline\">${gramShow(Wl.gram, 4)}", GAME)
+        self.assertNotIn("toFixed(7)", GAME[GAME.index("function gramHtml"):GAME.index("const gemSvg")])
 
 
 if __name__ == "__main__":

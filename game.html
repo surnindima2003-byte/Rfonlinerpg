@@ -3307,7 +3307,7 @@ function hud(){
   // крупные суммы в плашке — коротко (280K, 1,4M), чтобы число не обрезалось
   const cn = v => v >= 1e6 ? (Math.floor(v/1e5)/10).toString().replace(".", ",") + "M" : v >= 1e5 ? Math.floor(v/1e3) + "K" : nf(v);
   hudText("hScrap", cn(S.scrap)); hudText("hCores", cn(S.cores));
-  hudText("hGram", typeof gramBal === "function" ? (Math.floor(gramBal()*100)/100).toLocaleString("ru-RU") : "0");
+  hudText("hGram", typeof gramBal === "function" ? gramShow(gramBal()) : "0");
   if(now - hudBmT > 0.5){ hudBmT = now; hudText("hBM", "БМ " + nf(combatPower())); }          // боевая мощь — дорогой подсчёт, 2 раза в секунду хватает
   hudText("kitCount", String(have("kit_s") + have("kit_l")));
   const cd = (id, v, max) => { const k = `scaleY(${Math.round(Math.max(0, Math.min(1, v/max))*50)/50})`; if(HUDC[id + ":cd"] !== k){ HUDC[id + ":cd"] = k; $(id).querySelector(".cd").style.transform = k; } };
@@ -4079,9 +4079,16 @@ let pTab = "wallet", depo = null;   // depo: активная заявка на 
 const WITHDRAW_FEE = 0.10, WITHDRAW_MIN = 1;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+// Баланс GRAM везде показывается одинаково: с запятой и с округлением ВНИЗ (не больше, чем есть на счёте).
+// Раньше было три способа: HUD 12,34 (вниз), магазин 12,35 (вверх — «есть» деньги, которых нет), кошелёк 12.3456000.
+// d — знаков после запятой (HUD и магазин — 2, кошелёк и вывод — 4); 1e-6 гасит ошибку вида 0.29*100 = 28.999…
+function gramShow(v, d = 2){
+  const k = 10 ** d, x = Math.floor((+v || 0) * k + 1e-6) / k;
+  return x.toLocaleString("ru-RU", {minimumFractionDigits:0, maximumFractionDigits:d});
+}
 function gramHtml(v){
-  const [i, d] = (Math.round(v*1e7)/1e7).toFixed(7).split(".");
-  return `${Number(i).toLocaleString("ru-RU")}<span>.${d}</span><em>GRAM</em>`;
+  const k = 1e4, x = Math.floor((+v || 0) * k + 1e-6), i = Math.floor(x / k), d = String(x % k).padStart(4, "0");
+  return `${i.toLocaleString("ru-RU")}<span>,${d}</span><em>GRAM</em>`;
 }
 const gemSvg = `<svg viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 12L2 9z" fill="#5FD4E8"/><path d="M2 9h20M8 3l4 18M16 3l-4 18" stroke="#1B6F80" stroke-width="1" fill="none"/></svg>`;
 const icoIn = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>`;
@@ -4219,7 +4226,7 @@ setInterval(tickMemo, 1000);
 function withdrawSheet(){
   openSheet("Вывод GRAM", "На свой TON-кошелёк", () => {
     body().innerHTML = `
-      <div class="note warn">Доступно: <b style="display:inline">${(Math.round(Wl.gram*1e4)/1e4).toLocaleString("ru-RU")} GRAM</b> · комиссия ${WITHDRAW_FEE*100}%</div>
+      <div class="note warn">Доступно: <b style="display:inline">${gramShow(Wl.gram, 4)} GRAM</b> · комиссия ${WITHDRAW_FEE*100}%</div>
       <label class="flabel" for="wdAmt">Сумма вывода, минимум ${WITHDRAW_MIN} GRAM</label><input class="field" id="wdAmt" type="number" inputmode="decimal" min="${WITHDRAW_MIN}" step="0.1" placeholder="Сумма GRAM">
       <div class="flabel" id="wdGet" style="margin:-4px 0 10px"></div>
       <label class="flabel" for="wdAddr">TON-адрес получателя</label><input class="field" id="wdAddr" placeholder="UQ…" value="${esc(Wl.connected ? Wl.address : "")}" autocomplete="off">
@@ -4267,7 +4274,7 @@ $("shBody").addEventListener("click", e => {
   else if(a === "submit"){
     const amt = Math.round((parseFloat($("wdAmt").value) || 0)*1e4)/1e4, addr = $("wdAddr").value.trim();
     if(amt < WITHDRAW_MIN){ toast("Минимальный вывод " + WITHDRAW_MIN + " GRAM"); return; }
-    if(amt > Wl.gram){ toast("На счёте только " + (Math.round(Wl.gram*1e4)/1e4) + " GRAM"); return; }
+    if(amt > Wl.gram){ toast("На счёте только " + gramShow(Wl.gram, 4) + " GRAM"); return; }
     if(!/^(UQ|EQ|0:)[\w\-]{20,}$/.test(addr)){ toast("Проверь TON-адрес: он начинается с UQ или EQ"); return; }
     Wl.gram -= amt; addOp("Вывод на кошелёк", -amt, "на проверке"); closeSheet(); toast("Заявка на вывод создана"); renderProfile();
   }
@@ -8191,7 +8198,7 @@ function renderShop(){
   const tabs = [["packs", "Паки"], ["dops", "Допы"], ["boost", "Усиление"], ["drones", "Дроны"], ["runes", "Руны"], ["artifacts", "Артефакты"], ["wings", "Крылья"], ["cloaks", "Плащи"]];
   const list = PACKS.filter(pk => pk.tab === shopTab);
   body().innerHTML = `<div class="seg shop-tabs">${tabs.map(([k, n]) => `<button type="button" data-shtab="${k}" aria-pressed="${shopTab === k}">${n}</button>`).join("")}</div>
-    <div class="gbal">Баланс: <b>${gramF(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
+    <div class="gbal">Баланс: <b>${gramShow(bal)}</b> GRAM <button class="act alt" type="button" data-shop="topup">Пополнить</button></div>
     ${shopTab === "cloaks" ? `<p class="hint">Плащ висит за спиной робота, развевается на бегу и виден всем игрокам. Главный бонус — защита. Покупка учтена сервером: плащ можно перепродать на маркете</p>` : ""}${shopTab === "wings" ? `<p class="hint">Крылья видны за спиной робота всем игрокам и дают скорость и бонус к характеристикам. Покупка учтена сервером: крылья можно перепродать на маркете</p>` : ""}${shopTab === "artifacts" ? `<p class="hint">Артефакт даёт постоянный бонус к характеристикам, надет может быть один. Покупка учтена сервером: артефакт можно перепродать на маркете</p>` : shopTab === "runes" ? `<p class="hint">Руны из паков и Мастерской учтены сервером: их можно продать на маркете за GRAM. Вынутую из вещи руну тоже можно продать</p>` : shopTab === "drones" ? `<p class="hint">Дрон летает рядом, даёт бонус к характеристикам и сам собирает лут. Покупка навсегда, активен один дрон</p>` : ""}
     ${shopSaleOn() && G.sale.tabs.includes(shopTab) ? `<div class="sale-bar"><span class="sale-tag">−${G.sale.pct}%</span> Распродажа · конец: ${saleEndText()} <b id="saleCd">${saleLeftText()}</b></div>` : ""}
     ${list.map(pk => { const done = (pk.once && S.bought[pk.once + (pk.once === "season" ? seasonId() : "")]) || (pk.drone && droneOwned(pk.drone)), price = packPrice(pk), low = bal < price, off = price < pk.base;
