@@ -195,7 +195,7 @@ class PortalTouch(unittest.TestCase):
         a = GAME.index("const PORTAL_KINDS = ")
         block = GAME[a:GAME.index("// окно портала выхода", a)]
         js = "\n".join([
-            "let opened = [], sheetOpen = false, firing = false, auto = false, now = 10, locKey = 'scrapfields';",
+            "let opened = [], sheetOpen = false, firing = false, auto = false, now = 10, locKey = 'scrapfields', running = true, paused = false;",
             "const S = {pvpT: 0}, npcs = [{kind:'back', x:1000, y:1060}];",
             "const LOCS = {lobby:{safe:true}, scrapfields:{}};",
             "let p = {x:1000, y:1000, dead:false};",
@@ -376,6 +376,25 @@ class DeathAndSeasonPortal(unittest.TestCase):
         self.assertIn('data-go="season1"', fn)
         self.assertIn('data-shop="season"', fn)
         self.assertNotIn("openShop()", fn)                         # касание не открывает магазин само
+
+
+class NoAfkUnderUi(unittest.TestCase):
+    """Открытое окно или другая вкладка не ставят мир на паузу: мобы бьют, реген идёт, АВТО воюет."""
+    def test_loop_always_updates_world(self):
+        a = GAME.index("function loop(ts){")
+        fn = GAME[a:GAME.index("\n}\n", a)]
+        self.assertIn("if(p) update(dt);", fn)
+        self.assertNotIn("if(!paused) update(dt);", fn)
+
+    def test_manual_control_blocked_under_ui(self):
+        a = GAME.index("function update(dt){")
+        fn = GAME[a:a + 3000]
+        self.assertIn("const ctl = running && !paused;", fn)
+        self.assertIn("let mx = ctl ? stick.x : 0, my = ctl ? stick.y : 0;", fn)
+
+    def test_auto_skills_work_under_window(self):
+        self.assertIn("function autoTurn(fn){", GAME)
+        self.assertGreaterEqual(GAME.count("autoTurn(() =>"), 3)            # Жнец, боевые умения, Ремонтник
 
 
 if __name__ == "__main__":

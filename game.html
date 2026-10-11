@@ -2120,8 +2120,8 @@ const save = () => { try{ localStorage.setItem("mw-save-v2", JSON.stringify(S));
 // ---- зелья усиления: действие хранится как время окончания (переживает перезапуск игры) ----
 // авто-ремкомплект: включается в карточке ремкомплекта, срабатывает ниже 35% прочности
 function renderKitBtn(){ const b = $("skKit"); if(b) b.classList.toggle("kauto", !!S.kitAuto); }
-setInterval(() => {
-  if(typeof S === "undefined" || !S.kitAuto || typeof p === "undefined" || !p || p.dead || paused) return;
+setInterval(() => {      // работает и под открытым окном: мир не стоит на паузе, мобы бьют и там
+  if(typeof S === "undefined" || !S.kitAuto || typeof p === "undefined" || !p || p.dead) return;
   if(S.hp < stat().maxhp*0.35 && !(p.kitCd > 0) && (have("kit_s") || have("kit_l"))) useKit();
 }, 300);
 setTimeout(() => { if(typeof renderKitBtn === "function") renderKitBtn(); }, 1500);
@@ -2598,6 +2598,8 @@ function setAuto(on){
   auto = !!on; $("skAuto").classList.toggle("on", auto);
   if(!auto){ autoS.tgt = null; autoS.stuckT = 0; }
 }
+// ход АВТО под открытым окном: paused ставит окно (блок ручного ввода), а не бой — умения АВТО применяются и там
+function autoTurn(fn){ if(!paused) return fn(); paused = false; try{ return fn(); } finally { paused = true; } }
 function renderAutoBtn(){ $("skAuto").classList.toggle("locked", !autoAllowed()); }
 $("skAuto").addEventListener("click", () => {
   if(!auto && !autoAllowed()){ toast("🔒 АВТО открывается с VIP " + AUTO_VIP + " — смотри вкладку VIP в меню"); Sfx.play("ui"); return; }
@@ -2650,7 +2652,7 @@ function portalTouch(){
   const np = p && !p.dead ? nearestPortal() : null;
   if(!np || np.d > PORTAL_ARM){ PORTAL.armed = true; return; }
   if(np.d > PORTAL_TOUCH || !PORTAL.armed) return;
-  if($("sheet").classList.contains("open")) return;
+  if(!running || paused || $("sheet").classList.contains("open")) return;   // другая вкладка или окно поверх
   const safe = LOCS[locKey] && LOCS[locKey].safe;                                  // ангар: драться не с кем
   if(!safe && (firing || auto || S.pvpT > now)) return;
   PORTAL.armed = false;
@@ -2681,8 +2683,20 @@ function useKit(){
   if(S.hp >= mh){ toast("Прочность и так полная"); return; }
   const id = have("kit_s") ? "kit_s" : have("kit_l") ? "kit_l" : null;
   if(!id){ toast("Нет ремкомплектов. Купи у торговца в ангаре"); return; }
+  const ki = S.inv.map(x => x.id).lastIndexOf(id), n0 = S.inv.length;
   removeItem(S.inv, id, 1); p.kitCd = 2;
   const h = ITEMS[id].heal; S.hp = Math.min(mh, S.hp + h); addText(p.x, p.y-34, "+" + h, "#7BC98A");
+  invChangedUnderUi(S.inv.length < n0 ? ki : -1);
+}
+// авто-ремкомплект может сработать, пока открыта сумка или вкладка «Персонаж»: выбор держим на той же вещи
+// (кончилась стопка — номера ниже сдвинулись) и перерисовываем, чтобы кнопки не указывали на чужую ячейку
+function invChangedUnderUi(gone){
+  if(gone >= 0){
+    if(typeof bagSel === "number"){ if(bagSel === gone) bagSel = null; else if(bagSel > gone) bagSel--; }
+    if(typeof cSel === "number"){ if(cSel === gone) cSel = null; else if(cSel > gone) cSel--; }
+  }
+  if(typeof sheetRender !== "undefined" && sheetRender === renderBag) renderBag();
+  if(!$("scrChar").hidden && typeof renderChar === "function") renderChar();
 }
 
 // ---- механика ----
@@ -2725,6 +2739,7 @@ function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy =
     $("death").innerHTML = `<div class="death-box">Робот уничтожен<small>возврат в ангар…</small>` +
       (lose > 0 ? `<small class="death-loss">Ремонт: −${lose.toLocaleString("ru-RU")} лома (${Math.round(DEATH_SCRAP_PCT*100)}%)</small>` : "") + `</div>`;
     $("death").classList.add("show");
+    if(!running || paused) toast("Твой робот уничтожен — возврат в ангар");   // экран боя скрыт окном или вкладкой
   }
 }
 function killEnemy(e){
@@ -2769,9 +2784,14 @@ function update(dt){
   p.fireCd -= dt; p.dashCd = Math.max(0, p.dashCd-dt); p.kitCd = Math.max(0, p.kitCd-dt); p.inv -= dt; p.flash -= dt;
   if(S.hp > st.maxhp) S.hp = st.maxhp;
 
-  let mx = stick.x, my = stick.y;
-  if(keys.KeyW || keys.ArrowUp) my -= 1; if(keys.KeyS || keys.ArrowDown) my += 1;
-  if(keys.KeyA || keys.ArrowLeft) mx -= 1; if(keys.KeyD || keys.ArrowRight) mx += 1;
+  // ctl — игрок может управлять роботом: открыт экран боя и поверх нет окна. Иначе мир живёт, а робот стоит
+  // (АВТО при этом сам подходит к цели и бьёт — как и без окна).
+  const ctl = running && !paused;
+  let mx = ctl ? stick.x : 0, my = ctl ? stick.y : 0;
+  if(ctl){
+    if(keys.KeyW || keys.ArrowUp) my -= 1; if(keys.KeyS || keys.ArrowDown) my += 1;
+    if(keys.KeyA || keys.ArrowLeft) mx -= 1; if(keys.KeyD || keys.ArrowRight) mx += 1;
+  }
   let ml = Math.hypot(mx,my);
   // мёртвая зона у центра стика, полная скорость уже с половины хода — как в эталоне
   const kb = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
@@ -3496,14 +3516,20 @@ function loop(ts){
   // и у тающих кругов радиус уходил в минус (на iPhone это ошибка IndexSizeError)
   const raw = ts - last, dt = Math.max(0, Math.min(0.05, raw/1000)); last = ts;
   gfxWatch(raw);
+  // мир не встаёт на паузу: пока открыто окно (сумка, магазин…) или другая вкладка, мобы бьют, прочность и CP
+  // восстанавливаются, АВТО воюет. Раньше update() здесь не вызывался — игрок «уходил в АФК».
+  // Под окном и на других вкладках не принимается только ручное управление роботом (см. ctl в update).
+  const t0 = DBG.on ? performance.now() : 0;
+  if(p) update(dt);
   if(running && vw > 0){
-    const t0 = DBG.on ? performance.now() : 0;
-    if(!paused) update(dt);
     const t1 = DBG.on ? performance.now() : 0;
-    drawDt = paused ? 0 : dt; draw(ts/1000); hud();
+    drawDt = dt; draw(ts/1000); hud();
     if(DBG.on) dbgFrame(raw, t1 - t0, performance.now() - t1);
-    saveTimer += dt; if(saveTimer > 3){ saveTimer = 0; save(); }
+  } else if(typeof CB !== "undefined" && CB.fx.length){
+    // экран боя скрыт и не рисуется: вспышки умений АВТО гасим здесь, иначе они копились бы до возврата
+    for(const f of CB.fx) f.life -= dt; CB.fx = CB.fx.filter(f => f.life > 0);
   }
+  saveTimer += dt; if(saveTimer > 3){ saveTimer = 0; save(); }
   requestAnimationFrame(loop);
 }
 // ===================== ПАНЕЛЬ ОТЛАДКИ (админы и модераторы) =====================
@@ -10297,9 +10323,9 @@ const ECHO_PVP_RANGE = 260, PVP_STEAL_K = 0.3;
 }
 // АВТО: лечащее умение (Энергопоглощение Жнеца) применяется сразу по откату, когда есть цель
 setInterval(() => {
-  if(typeof auto === "undefined" || !auto || !p || p.dead || paused || !p.target) return;
+  if(typeof auto === "undefined" || !auto || !p || p.dead || !p.target) return;
   const C = clsOf(S.cls); if(!C) return;
-  C.skills.forEach((sk, i) => { if(sk.buff === "steal" && !(CB.cd[i] > 0)) useSkill(i); });
+  autoTurn(() => C.skills.forEach((sk, i) => { if(sk.buff === "steal" && !(CB.cd[i] > 0)) useSkill(i); }));
 }, 400);
 // ===================== НОВЫЕ КЛАССЫ: ПРИЗРАК И ГЛИФОНОСЕЦ =====================
 // Иконки умений: объёмный металл, светящаяся энергия с ореолом, блики — в стиле иконок первых классов
@@ -10623,7 +10649,7 @@ setInterval(() => { const el = $("hTk"); if(el && typeof ticketActive === "funct
   const AUTO_SK = ["strike", "aoe", "volley", "burst", "leap", "phase", "siren", "gravity", "chain"];
   let autoSkT = 0;
   setInterval(() => {
-    if(typeof auto === "undefined" || !auto || !p || p.dead || paused || !p.target || locKey === "lobby") return;
+    if(typeof auto === "undefined" || !auto || !p || p.dead || !p.target || locKey === "lobby") return;
     if(performance.now() < autoSkT) return;
     const C = clsOf(S.cls); if(!C) return;
     const t = p.target, d = Math.hypot(t.x - p.x, t.y - p.y);
@@ -10632,7 +10658,7 @@ setInterval(() => { const el = $("hTk"); if(el && typeof ticketActive === "funct
       if(CB.cd[i] > 0 || !AUTO_SK.includes(s.type)) continue;
       const reach = s.type === "aoe" || s.type === "siren" ? s.radius + 20 : s.type === "leap" || s.type === "phase" ? (s.dist || 300) : s.type === "gravity" ? 260 : classParams().range + stat().range + 60;
       if(d > reach) continue;
-      useSkill(i); autoSkT = performance.now() + 700; break;
+      autoTurn(() => useSkill(i)); autoSkT = performance.now() + 700; break;
     }
   }, 250);
 }
@@ -10664,7 +10690,7 @@ function wbHit(mult){
   Sfx.play(crit ? "crit" : "shot"); return true;
 }
 setInterval(() => {
-  if(!wbOn() || !p || p.dead || paused || !(firing || auto)) return;
+  if(!wbOn() || !p || p.dead || !(firing || auto)) return;   // АВТО бьёт и под окном; «УДАР» окно само отпускает
   if(performance.now() < WB.hitT) return;
   if(wbHit(1)) WB.hitT = performance.now() + 1000/classParams().rate/(stat().rate || 1);
 }, 100);
@@ -10834,7 +10860,7 @@ function twHit(mult){
   return true;
 }
 setInterval(() => {
-  if(locKey !== "tower" || !TW.run || !p || p.dead || paused || !(firing || auto) || performance.now() < TW.hitT) return;
+  if(locKey !== "tower" || !TW.run || !p || p.dead || !(firing || auto) || performance.now() < TW.hitT) return;   // АВТО бьёт и под окном
   if(twHit(1)) TW.hitT = performance.now() + 1000/classParams().rate/(stat().rate || 1);
 }, 100);
 {
@@ -14675,8 +14701,8 @@ setInterval(() => {
 }
 // описание умений Ремонтника в окне навыков — теперь в общем skillText (там же все остальные классы)
 // АВТО для Ремонтника: лечит раненых, ставит щит, бросает рой в бою и бьёт Разрядником
-setInterval(() => {
-  if(typeof auto === "undefined" || !auto || S.cls !== "medic" || !p || p.dead || paused) return;
+setInterval(() => autoTurn(() => {      // и под открытым окном (см. autoTurn)
+  if(typeof auto === "undefined" || !auto || S.cls !== "medic" || !p || p.dead) return;
   const C = clsOf(S.cls), idx = ty => C.skills.findIndex(k => k.type === ty), ready = i => i >= 0 && !(CB.cd[i] > 0);
   // в бою с пилотами себя лечим и по CP: они принимают удары первыми, а лечение их восстанавливает
   const st0 = stat(), selfFr = medInPvp() ? (S.hp + (S.cp || 0))/Math.max(1, st0.maxhp + st0.maxcp) : medFrac("self");
@@ -14686,7 +14712,7 @@ setInterval(() => {
   if(low < 0.65 && ready(iM)) return useSkill(iM);
   if(p.target && low < 0.85 && ready(iN)) return useSkill(iN);
   if(p.target && locKey !== "lobby" && ready(iD) && Math.hypot(p.target.x - p.x, p.target.y - p.y) < classParams().range + stat().range + 60) useSkill(iD);
-}, 400);
+}), 400);
 // ===================== ОГЛУШЕНИЕ В БОЮ С ПИЛОТАМИ =====================
 // Оглушение умением (Шоковый удар и Таран Стража, ЭМИ-волна Техноманта) длится меньше секунды, но на это время
 // робот не ездит, не бьёт и не применяет умения. «Заминка» от ударов Жнеца (rootT) только останавливает.
