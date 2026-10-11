@@ -54,7 +54,9 @@ class Caps(unittest.TestCase):
     def test_tighter_where_old_was_too_wide(self):
         hp, cp, df = pvpguard.caps(30, 0)
         self.assertLess(hp, 32_000)
-        self.assertLess(cp, 320_000)
+        # CP от прочности (×10) уже старого предела. Улучшение «CP» старый предел не учитывал вовсе, а у Стража
+        # с лучшим снаряжением (множитель прочности класса действует на итог) вместе с ним выходит чуть больше 320 000
+        self.assertLess(cp - pvpguard.CP_PER_POINT * pvpguard.points(30, 0), 320_000)
         self.assertLess(df, 4_800)
 
     def test_wider_where_old_cut_honest_players(self):

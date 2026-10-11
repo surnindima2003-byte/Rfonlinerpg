@@ -1846,7 +1846,7 @@ const TIERS = [
 const tierK = L => 1 + 0.12*L + 0.0022*L*L, tierSoft = L => 1 + 0.05*L, tierSpd = L => 1 + 0.03*L;
 // g — род для прилагательного: 0 — мужской, 1 — женский, 2 — множественное число
 const GEAR_FAM = {
-  hammer:{slot:"weapon", cls:"guard", noun:"кувалда", g:1, st:{atk:5, def:1}},
+  hammer:{slot:"weapon", cls:"guard", noun:"кувалда", g:1, st:{atk:5, def:1, crit:1}},
   blades:{slot:"weapon", cls:"reaper", noun:"клинки", g:2, st:{atk:6, crit:1}},
   rifle:{slot:"weapon", cls:"sniper", noun:"винтовка", g:1, st:{atk:6, crit:2}},
   staff:{slot:"weapon", cls:"techno", noun:"посох", g:0, st:{atk:6, hp:8}},
@@ -1959,47 +1959,54 @@ const gradeColor = g => GRADES[g||0].color;
 
 
 // ===================== КЛАССЫ =====================
-// hp/atk/def — множители базовых характеристик, speed — скорость езды, rate — атак в секунду, range — дальность атаки.
+// hp/atk/def — множители ИТОГОВЫХ прочности, атаки и брони (после снаряжения, улучшений, рун, дрона и т. д.).
+// Раньше они действовали только на базу уровня, и с ростом снаряжения роль класса растворялась: к 40 уровню у «танка»
+// Стража прочности было меньше, чем у Ремонтника. speed — скорость езды, rate — атак в секунду, range — дальность атаки.
+// pk — множитель предела урона обычного удара по пилотам (зеркало webserver.py → PVP_HIT_K, сверяет test_class_balance.py):
+// кто бьёт реже, бьёт сильнее, поэтому при упоре в предел урон в секунду у классов сопоставим, а не растёт с частотой ударов.
+// Поля умений: mult — доля атаки, cd — перезарядка, stun — оглушение мобов (сек), pstun — оглушение пилотов (сек),
+// slow/slowDur — замедление (доля и сек), heal — прочность за каждого задетого врага, buff2/v2 — второй бафф,
+// pshield — щит в бою с пилотами (−доля урона, его применяет сервер), g — прирост за уровень умения (см. SK_GROW).
 const CLASSES = {
-  guard:{name:"Страж", role:"Ближний бой", color:"#E08A4E", hp:1.6, atk:0.85, def:2.0, speed:150, rate:1.0, range:80, melee:true, skills:[
-    {id:"shock", lore:"Разряд из силового кулака парализует электронику врага.", name:"Шоковый удар", desc:"×2 урон по цели и оглушение на 3 сек", cd:18, type:"strike", mult:2, stun:3},
-    {id:"blades", lore:"Выдвижные лезвия раскручиваются вокруг корпуса и рубят всё рядом.", name:"Вихрь лезвий", desc:"Урон всем врагам в радиусе 110", cd:12, type:"aoe", mult:1.5, radius:110},
-    {id:"plating", lore:"Дополнительные бронеплиты смыкаются поверх корпуса.", name:"Броневой контур", desc:"+80% брони на 10 сек", cd:20, type:"buff", buff:"def", v:0.8, dur:10},
-    {id:"ram", lore:"Разгон на полной мощности и удар бронированным корпусом.", name:"Таран", desc:"Прыжок к цели с уроном", cd:15, type:"leap", mult:1.5, dist:320}]},
-  reaper:{name:"Жнец", role:"Ближний бой", color:"#9B7BFF", hp:1.3, atk:1.05, def:1.4, speed:165, rate:1.25, range:80, melee:true, skills:[
-    {id:"drain", lore:"Контур поглощения перекачивает энергию врага в твой реактор.", name:"Энергопоглощение", desc:"Лечение на 15% от урона в течение 10 сек", cd:28, type:"buff", buff:"steal", v:0.15, dur:10},
-    {id:"saw", lore:"Раскалённая пила описывает круг и режет корпуса врагов.", name:"Циркулярная пила", desc:"Урон всем врагам в радиусе 110", cd:12, type:"aoe", mult:1.6, radius:110},
-    {id:"overheat", lore:"Снимает ограничители реактора: больше урона, пока системы не остыли.", name:"Перегрев", desc:"+30% атаки на 6 сек", cd:20, type:"buff", buff:"atk", v:0.3, dur:6},
-    {id:"hook", lore:"Магнитный крюк притягивает робота к цели для удара.", name:"Захват", desc:"Прыжок к цели с уроном", cd:15, type:"leap", mult:1.4, dist:320}]},
-  sniper:{name:"Снайпер", role:"Дальний бой", color:"#7BC98A", hp:0.9, atk:0.9, def:0.9, speed:180, rate:1.6, range:270, melee:false, skills:[
-    {id:"volley", lore:"Система наведения распределяет заряды между ближайшими целями.", name:"Залп", desc:"Выстрел по трём ближайшим целям, −20% защиты на 5 сек", cd:6, type:"volley", n:3, mult:1},
-    {id:"burst", lore:"Короткая очередь бронебойными зарядами в одну точку.", name:"Очередь", desc:"3 быстрых выстрела по цели", cd:10, type:"burst", n:3, mult:1},
-    {id:"jet", lore:"Прыжковые двигатели выбрасывают робота из-под огня.", name:"Реактивный скачок", desc:"Рывок на 160 вперёд", cd:8, type:"dash", dist:160},
-    {id:"overclock", lore:"Разгон процессора наведения: орудие стреляет чаще.", name:"Разгон", desc:"×1.5 скорость атаки на 5 сек", cd:20, type:"buff", buff:"rate", v:0.5, dur:5}]},
-  techno:{name:"Техномант", role:"Дальний бой", color:"#5FD4E8", hp:0.8, atk:1.25, def:0.7, speed:170, rate:0.9, range:240, melee:false, skills:[
-    {id:"plasma", lore:"Сгусток перегретой плазмы прожигает броню насквозь.", name:"Плазменный шар", desc:"Снаряд с ×2 уроном", cd:5, type:"strike", mult:2, big:true},
-    {id:"emp", lore:"Электромагнитный импульс бьёт по области и выключает врагов.", name:"ЭМИ-волна", desc:"Урон в радиусе 130, оглушение на 3 сек и −20% защиты на 5 сек", cd:10, type:"aoe", mult:1.2, radius:130, stun:3},
-    {id:"field", lore:"Генератор поднимает силовой купол вокруг корпуса.", name:"Силовое поле", desc:"+50% брони и +30% атаки на 4 сек", cd:18, type:"buff", buff:"def", v:0.5, dur:4},
-    {id:"blink", lore:"Квантовый перенос мгновенно перемещает робота вперёд.", name:"Телепорт", desc:"Мгновенный перенос на 360 вперёд", cd:12, type:"dash", dist:360, instant:true}]},
+  guard:{name:"Страж", role:"Танк · ближний бой", color:"#E08A4E", hp:1.3, atk:1.0, def:1.45, speed:150, rate:1.05, range:80, melee:true, pk:0.74, skills:[
+    {id:"shock", lore:"Разряд из силового кулака парализует электронику врага.", name:"Шоковый удар", desc:"×2,5 урона по цели и оглушение на 2,5 сек (пилота — на 0,8 сек)", cd:12, type:"strike", mult:2.5, stun:2.5, pstun:0.8, g:{stun:0.1}},
+    {id:"blades", lore:"Выдвижные лезвия раскручиваются вокруг корпуса и рубят всё рядом.", name:"Вихрь лезвий", desc:"Урон всем врагам в радиусе 120 и замедление на 30% на 3 сек", cd:9, type:"aoe", mult:1.8, radius:120, slow:0.3, slowDur:3},
+    {id:"plating", lore:"Дополнительные бронеплиты смыкаются поверх корпуса.", name:"Броневой контур", desc:"+60% брони на 8 сек; в бою с пилотами — −25% входящего урона", cd:18, type:"buff", buff:"def", v:0.6, dur:8, pshield:0.25, g:{v:0.03, dur:0.2}},
+    {id:"ram", lore:"Разгон на полной мощности и удар бронированным корпусом.", name:"Таран", desc:"Прыжок к цели с уроном и оглушением на 1 сек (пилота — на 0,4 сек)", cd:13, type:"leap", mult:2, dist:320, stun:1, pstun:0.4, g:{stun:0.05}}]},
+  reaper:{name:"Жнец", role:"Боец · ближний бой", color:"#9B7BFF", hp:1.12, atk:1.05, def:1.12, speed:165, rate:1.2, range:80, melee:true, pk:1.1, skills:[
+    {id:"drain", lore:"Контур поглощения перекачивает энергию врага в твой реактор.", name:"Энергопоглощение", desc:"8 сек: 18% нанесённого урона чинит корпус, в том числе в бою с пилотами", cd:22, type:"buff", buff:"steal", v:0.18, dur:8, g:{v:0.04, dur:0.2}},
+    {id:"saw", lore:"Раскалённая пила описывает круг и режет корпуса врагов.", name:"Циркулярная пила", desc:"Урон всем врагам в радиусе 115; каждый задетый враг чинит 2% прочности", cd:11, type:"aoe", mult:1.9, radius:115, heal:0.02},
+    {id:"overheat", lore:"Снимает ограничители реактора: больше урона, пока системы не остыли.", name:"Перегрев", desc:"+25% атаки и +15% скорости атаки на 6 сек", cd:18, type:"buff", buff:"atk", v:0.25, buff2:"rate", v2:0.15, dur:6, g:{v:0.03, dur:0.2}},
+    {id:"hook", lore:"Магнитный крюк притягивает робота к цели для удара.", name:"Захват", desc:"Прыжок к цели с уроном и замедлением на 40% на 3 сек", cd:13, type:"leap", mult:1.5, dist:340, slow:0.4, slowDur:3}]},
+  sniper:{name:"Снайпер", role:"Стрелок · дальний бой", color:"#7BC98A", hp:0.9, atk:0.88, def:0.88, speed:180, rate:1.3, range:270, melee:false, pk:1.13, skills:[
+    {id:"volley", lore:"Система наведения распределяет заряды между ближайшими целями.", name:"Залп", desc:"Выстрел по трём ближайшим целям, −20% защиты на 5 сек", cd:7, type:"volley", n:3, mult:1.1},
+    {id:"burst", lore:"Короткая очередь бронебойными зарядами в одну точку.", name:"Очередь", desc:"3 быстрых выстрела по цели", cd:9, type:"burst", n:3, mult:1},
+    {id:"jet", lore:"Прыжковые двигатели выбрасывают робота из-под огня.", name:"Реактивный скачок", desc:"Рывок на 180 вперёд", cd:8, type:"dash", dist:180},
+    {id:"overclock", lore:"Разгон процессора наведения: орудие стреляет чаще.", name:"Разгон", desc:"+40% скорости атаки на 5 сек", cd:18, type:"buff", buff:"rate", v:0.4, dur:5, g:{v:0.03, dur:0.2}}]},
+  techno:{name:"Техномант", role:"Маг · дальний бой", color:"#5FD4E8", hp:0.88, atk:1.0, def:0.85, speed:170, rate:0.95, range:240, melee:false, pk:1.07, skills:[
+    {id:"plasma", lore:"Сгусток перегретой плазмы прожигает броню насквозь.", name:"Плазменный шар", desc:"Снаряд с ×2,1 урона", cd:5, type:"strike", mult:2.1, big:true, g:{mult:0.06}},
+    {id:"emp", lore:"Электромагнитный импульс бьёт по области и выключает врагов.", name:"ЭМИ-волна", desc:"Урон в радиусе 130, оглушение на 2 сек (пилота — на 0,6 сек) и −20% защиты на 5 сек", cd:10, type:"aoe", mult:1.3, radius:130, stun:2, pstun:0.6, g:{stun:0.1, mult:0.06}},
+    {id:"field", lore:"Генератор поднимает силовой купол вокруг корпуса.", name:"Силовое поле", desc:"+40% брони и +30% атаки на 5 сек; в бою с пилотами — −20% входящего урона", cd:16, type:"buff", buff:"def", v:0.4, buff2:"atk", v2:0.3, dur:5, pshield:0.2, g:{v:0.03, dur:0.2}},
+    {id:"blink", lore:"Квантовый перенос мгновенно перемещает робота вперёд.", name:"Телепорт", desc:"Мгновенный перенос на 360 вперёд", cd:11, type:"dash", dist:360, instant:true}]},
   // ===== новые классы (вторая профессия, 4 сезон) =====
-  ghost:{name:"Призрак", role:"Ближний бой · криты", color:"#FF5FA2", hp:1.0, atk:1.2, def:0.8, speed:195, rate:1.45, range:80, melee:true, skills:[
-    {id:"phase", lore:"Корпус на миг уходит в фазу и проходит сквозь врага, оставляя за собой разрез.", name:"Фазовый разрез", desc:"Проход сквозь цель с ×2,2 урона и выход за её спиной; по целям ниже 50% прочности — гарантированный крит", cd:9, type:"phase", mult:2.2, dist:300, pvpAs:"leap"},
-    {id:"echo", lore:"Голографический двойник замирает на месте и повторяет каждый твой взмах клинком.", name:"Эхо-двойник", desc:"На 6 сек на месте остаётся двойник и повторяет твои обычные удары с 50% урона", cd:22, type:"echo", v:0.5, dur:6},
-    {id:"siren", lore:"Визг глушилки срывает прицелы и выкручивает броню вокруг на минимум.", name:"Сирена помех", desc:"Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30%", cd:14, type:"siren", radius:130, mult:0.6, pvpAs:"aoe"},
-    {id:"nulltrace", lore:"Сигнатура обнуляется: сенсоры врагов видят пустое место.", name:"Нулевой след", desc:"Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит", cd:20, type:"stealth", dur:4}]},
-  glyph:{name:"Глифоносец", role:"Ближний бой · контроль", color:"#FFB347", hp:1.05, atk:0.95, def:1.1, speed:160, rate:1.1, range:95, melee:true, skills:[
-    {id:"gravity", lore:"Глиф искривляет поле, стягивает металл к центру и схлопывается.", name:"Глиф притяжения", desc:"Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×1,6 урона", cd:14, type:"gravity", radius:150, mult:1.6, pvpAs:"aoe"},
-    {id:"chain", lore:"Разряд прыгает от глифа к глифу и с каждой целью набирает силу.", name:"Цепь глифов", desc:"Разряд по 5 целям подряд, каждый следующий прыжок +15% урона", cd:10, type:"chain", n:5, mult:1.2, pvpAs:"strike"},
-    {id:"seal", lore:"Зеркальная печать возвращает удары тем, кто их нанёс.", name:"Печать отражения", desc:"5 сек: −40% входящего урона, 40% урона возвращается атакующему", cd:20, type:"buff", buff:"reflect", v:0.4, dur:5},
-    {id:"recall", lore:"Руна запоминает точку. Вызови её снова — и ты уже там, с починенным корпусом.", name:"Руна возврата", desc:"Ставит руну на 10 сек; повторное нажатие — возврат к руне и +15% прочности", cd:16, type:"recall", v:0.15}]},
+  ghost:{name:"Призрак", role:"Убийца · ближний бой", color:"#FF5FA2", hp:0.92, atk:0.88, def:0.88, speed:195, rate:1.3, range:80, melee:true, pk:1.45, skills:[
+    {id:"phase", lore:"Корпус на миг уходит в фазу и проходит сквозь врага, оставляя за собой разрез.", name:"Фазовый разрез", desc:"Проход сквозь цель с ×2,2 урона и выход за её спиной; по целям ниже 50% прочности — гарантированный крит", cd:8, type:"phase", mult:2.2, dist:300, pvpAs:"leap"},
+    {id:"echo", lore:"Голографический двойник замирает на месте и повторяет каждый твой взмах клинком.", name:"Эхо-двойник", desc:"На 6 сек на месте остаётся двойник и повторяет твои обычные удары с 50% урона", cd:20, type:"echo", v:0.5, dur:6, g:{v:0.03, dur:0.2}},
+    {id:"siren", lore:"Визг глушилки срывает прицелы и выкручивает броню вокруг на минимум.", name:"Сирена помех", desc:"Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30% на 3 сек", cd:12, type:"siren", radius:130, mult:0.8, slow:0.3, slowDur:3, pvpAs:"aoe"},
+    {id:"nulltrace", lore:"Сигнатура обнуляется: сенсоры врагов видят пустое место.", name:"Нулевой след", desc:"Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит (по пилоту — ×2,5 и крит)", cd:18, type:"stealth", dur:4, g:{dur:0.2}}]},
+  glyph:{name:"Глифоносец", role:"Контроль · ближний бой", color:"#FFB347", hp:1.12, atk:1.0, def:1.18, speed:160, rate:1.2, range:110, melee:true, pk:0.8, skills:[
+    {id:"gravity", lore:"Глиф искривляет поле, стягивает металл к центру и схлопывается.", name:"Глиф притяжения", desc:"Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×2 урона; пилота замедляет на 40% на 2 сек", cd:13, type:"gravity", radius:150, mult:2, slow:0.4, slowDur:2, pvpAs:"aoe"},
+    {id:"chain", lore:"Разряд прыгает от глифа к глифу и с каждой целью набирает силу.", name:"Цепь глифов", desc:"Разряд по 5 целям подряд, каждый прыжок +15% урона; если целей мало, до 2 разрядов возвращаются в первую цель с 50% силы", cd:9, type:"chain", n:5, mult:1.45, pvpAs:"strike"},
+    {id:"seal", lore:"Зеркальная печать возвращает удары тем, кто их нанёс.", name:"Печать отражения", desc:"5 сек: −35% урона от мобов, 40% их урона возвращается атакующему; в бою с пилотами — −25% входящего урона", cd:18, type:"buff", buff:"reflect", v:0.35, dur:5, rf:0.4, pshield:0.25, g:{v:0.02, dur:0.2}},
+    {id:"recall", lore:"Руна запоминает точку. Вызови её снова — и ты уже там, с починенным корпусом.", name:"Руна возврата", desc:"Ставит руну на 10 сек; повторное нажатие — возврат к руне и +12% прочности", cd:16, type:"recall", v:0.12, g:{v:0.04}}]},
   // ===== Ремонтник: чистый лекарь. Слабый урон, лечение по % прочности цели, щит и облако нанитов =====
-  medic:{name:"Ремонтник", role:"Поддержка · лечение", color:"#6EE7A8", hp:1.1, atk:0.7, def:1.1, speed:170, rate:1.0, range:230, melee:false, skills:[
-    {id:"mend", lore:"Сварочный луч стягивает трещины в броне и перезапускает повреждённые узлы.", name:"Ремонтный луч", desc:"Чинит выбранного союзника на 16% его прочности; без выбора — самого раненого рядом (или тебя). По целям ниже 40% прочности — сильнее", cd:7, type:"mend", v:0.16, dist:380},
-    {id:"nanoswarm", lore:"Облако нанороботов оседает на корпусах и латает их, пока не кончится заряд.", name:"Рой нанитов", desc:"Облако на 6 сек в радиусе 150: тебе и союзникам внутри +3,5% прочности в секунду", cd:20, type:"nanofield", v:0.035, dur:6, radius:150},
-    {id:"aegis", lore:"Генератор накидывает на цель тонкую силовую сетку, гасящую удары.", name:"Щит-контур", desc:"Союзник (или ты) получает на 30% меньше урона 5 сек, работает и в PvP", cd:18, type:"shieldcast", v:0.3, dur:5, dist:380},
-    {id:"surge", lore:"Излучатель на миг меняет полярность: энергия врага уходит на ремонт своих.", name:"Разрядник", desc:"Разряд по врагу ×1,5 урона; 50% нанесённого урона чинит самого раненого союзника рядом или тебя", cd:8, type:"siphon", mult:1.5, v:0.5, pvpAs:"strike"}]}
+  medic:{name:"Ремонтник", role:"Поддержка · лечение", color:"#6EE7A8", hp:1.05, atk:1.0, def:1.05, speed:170, rate:1.0, range:230, melee:false, pk:0.88, skills:[
+    {id:"mend", lore:"Сварочный луч стягивает трещины в броне и перезапускает повреждённые узлы.", name:"Ремонтный луч", desc:"Чинит выбранного союзника на 16% его прочности; без выбора — самого раненого рядом (или тебя). По целям ниже 40% прочности — сильнее", cd:7, type:"mend", v:0.16, dist:380, g:{v:0.03}},
+    {id:"nanoswarm", lore:"Облако нанороботов оседает на корпусах и латает их, пока не кончится заряд.", name:"Рой нанитов", desc:"Облако на 6 сек в радиусе 150: тебе и союзникам внутри +3,5% прочности в секунду", cd:20, type:"nanofield", v:0.035, dur:6, radius:150, g:{v:0.03, dur:0.2}},
+    {id:"aegis", lore:"Генератор накидывает на цель тонкую силовую сетку, гасящую удары.", name:"Щит-контур", desc:"Союзник (или ты) получает на 30% меньше урона 5 сек, работает и в PvP", cd:16, type:"shieldcast", v:0.3, dur:5, dist:380, g:{v:0.02, dur:0.2}},
+    {id:"surge", lore:"Излучатель на миг меняет полярность: энергия врага уходит на ремонт своих.", name:"Разрядник", desc:"Разряд по врагу ×2,5 урона; 50% нанесённого урона чинит самого раненого союзника рядом или тебя", cd:7, type:"siphon", mult:2.5, v:0.5, pvpAs:"strike"}]}
 };
-const NO_CLASS = {hp:1, atk:1, def:1, speed:175, rate:1/0.55, range:240, melee:false};
+const NO_CLASS = {hp:1, atk:1, def:1, speed:175, rate:1/0.55, range:240, melee:false, pk:1};
 const clsOf = id => CLASSES[id] || null;
 const classParams = () => clsOf(S.cls) || NO_CLASS;
 
@@ -2041,8 +2048,13 @@ const PASSIVES = [
   {id:"longshot",  cls:"sniper", name:"Дальнобой",          per:12,  unit:"",   desc:"+12 к дальности атаки за уровень"},
   {id:"overload",  cls:"techno", name:"Перегрузка",         per:4,   unit:"%",  desc:"+4% урона умений за уровень"},
   {id:"cyclotron", cls:"techno", name:"Циклотрон",          per:2.5, unit:"%", sign:"−",  desc:"−2,5% перезарядки умений за уровень"},
-  {id:"fieldrep",  cls:"medic",  name:"Полевой ремонт",     per:4,   unit:"%",  desc:"+4% к силе лечения за уровень"},
-  {id:"triage",    cls:"medic",  name:"Сортировка раненых", per:6,   unit:"%",  desc:"+6% лечения по целям с прочностью ниже 40% за уровень"},
+  {id:"fieldrep",  cls:"medic",  name:"Полевой ремонт",     per:4,   unit:"%",  desc:"+4% к силе лечения за уровень (в бою с пилотами — только союзников)"},
+  {id:"triage",    cls:"medic",  name:"Сортировка раненых", per:6,   unit:"%",  desc:"+6% лечения по целям с прочностью ниже 40% за уровень (в бою с пилотами — только союзников)"},
+  // у Призрака и Глифоносца своих пассивок не было — теперь у каждого класса по две
+  {id:"hunter",    cls:"ghost",  name:"Охотник",            per:4,   unit:"%",  desc:"+4% урона по целям с прочностью ниже 50% за уровень"},
+  {id:"shade",     cls:"ghost",  name:"Тень",               per:2,   unit:"%",  desc:"+2% уклонения от атак мобов, −1,5% урона от пилотов и +1,5% скорости бега за уровень"},
+  {id:"monolith",  cls:"glyph",  name:"Монолит",            per:2,   unit:"%",  desc:"+2% брони и прочности за уровень"},
+  {id:"weave",     cls:"glyph",  name:"Вязь глифов",        per:4,   unit:"%",  desc:"+4% урона умений за уровень"},
   {id:"swift",     cls:null,     name:"Стремительность",    per:2,   unit:"%",  desc:"+2% скорости атаки за уровень"},
   {id:"vital",     cls:null,     name:"Живучесть",          per:3,   unit:"%",  desc:"+3% максимальной прочности за уровень"},
   {id:"fury",      cls:null,     name:"Боевой раж",         per:4,   unit:"%",  desc:"+4% силы крита за уровень"},
@@ -2131,8 +2143,13 @@ setInterval(() => {
   if(typeof S === "undefined" || !S.potAuto) return;
   for(const id in S.potAuto) if(S.potAuto[id] && ITEMS[id] && potLeft(ITEMS[id].pot) <= 0 && have(id)) usePot(id);
 }, 3000);
-// лечение восстанавливает и CP — в 10 раз больше, чем прочности (как в 4 сезоне Liberty)
-function healCP(hp){ if(!(hp > 0)) return; const mx = stat().maxcp; S.cp = Math.min(mx, (S.cp ?? mx) + hp*10); }
+// лечение восстанавливает и CP — в 10 раз больше, чем прочности (как в 4 сезоне Liberty).
+// Свой ремонт в бою с пилотами (лечение себя, вампиризм, Руна возврата, регенерация) даёт столько же CP, сколько прочности:
+// раньше самолечение ×10 перекрывало любой урон, и Ремонтник с Глифоносцем выигрывали почти любую дуэль.
+// Лечение от союзника по-прежнему восстанавливает CP ×10 — лекарь сильнее всего в группе.
+const CP_HEAL = 10, CP_HEAL_PVP_SELF = 1;
+const cpHealK = self => self && typeof inPvpFight === "function" && inPvpFight() ? CP_HEAL_PVP_SELF : CP_HEAL;
+function healCP(hp, self){ if(!(hp > 0)) return; const mx = stat().maxcp; S.cp = Math.min(mx, (S.cp ?? mx) + hp*cpHealK(self)); }
 // ===================== ДРОНЫ-КОМПАНЬОНЫ: ДАННЫЕ =====================
 // Дрон летает рядом с роботом, даёт бонус к характеристикам и сам подлетает к луту в радиусе сбора.
 // Прокачки нет: дроны отличаются видом, бонусами и радиусом. Активен один, остальные ждут в ангаре.
@@ -2249,8 +2266,8 @@ for(const list of [S.inv, S.store]) for(let i = list.length-1; i >= 0; i--){ if(
 
 function stat(){
   const C = classParams(), U = S.up || {};
-  let atk = Math.round(S.attack*C.atk) + 3*(U.atk || 0), def = Math.round(S.defense*C.def) + 3*(U.def || 0);
-  let maxhp = Math.round(S.max_hp*C.hp) + 30*(U.hp || 0), spd = 0, crit = 3 + 0.3*(U.crit || 0);
+  let atk = S.attack + 3*(U.atk || 0), def = S.defense + 3*(U.def || 0);
+  let maxhp = S.max_hp + 30*(U.hp || 0), spd = 0, crit = 3 + 0.3*(U.crit || 0);
   for(const e of Object.values(S.eq)){ if(!e) continue; const s = gearStats(e.id, e.g, e.e); atk += s.atk||0; def += s.def||0; maxhp += s.hp||0; spd += s.spd||0; crit += s.crit||0; }
   if(typeof codexBonus === "function"){ const cb = codexBonus(); atk += cb.atk; def += cb.def; maxhp += cb.hp; crit += cb.crit; }
   // комплект: 3 вещи одного поколения — +1,5% атаки за номер поколения, 6 вещей — ещё +2% прочности и +крит
@@ -2276,7 +2293,11 @@ function stat(){
   if(RB.def) def = Math.round(def*(1 + RB.def));
   crit += RB.crit || 0; spd += RB.spd || 0;
   crit += 2*pasLv("eagle");
-  spd += 0.02*pasLv("servo");
+  spd += 0.02*pasLv("servo") + 0.015*pasLv("shade");
+  // «Монолит» Глифоносца: броня и прочность
+  if(pasLv("monolith")){ const k = 1 + 0.02*pasLv("monolith"); def = Math.round(def*k); maxhp = Math.round(maxhp*k); }
+  // множители класса — на итог: роль класса (танк, стрелок, лекарь) видна на любом уровне и с любым снаряжением
+  atk = Math.round(atk*C.atk); def = Math.round(def*C.def); maxhp = Math.round(maxhp*C.hp);
   return {atk, def, maxhp, spd, crit, maxcp:maxhp*10 + 200*(U.cpup || 0),
     critPow:2 + 0.003*(U.cpow || 0) + 0.04*pasLv("fury") + (RB.cpow || 0),
     rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift") + (RB.rate || 0),
@@ -2284,15 +2305,18 @@ function stat(){
     xpUp:0.001*(U.xpup || 0) + (DB.xp || 0) + (RB.xp || 0), dropUp:0.001*(U.dropup || 0),
     dmgRed:Math.min(0.45, 0.03*pasLv("steelskin")),
     thorns:0.04*pasLv("retaliate"), steal:0.02*pasLv("hunger"), execute:0.06*pasLv("execute"),
-    range:12*pasLv("longshot"), skillDmg:0.04*pasLv("overload"),
+    range:12*pasLv("longshot"), skillDmg:0.04*pasLv("overload") + 0.04*pasLv("weave"),
+    hunt:0.04*pasLv("hunter"), dodge:Math.min(0.3, 0.02*pasLv("shade")), pvpRed:0.015*pasLv("shade"),
     cdr:Math.min(0.5, 0.02*pasLv("cold") + 0.025*pasLv("cyclotron")), loot:0.03*pasLv("looter") + (DB.scrap || 0) + (RB.scrap || 0)};
 }
 
 // Боевая мощь (БМ): одно число для сравнения пилотов и рейтинга
 function combatPower(){
-  const st = stat();
-  let bm = st.atk*12 + st.def*10 + st.maxhp*1.5 + st.crit*6 + st.spd*300 + S.level*25;
-  bm += (st.critPow - 2)*120 + (st.rate - 1)*500 + st.regen*40 + st.dmgRed*600 + st.steal*500 + st.cdr*400 + st.skillDmg*300;
+  // множители класса в боевую мощь не входят: это мера развития пилота (уровень, снаряжение, руны, кодекс, умения).
+  // Множители теперь действуют на итог, и без этого рейтинг по БМ заняли бы Стражи, а Призрак «терял» 10% мощи.
+  const st = stat(), C = classParams();
+  let bm = st.atk/C.atk*12 + st.def/C.def*10 + st.maxhp/C.hp*1.5 + st.crit*6 + st.spd*300 + S.level*25;
+  bm += (st.critPow - 2)*120 + (st.rate - 1)*500 + st.regen*40 + st.dmgRed*600 + st.steal*500 + st.cdr*400 + st.skillDmg*300 + (st.hunt || 0)*300 + (st.dodge || 0)*500;
   for(const [id, lv] of Object.entries(S.skl || {})) bm += (lv - 1)*15;
   return Math.round(bm);
 }
@@ -2680,8 +2704,13 @@ let lastHitBy = "враг";
 const DEATH_SCRAP_PCT = 0.03;
 const deathScrapLoss = () => { const L = LOCS[locKey]; return !L || L.arena || locKey === "lobby" ? 0 : Math.floor((+S.scrap || 0) * DEATH_SCRAP_PCT); };
 function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy = by;
-  const stp = stat(); dmg = Math.max(1, Math.round(dmg*(1 - stp.dmgRed)));
-  if(src && !src.dead && stp.thorns && los(p.x, p.y, src.x, src.y) && Math.random() < stp.thorns && typeof hitEnemy === "function") hitEnemy(src, stp.atk*0.5, "aoe");
+  // p._pvpHit — удар пилота (hurtByPlayer): его урон считает и сервер, поэтому здесь не режем его тем, чего сервер не знает
+  const stp = stat(), pvpHit = !!(p && p._pvpHit);
+  // «Тень» Призрака: уклонение только от мобов
+  if(src && !pvpHit && stp.dodge && !(p.dead || p.inv > 0) && Math.random() < stp.dodge){ addText(p.x, p.y - 30, "уклонение", "#FF9FCF"); return; }
+  dmg = Math.max(1, Math.round(dmg*(1 - (pvpHit ? Math.min(0.45, stp.dmgRed + (stp.pvpRed || 0)) : stp.dmgRed))));
+  // «Ответный удар» Стража. Раньше не срабатывал: обёртки hurtPlayer теряли третий аргумент (src)
+  if(src && !src.dead && stp.thorns && los(p.x, p.y, src.x, src.y) && Math.random() < stp.thorns && typeof hitEnemy === "function") hitEnemy(src, stp.atk*0.5, "reflect");
   if(p.dead || p.inv > 0) return;
   S.hp -= dmg; p.flash = 0.15; Sfx.play("hit"); addText(p.x + (Math.random()*20-10), p.y-28, "-" + dmg, "#E0694A");
   if(S.hp <= 0){
@@ -2742,8 +2771,9 @@ function update(dt){
   if(ml > 0){ mx = mx/ml*mag; my = my/ml*mag; }
   ml = mag;
   p.moving = ml > 0;
-  // замедление от ударов Стража/Жнеца в PvP, оглушение — стоим на месте
-  const speed = classParams().speed*MOVE.speedK*(1 + st.spd)*(p.slowT > now ? 1 - (p.slowP || 0) : 1)*(p.stunT > now ? 0 : 1)*(p.stealthT > now ? 1.3 : 1);
+  // замедление от ударов Стража/Жнеца в PvP; оглушение и «заминка» — стоим на месте (при оглушении ещё и не бьём)
+  const stunned = p.stunT > now;
+  const speed = classParams().speed*MOVE.speedK*(1 + st.spd)*(p.slowT > now ? 1 - (p.slowP || 0) : 1)*(stunned || p.rootT > now ? 0 : 1)*(p.stealthT > now ? 1.3 : 1);
   const ox0 = p.x, oy0 = p.y;
   if(p.vx === undefined){ p.vx = 0; p.vy = 0; }
   if(p.dashT > 0){ p.dashT -= dt; p.x += p.dx*1150*dt; p.y += p.dy*1150*dt; p.vx = p.dx*speed; p.vy = p.dy*speed; }   // после рывка едем дальше, а не встаём как вкопанные
@@ -2762,7 +2792,7 @@ function update(dt){
     p.vx = cut(p.vx, ax); p.vy = cut(p.vy, ay);
   }
   if(safeSpot(p)) S.hp = Math.min(st.maxhp, S.hp + st.maxhp*(locKey === "lobby" ? 0.15 : 0.05)*dt);
-  if(st.regen) S.cp = Math.min(st.maxcp, (S.cp ?? st.maxcp) + st.regen*10*dt);       // регенерация: +CP в 10 раз больше
+  if(st.regen) S.cp = Math.min(st.maxcp, (S.cp ?? st.maxcp) + st.regen*cpHealK(true)*dt);   // регенерация: +CP в 10 раз больше (в бою с пилотами — столько же, сколько прочности)
   if(st.regen) S.hp = Math.min(st.maxhp, S.hp + st.regen*dt);
   if(S.cp === undefined || S.cp > st.maxcp) S.cp = st.maxcp;
   if(!(S.pvpT > now)) S.cp = Math.min(st.maxcp, S.cp + st.maxcp*0.05*dt);   // CP восстанавливаются вне PvP
@@ -2811,13 +2841,13 @@ function update(dt){
     const fr = Math.hypot(foe.rx - p.x, foe.ry - p.y), fReach = fr <= RANGE + 22 && los(p.x, p.y, foe.rx, foe.ry);
     const fa = Math.atan2(foe.ry - p.y, foe.rx - p.x), fd = ((fa - p.aim + Math.PI*3) % (Math.PI*2)) - Math.PI; p.aim += fd*Math.min(1, dt*16);
     if(auto && !fReach && !p.moving && stick.id === null && fr < 520){ const ax = p.x, ay = p.y; p.x += Math.cos(fa)*speed*dt; p.y += Math.sin(fa)*speed*dt; p.ang = fa; p.moving = true; p.vx = p.vy = 0; pushOut(p, p.r); slide(p, ax, ay, p.r); guardGate(); }
-    if((firing || auto) && fReach && p.fireCd <= 0){
+    if((firing || auto) && fReach && p.fireCd <= 0 && !stunned){
       p.atkT = 0.25; p.fireCd = 1/(CP.rate*(1 + buffV("rate"))*st.rate);
       const isCrit = Math.random()*100 < st.crit, dmg = Math.round((st.atk*(1 + buffV("atk")) + Math.floor(Math.random()*3))*(isCrit ? st.critPow : 1));
       pvpStrike(foe, dmg, isCrit);
     }
   }
-  else if((firing || (auto && inReach)) && p.fireCd <= 0){
+  else if((firing || (auto && inReach)) && p.fireCd <= 0 && !stunned){
     p.atkT = 0.25;
     p.fireCd = 1/(CP.rate*(1 + buffV("rate"))*st.rate);
     if(CP.melee){
@@ -2883,7 +2913,8 @@ function updateEnemies(dt, st){
       e.ang = Math.atan2(dy,dx);
       if(d > k.range*0.85){ const sp = k.speed*(e.slowT > now ? 1 - (e.slowP || 0) : 1); vx = dx/d*sp; vy = dy/d*sp; }
       if(d <= k.range && e.cd <= 0 && los(e.x, e.y, p.x, p.y)){
-        e.cd = 1.3; e.atkN = (e.atkN || 0) + 1; const K = 20 + 5*(k.lvl || 1), dmg = Math.max(1, Math.round(k.atk*K/(K + st.def*(1 + buffV("def")))));
+        // замедленный моб и бьёт реже: замедление от ударов Стража и Жнеца, Вихря лезвий, Захвата, Сирены помех
+        e.cd = 1.3*(e.slowT > now ? 1 + (e.slowP || 0) : 1); e.atkN = (e.atkN || 0) + 1; const K = 20 + 5*(k.lvl || 1), dmg = Math.max(1, Math.round(k.atk*K/(K + st.def*(1 + buffV("def")))));
         if(k.ranged) bolts.push({x:e.x, y:e.y, vx:dx/d*330, vy:dy/d*330, dmg, life:1.2, by:k.name, src:e});
         else { hurtPlayer(dmg, k.name, e); e.lunge = 0.15; }
       }
@@ -5341,24 +5372,36 @@ function drawOthers(t, dt){
 // ===================== КЛАССЫ: УМЕНИЯ И ВЫБОР =====================
 const CB = {cd:[0,0,0,0], buffs:{}, queue:[], fx:[]};
 const CLASS_CHANGE_COST = 100;
-// умение на заданном уровне: урон, длительность, радиус, дальность растут, перезарядка падает
+// умение на заданном уровне: урон, длительность, радиус, дальность растут, перезарядка падает.
+// Прирост за уровень: mult и v — доли (+10% и +6% от базы), stun и dur — секунды, radius и dist — пиксели, cd — доля.
+// У умения может быть свой прирост g (например, щит и отражение растут медленнее урона): раньше всё росло одинаково,
+// и к 10 уровню Печать отражения резала 69% урона, а ЭМИ-волна оглушала на 5 сек каждые 8 сек.
+const SK_GROW = {mult:0.1, stun:0.1, v:0.06, dur:0.3, radius:4, dist:8, cd:0.02};
 function skillAt(s, lv){
-  const k = (lv || 1) - 1, o = {...s};
-  if(s.mult) o.mult = +(s.mult*(1 + 0.1*k)).toFixed(2);
-  if(s.stun) o.stun = +(s.stun + 0.25*k).toFixed(2);
-  if(s.v) o.v = +(s.v*(1 + 0.08*k)).toFixed(3);
-  if(s.dur) o.dur = +(s.dur + 0.4*k).toFixed(1);
-  if(s.radius) o.radius = Math.round(s.radius + 4*k);
-  if(s.dist) o.dist = Math.round(s.dist + 8*k);
-  o.cd = +(s.cd*(1 - 0.02*k)).toFixed(1);
+  const k = (lv || 1) - 1, o = {...s}, G = s.g ? {...SK_GROW, ...s.g} : SK_GROW;
+  if(s.mult) o.mult = +(s.mult*(1 + G.mult*k)).toFixed(2);
+  if(s.stun) o.stun = +(s.stun + G.stun*k).toFixed(2);
+  if(s.v) o.v = +(s.v*(1 + G.v*k)).toFixed(3);
+  if(s.v2) o.v2 = +(s.v2*(1 + G.v*k)).toFixed(3);
+  if(s.dur) o.dur = +(s.dur + G.dur*k).toFixed(1);
+  if(s.radius) o.radius = Math.round(s.radius + G.radius*k);
+  if(s.dist) o.dist = Math.round(s.dist + G.dist*k);
+  o.cd = +(s.cd*(1 - G.cd*k)).toFixed(1);
   return o;
 }
+// бой с пилотами идёт сейчас (меня били или я бил последние секунды)
+const inPvpFight = () => (S.pvpT || 0) > now || (typeof NET !== "undefined" && (NET.pvpUntil || 0) > now);
+// замедлить моба: берём сильнейшее из действующих замедлений
+function slowMob(e, v, dur){ if(!e || e.dead || !v) return; e.slowP = Math.max(e.slowT > now ? e.slowP || 0 : 0, v); e.slowT = Math.max(e.slowT > now ? e.slowT : 0, now + (dur || 3)); }
+// щит умения в бою с пилотами: снижение урона применяет сервер (иначе он считал бы урон без щита и «добивал» живого)
+function pvpShieldCast(s){ if(s && s.pshield && typeof netSend === "function") netSend({t:"cbuff", to:(typeof NET !== "undefined" ? NET.id : 0), k:"shield", v:s.pshield, dur:s.dur}); }
 const buffV = k => { const b = CB.buffs[k]; return b && b.t > 0 ? b.v : 0; };
 
 function hitEnemy(e, dmg, kind){
   if(!e || e.dead) return;
   const C = classParams();
   if(e.hp/e.max < 0.3){ const ex = stat().execute; if(ex) dmg *= 1 + ex; }
+  if(e.hp/e.max < 0.5 && kind !== "reflect"){ const hu = stat().hunt; if(hu) dmg *= 1 + hu; }        // «Охотник» Призрака
   const edef = (NPCS[e.type].def || 0)*(e.brkT > now ? 0.8 : 1); if(edef) dmg *= 30/(30 + edef);
   if(e.brkT > now) dmg *= 1.2;                                      // снятая защита: −20% брони (у мобов без брони — +20% урона)
   dmg = Math.max(1, Math.round(dmg));
@@ -5374,7 +5417,7 @@ function hitEnemy(e, dmg, kind){
   if(kind === "melee" || kind === "strike-m" || (kind === "crit" && C.melee)) CB.fx.push({type:"slash", x:e.x - Math.cos(a)*10, y:e.y - Math.sin(a)*10, a, life:.2, max:.2, c:C.color || "#fff"});
   else if(kind !== "aoe") beams.push({x1:p.x + Math.cos(p.aim)*24, y1:p.y - 26 + Math.sin(p.aim)*24, x2:e.x, y2:e.y, life:0.12, plasma:kind === "plasma"});
   const st = stat();
-  const steal = buffV("steal") + st.steal; if(steal){ S.hp = Math.min(st.maxhp, S.hp + dmg*steal); healCP(dmg*steal); }
+  const steal = buffV("steal") + st.steal; if(steal && kind !== "reflect"){ S.hp = Math.min(st.maxhp, S.hp + dmg*steal); healCP(dmg*steal, true); }
   if(e.hp <= 0 && !e.dead) killEnemy(e);
 }
 
@@ -5388,16 +5431,25 @@ function useSkill(i){
     if(!t) toast("Нет цели рядом"); else if(!lk){ tgt = {kind:"enemy", e:t}; renderTargetFrame(); } return t; };
   switch(s.type){
     case "strike": { const t = need(C.range + 60); if(!t) return;
-      hitEnemy(t, atk*s.mult, s.big ? "plasma" : C.melee ? "strike-m" : "beam"); if(s.stun) t.stun = s.stun; break; }
+      hitEnemy(t, atk*s.mult, s.big ? "plasma" : C.melee ? "strike-m" : "beam"); if(s.stun && !t.dead) t.stun = Math.max(t.stun || 0, s.stun); break; }
     case "aoe": {
-      for(const e of enemies){ if(e.dead) continue; if(Math.hypot(e.x-p.x, e.y-p.y) < s.radius + NPCS[e.type].r && los(p.x, p.y, e.x, e.y)){ hitEnemy(e, atk*s.mult, "aoe"); if(s.stun && !e.dead) e.stun = s.stun; } }
+      let n = 0;
+      for(const e of enemies){ if(e.dead) continue; if(Math.hypot(e.x-p.x, e.y-p.y) < s.radius + NPCS[e.type].r && los(p.x, p.y, e.x, e.y)){ n++; hitEnemy(e, atk*s.mult, "aoe"); if(s.stun && !e.dead) e.stun = Math.max(e.stun || 0, s.stun); if(s.slow) slowMob(e, s.slow, s.slowDur); } }
+      // Циркулярная пила: каждый задетый враг чинит корпус (не больше чем за пятерых)
+      if(s.heal && n){ const mh = st.maxhp, h = Math.round(mh*s.heal*Math.min(5, n)); S.hp = Math.min(mh, S.hp + h); healCP(h, true); addText(p.x, p.y - 40, "+" + h, "#7BC98A"); }
       CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius, life:.45, max:.45, c:C.color}); p.atkT = 0.25; break; }
-    case "buff": CB.buffs[s.buff] = {v:s.v, t:s.dur, max:s.dur}; addText(p.x, p.y - 44, s.name, C.color); break;
+    case "buff":
+      CB.buffs[s.buff] = {v:s.v, t:s.dur, max:s.dur};
+      if(s.buff2) CB.buffs[s.buff2] = {v:s.v2, t:s.dur, max:s.dur};
+      pvpShieldCast(s);
+      addText(p.x, p.y - 44, s.name, C.color); break;
     case "leap": { const t = need(s.dist); if(!t) return;
       const a = Math.atan2(t.y-p.y, t.x-p.x), d = Math.max(0, Math.hypot(t.x-p.x, t.y-p.y) - NPCS[t.type].r - 24);
       CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*d, y2:p.y + Math.sin(a)*d, life:.3, max:.3, c:C.color});
       [p.x, p.y] = landAlong(p.x, p.y, p.x + Math.cos(a)*d, p.y + Math.sin(a)*d, p.r); pushOut(p, p.r); unstick(p, p.r); p.ang = p.aim = a; p.inv = 0.3;
-      hitEnemy(t, atk*s.mult, "strike-m"); break; }
+      hitEnemy(t, atk*s.mult, "strike-m");
+      if(!t.dead){ if(s.stun) t.stun = Math.max(t.stun || 0, s.stun); if(s.slow) slowMob(t, s.slow, s.slowDur); }
+      break; }
     case "dash": {
       const a = p.ang;
       if(s.instant){
@@ -5923,30 +5975,61 @@ function upgradesStatsView(){
 
 // ---- умения: полное описание ----
 const pct = v => Math.round(v*100) + "%";
+// Тип и описание умения для окна навыков — для всех видов умений всех классов (раньше у Призрака и Глифоносца
+// строка эффекта была пустой, а Печать отражения описывалась как «Вампиризм 40% от урона»).
+const BUFF_NAME = {def:"Броня", atk:"Атака", rate:"Скорость атаки", steal:"Вампиризм", reflect:"Защита от мобов"};
+const BREAK_IDS = ["emp", "volley", "siren"];
 function skillType(s){
-  if(s.type === "buff") return "Усиление";
+  if(["mend", "nanofield"].includes(s.type)) return "Лечение";
+  if(s.type === "shieldcast" || s.buff === "reflect") return "Защита";
+  if(s.type === "siphon") return "Урон · лечение";
+  if(s.type === "recall") return "Перемещение · лечение";
+  if(s.type === "stealth") return "Скрытность";
+  if(s.type === "buff" || s.type === "echo") return "Усиление";
   if(s.type === "dash") return "Перемещение";
-  if(s.type === "leap") return "Урон · перемещение";
-  return s.stun ? "Урон · контроль" : "Урон";
+  if(s.type === "leap" || s.type === "phase") return s.stun || s.slow ? "Урон · контроль" : "Урон · перемещение";
+  return s.stun || s.slow || s.type === "siren" || s.type === "gravity" ? "Урон · контроль" : "Урон";
 }
 function skillText(s){
+  const f = v => fmtN(v);
+  const stun = s.stun ? ` · оглушение ${f(s.stun)} сек` + (s.pstun ? ` (пилота — ${f(s.pstun)} сек)` : "") : "";
+  const slow = s.slow ? ` · замедление ${pct(s.slow)} на ${f(s.slowDur || 3)} сек` : "";
+  const brk = BREAK_IDS.includes(s.id) ? " · −20% защиты на 5 сек" : "";
+  const shield = s.pshield ? ` · в бою с пилотами −${pct(s.pshield)} урона` : "";
   switch(s.type){
-    case "strike": return (s.big ? "Плазменный снаряд" : "Удар по цели") + `: ${pct(s.mult)} атаки` + (s.stun ? ` · оглушение ${s.stun} сек` : "");
-    case "aoe": return `Урон по области (радиус ${s.radius}): ${pct(s.mult)} атаки` + (s.stun ? ` · оглушение ${s.stun} сек` : "");
-    case "buff": return ({def:"Броня", atk:"Атака", rate:"Скорость атаки"}[s.buff] ? `${({def:"Броня", atk:"Атака", rate:"Скорость атаки"})[s.buff]} +${pct(s.v)}` : `Вампиризм ${pct(s.v)} от урона`) + ` · длительность ${s.dur} сек`;
-    case "leap": return `Прыжок к цели (до ${s.dist}) и удар: ${pct(s.mult)} атаки`;
+    case "strike": return (s.big ? "Плазменный снаряд" : "Удар по цели") + `: ${pct(s.mult)} атаки` + stun + slow;
+    case "aoe": return `Урон по области (радиус ${s.radius}): ${pct(s.mult)} атаки` + stun + slow + brk + (s.heal ? ` · +${pct(s.heal)} прочности за каждого врага` : "");
+    case "buff": {
+      const main = s.buff === "steal" ? `Вампиризм ${pct(s.v)} от урона` : s.buff === "reflect" ? `Урон от мобов −${pct(s.v)} · ${pct(s.rf || 0.4)} отражается` : `${BUFF_NAME[s.buff] || "Сила"} +${pct(s.v)}`;
+      const second = s.buff2 ? ` · ${BUFF_NAME[s.buff2] || "Сила"} +${pct(s.v2)}` : "";
+      return main + second + ` · длительность ${f(s.dur)} сек` + shield;
+    }
+    case "leap": return `Прыжок к цели (до ${s.dist}) и удар: ${pct(s.mult)} атаки` + stun + slow;
     case "dash": return (s.instant ? "Телепорт вперёд на " : "Рывок вперёд на ") + s.dist + " · неуязвимость 0,3 сек";
-    case "volley": return `Выстрел по ${s.n} целям: ${pct(s.mult)} атаки каждой`;
+    case "volley": return `Выстрел по ${s.n} целям: ${pct(s.mult)} атаки каждой` + brk;
     case "burst": return `Очередь из ${s.n} выстрелов: ${pct(s.mult)} атаки каждый`;
+    case "phase": return `Проход сквозь цель (до ${s.dist}): ${pct(s.mult)} атаки · по целям ниже 50% прочности — крит`;
+    case "echo": return `Двойник на ${f(s.dur)} сек повторяет обычные удары: ${pct(s.v)} урона`;
+    case "siren": return `Помехи в радиусе ${s.radius}: ${pct(s.mult)} атаки` + brk + slow + " · мобы теряют цель";
+    case "stealth": return `Невидимость для мобов на ${f(s.dur)} сек · +30% скорости · удар из тени ×3 и крит (по пилоту ×2,5)`;
+    case "gravity": return `Глиф (радиус ${s.radius}) стягивает врагов и взрывается: ${pct(s.mult)} атаки` + (s.slow ? ` · пилота замедляет на ${pct(s.slow)} на ${f(s.slowDur || 2)} сек` : "");
+    case "chain": return `Разряд по ${s.n} целям: ${pct(s.mult)} атаки, +15% за прыжок · до 2 возвратов в первую цель с 50% силы`;
+    case "recall": return `Руна на 10 сек · возврат к ней и +${pct(s.v)} прочности`;
+    case "mend": return `Лечение цели: ${pct(s.v)} её прочности · дальность ${s.dist}`;
+    case "nanofield": return `Облако (радиус ${s.radius}): ${(s.v*100).toFixed(1).replace(".", ",")}% прочности в секунду · ${f(s.dur)} сек`;
+    case "shieldcast": return `Щит: −${pct(Math.min(MED_SHIELD_MAX, s.v))} входящего урона · ${f(s.dur)} сек`;
+    case "siphon": return `Разряд: ${pct(s.mult)} атаки · ${pct(Math.min(MED_SIPHON_MAX, s.v))} урона уходит на лечение`;
   }
   return "";
 }
 function skillDiff(a, b){
   const out = [];
+  const vName = s => s.type === "buff" ? BUFF_NAME[s.buff] || "Сила" : "Сила";
   if(a.mult !== b.mult) out.push(`Урон ${pct(a.mult)} → ${pct(b.mult)}`);
-  if(a.stun !== b.stun && a.stun) out.push(`Оглушение ${a.stun} → ${b.stun} сек`);
-  if(a.v !== b.v) out.push(`Сила ${pct(a.v)} → ${pct(b.v)}`);
-  if(a.dur !== b.dur) out.push(`Длительность ${a.dur} → ${b.dur} сек`);
+  if(a.stun !== b.stun && a.stun) out.push(`Оглушение ${fmtN(a.stun)} → ${fmtN(b.stun)} сек`);
+  if(a.v !== b.v) out.push(`${vName(a)} ${pct(a.v)} → ${pct(b.v)}`);
+  if(a.v2 !== b.v2 && a.v2) out.push(`${BUFF_NAME[a.buff2] || "Сила"} ${pct(a.v2)} → ${pct(b.v2)}`);
+  if(a.dur !== b.dur) out.push(`Длительность ${fmtN(a.dur)} → ${fmtN(b.dur)} сек`);
   if(a.radius !== b.radius) out.push(`Радиус ${a.radius} → ${b.radius}`);
   if(a.dist !== b.dist) out.push(`Дальность ${a.dist} → ${b.dist}`);
   if(a.cd !== b.cd) out.push(`Перезарядка ${fmtN(a.cd)} → ${fmtN(b.cd)} сек`);
@@ -6008,7 +6091,13 @@ const PAS_GLYPH = {
   servo:`<circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>`,
   cold:`<path d="M12 2v20M3 7l18 10M21 7 3 17"/>`,
   selfrepair:`<path d="M15 4a4 4 0 0 0-5 5L4 15l3 3 6-6a4 4 0 0 0 5-5l-3 3-3-3z"/>`,
-  looter:`<path d="M8 6h8l2 3v9a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V9z"/><path d="M9 3h6"/>`
+  looter:`<path d="M8 6h8l2 3v9a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V9z"/><path d="M9 3h6"/>`,
+  hunter:`<circle cx="12" cy="12" r="7.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><path d="M8.5 15.5 15.5 8.5"/><circle cx="12" cy="12" r="1.6"/>`,
+  shade:`<path d="M12 3c4.5 0 7.5 3.5 7.5 8v5c0 1.5-1 3-2.5 3.5M12 3c-4.5 0-7.5 3.5-7.5 8v5c0 1.5 1 3 2.5 3.5"/><path d="M8.5 12h7"/><path d="M9 21h1.5M13.5 21H15M11 18.5h2"/>`,
+  monolith:`<path d="M7 21V7l5-4 5 4v14z"/><path d="M4 21h16"/><path d="M12 8l2.5 3.5L12 15l-2.5-3.5z"/>`,
+  fieldrep:`<path d="M14.5 4a4.5 4.5 0 0 0-5 5.5L4 15l3 3 5.5-5.5a4.5 4.5 0 0 0 5.5-5l-3 3-2.5-.5-.5-2.5z"/><path d="M17 15v6M14 18h6"/>`,
+  triage:`<path d="M12 21s-7.5-4.6-7.5-10.5A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5C19.5 16.4 12 21 12 21z"/><path d="M7.5 13h3l1.5-3 2 5.5 1.5-2.5h2"/>`,
+  weave:`<path d="M4 12c2.5-5 5.5-5 8 0s5.5 5 8 0"/><path d="M4 12c2.5 5 5.5 5 8 0s5.5-5 8 0"/><circle cx="12" cy="12" r="1.6"/><path d="M12 3v2.5M12 18.5V21"/>`
 };
 function passiveIcon(id, c){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PAS_GLYPH[id] || ""}</svg>`;
@@ -7732,7 +7821,7 @@ function hurtByPlayer(dmg, by){
   if(S.cp === undefined) S.cp = st.maxcp;
   const absorbed = Math.min(S.cp, dmg); S.cp -= absorbed; dmg -= absorbed;
   addText(p.x, p.y - 60, "-" + Math.round(absorbed) + " CP", "#F2C14B");
-  if(dmg > 0) hurtPlayer(dmg, by);
+  if(dmg > 0){ p._pvpHit = true; try{ hurtPlayer(dmg, by); } finally { p._pvpHit = false; } }
 }
 // ===================== ПОДЗЕМЕЛЬЕ «НИЖНИЕ ЦЕХА» =====================
 // Центральный коридор, от него 10 проходов. В каждом проходе сверху мобы нечётного уровня,
@@ -9146,6 +9235,15 @@ $("pBody").parentElement && document.addEventListener("click", e => { const t = 
 // Ангар и арена «Страх» — всегда без PvP. В остальных локациях можно атаковать выбранного пилота.
 // Союзники по пати и гильдии защищены. Каждый удар проверяет сервер (дистанция, частота, предел урона).
 const pvpZone = () => !!(LOCS[locKey] && !LOCS[locKey].safe && !LOCS[locKey].arena);
+// доля удара по пилоту, которая проходит сквозь его броню: K/(K + броня), K = PVP_DEF_K × (40 + 8 × уровень жертвы)
+const PVP_DEF_K = 4;
+const pvpDefMult = (def, lvl) => { const K = PVP_DEF_K*(40 + 8*Math.max(1, lvl || 1)); return K/(K + Math.max(0, def || 0)); };
+// Множитель класса в бою с пилотами (pk): предел удара умножается на pk (сервер, webserver.py → handle_pvp),
+// сам удар — на √pk. Так баланс держится и на слабом снаряжении (удар не упирается в предел), и на сильном.
+const pvpHitCap = skill => (40 + 8*(S.level || 1))*(classParams().pk || 1)*(skill ? 4 : 1);
+const pvpDmgK = () => Math.sqrt(classParams().pk || 1);
+// «ранен» ли пилот: прочность вместе с CP ниже половины (CP принимают удары первыми, и без них прочность полна до конца боя)
+const pvpLow = o => ((+o.hp || 0) + (+o.cp || 0))/Math.max(1, (+o.mhp || 1) + (+o.mcp || 0)) < 0.5;
 const isFriend = o => (typeof inParty === "function" && inParty(o.id)) || (typeof gCur !== "undefined" && gCur && o.gt && o.gt === gCur.tag);
 const PVP_MIN_LVL = 10;
 let pvpFlagUntil = 0;
@@ -9155,9 +9253,19 @@ function pvpFoe(){
   const o = tgtPlayer();
   return o && !o.dead && !isFriend(o) && !pvpNewbie(o) ? o : null;
 }
-function pvpStrike(o, dmg, crit, skill){
+// extra — эффекты удара, которые сервер проверяет по классу: sl/st — замедление и «заминка» от обычного удара
+// Стража и Жнеца, br — снятие защиты, stn — оглушение умением (сек), sls/sld — замедление умением (доля, сек)
+// Сервер принимает удары умениями по пилотам не чаще раза в 0,8 с (webserver.py → handle_pvp). Раньше умение сразу
+// после другого умения (или после удара из тени) молча пропадало — теперь его удар уходит, как только сервер его примет.
+const PVP_SK_GAP = 850;
+let pvpSkAt = -1e9;
+function pvpStrike(o, dmg, crit, skill, extra){
   if(!(typeof NET !== "undefined" && NET.ws && NET.ws.readyState === 1)) return;
-  NET.ws.send(JSON.stringify({t:"pvp", to:o.id, dmg, crit, skill:!!skill}));
+  const msg = JSON.stringify({t:"pvp", to:o.id, dmg, crit, skill:!!skill, ...(extra || {})});
+  const t = performance.now(), wait = skill ? pvpSkAt + PVP_SK_GAP - t : 0;
+  if(skill) pvpSkAt = Math.max(t, pvpSkAt + PVP_SK_GAP);
+  if(wait > 0) setTimeout(() => { if(NET.ws && NET.ws.readyState === 1) NET.ws.send(msg); }, wait);
+  else NET.ws.send(msg);
   if(!o.fl && !(o.kr > 0)) pvpFlagUntil = now + 30;          // напал на «чистого» — сам становишься фиолетовым
   if(typeof spawnPvpShot === "function") spawnPvpShot(NET.id, o.id, S.cls || "", crit, !!skill, dmg, true);
   Sfx.play(crit ? "crit" : "shot");
@@ -9169,7 +9277,10 @@ if(typeof onNetExtra === "function"){
     if(d.t === "pvp_hit"){
       if(!pvpZone() || p.dead) return;
       const wasAlive = !p.dead, st = stat(), raw = Math.max(1, +d.dmg || 0);
-      const dmg = Math.max(1, Math.round(raw - st.def*0.5));
+      // броня режет удар пилота в доле K/(K + броня), K растёт с уровнем (зеркало pvpguard.def_mult). Раньше броня
+      // вычиталась (−половина брони с каждого удара), а удар по пилоту ограничен сервером: у Стража с бронёй выше
+      // удвоенного предела обычные удары шли по 1, и чем лучше снаряжение, тем сильнее перекос в пользу брони
+      const dmg = Math.max(1, Math.round(raw*pvpDefMult(st.def, S.level)));
       hurtByPlayer(dmg, String(d.nick || "Пилот").slice(0, 16));
       if(Sfx.haptic && S.settings.vibro) Sfx.haptic("heavy");
       if(wasAlive && p.dead){
@@ -9239,15 +9350,25 @@ useSkill = function(i){
   if(d > reach){ toast("Цель далеко: подойди ближе"); return; }
   if(!los(p.x, p.y, o.rx, o.ry)){ toast("Цель за стеной"); return; }
   if(ty === "leap"){                                              // рывок к пилоту, как к мобу
-    const a = Math.atan2(o.ry - p.y, o.rx - p.x), step = Math.max(0, d - 40), bx = p.x, by = p.y;
+    // Фазовый разрез проходит сквозь пилота и выходит у него за спиной, остальные рывки останавливаются перед целью
+    const a = Math.atan2(o.ry - p.y, o.rx - p.x), step = s.type === "phase" ? d + 40 : Math.max(0, d - 40), bx = p.x, by = p.y;
     CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:p.x + Math.cos(a)*step, y2:p.y + Math.sin(a)*step, life:.3, max:.3, c:C.color});
     [p.x, p.y] = landAlong(bx, by, bx + Math.cos(a)*step, by + Math.sin(a)*step, p.r); pushOut(p, p.r); unstick(p, p.r);
-    p.ang = p.aim = a; p.inv = 0.3;
+    p.ang = p.aim = s.type === "phase" ? a + Math.PI : a; p.inv = 0.3;
   }
-  const st = stat(), hits = ty === "burst" ? (s.n || 3) : 1;
-  const dmg = Math.round(st.atk*(1 + buffV("atk"))*(1 + st.skillDmg)*s.mult*hits);
-  pvpStrike(o, dmg, false, true);                                 // оглушение по игрокам не применяем: слишком сильно в PvP
+  // Очередь — все выстрелы одним сообщением; Цепь глифов по одному пилоту — разряд и два возврата с 50% силы
+  const st = stat(), hits = ty === "burst" ? (s.n || 3) : s.type === "chain" ? 2 : 1;
+  const low = pvpLow(o);
+  let mult = s.mult*hits;
+  if(s.type === "phase" && low) mult *= st.critPow;             // по раненому пилоту — гарантированный крит, как по мобам
+  const dmg = Math.round(st.atk*(1 + buffV("atk"))*(1 + st.skillDmg)*mult);
+  const x = {};
+  if(s.pstun) x.stn = s.pstun;                                    // короткое оглушение пилота (сервер ограничивает по классу)
+  if(s.slow){ x.sls = s.slow; x.sld = s.slowDur || 3; }
+  pvpStrike(o, dmg, s.type === "phase" && low, true, x);
+  if(s.heal){ const mh = st.maxhp, h = Math.round(mh*s.heal); S.hp = Math.min(mh, S.hp + h); healCP(h, true); addText(p.x, p.y - 40, "+" + h, "#7BC98A"); }
   CB.fx.push({type:"ring", x:o.rx, y:o.ry, r:36, life:.4, max:.4, c:C.color});
+  if(ty === "aoe") CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius || 110, life:.45, max:.45, c:C.color});
   p.atkT = 0.25;
   CB.cd[i] = s.cd*(1 - st.cdr); Sfx.play("crit");
   if(Sfx.haptic) Sfx.haptic("medium");
@@ -9804,36 +9925,56 @@ function onHitEffects(e){
     try{ return _useB(i); } finally { BAL.skill = null; }
   };
 }
-// Силовое поле (+30% атаки) и снятая защита на мне (из PvP) — через stat()
+// снятая защита на мне (из PvP) — через stat(). Силовое поле теперь даёт атаку вторым баффом (buff2), а не здесь
 {
   const _statB = stat;
   stat = function(){
     const s = _statB();
-    if(S.cls === "techno" && CB.buffs.def && CB.buffs.def.t > 0) s.atk = Math.round(s.atk*1.3);
     if(p && p.brkT > now) s.def = Math.round(s.def*0.8);
     return s;
   };
 }
-// PvP: замедление, оглушение и снятие защиты передаются цели вместе с ударом
+// PvP: эффекты удара. Замедление, «заминка», снятие защиты, оглушение и замедление умением уходят вместе с ударом,
+// сервер проверяет их по классу. Здесь же — то, что считает сам атакующий: удар из тени, эхо-двойник, «Охотник», вампиризм.
+const ECHO_PVP_RANGE = 260, PVP_STEAL_K = 0.3;
 {
   const _pvpS = pvpStrike;
-  pvpStrike = function(o, dmg, crit, skill){
-    const ws = typeof NET !== "undefined" && NET.ws;
-    if(ws && ws.readyState === 1){
-      const extra = {};
-      if(!skill && (S.cls === "guard" || S.cls === "reaper")) extra.sl = 1;
-      if(!skill && S.cls === "reaper" && Math.random() < 0.2) extra.st = 1;
-      if(BAL.skill === "emp" || BAL.skill === "volley" || BAL.skill === "siren") extra.br = 1;
-      if(Object.keys(extra).length){ const send = ws.send.bind(ws); ws.send = m => { ws.send = send; const d = JSON.parse(m); send(JSON.stringify({...d, ...extra})); }; }
+  pvpStrike = function(o, dmg, crit, skill, extra){
+    const x = {...(extra || {})}, st = stat();
+    if(!skill && (S.cls === "guard" || S.cls === "reaper")) x.sl = 1;
+    if(!skill && S.cls === "reaper" && Math.random() < 0.2) x.st = 1;
+    if(BAL.skill === "emp" || BAL.skill === "volley" || BAL.skill === "siren") x.br = 1;
+    // Нулевой след: первый удар из тени по пилоту — ×2,5 и крит (уходит как умение: у умений предел урона выше)
+    if(!skill && p && p.stealthT > now){
+      p.stealthT = 0; skill = true; crit = true;
+      dmg = Math.round(st.atk*(1 + buffV("atk"))*2.5*st.critPow);
+      addText(o.rx, o.ry - 50, "ИЗ ТЕНИ", "#FF5FA2");
     }
-    return _pvpS(o, dmg, crit, skill);
+    // Эхо-двойник: обычные удары по пилоту рядом с двойником сильнее на силу двойника (в пределах сервера)
+    else if(!skill && typeof NC !== "undefined" && NC.echo && NC.echo.until > now && Math.hypot(o.rx - NC.echo.x, o.ry - NC.echo.y) < ECHO_PVP_RANGE)
+      dmg = Math.round(dmg*(1 + NC.echo.v));
+    // «Охотник» Призрака: по раненому пилоту (у пилота «прочность» — вместе с CP: CP принимает удары первыми)
+    if(st.hunt && pvpLow(o)) dmg = Math.round(dmg*(1 + st.hunt));
+    dmg = Math.round(dmg*pvpDmgK());
+    const r = _pvpS(o, dmg, crit, skill, x);
+    // вампиризм (Энергопоглощение, «Жажда металла») — от того, что пропустит сервер, на 30%: в PvP урон и так упирается в предел
+    const steal = buffV("steal") + (st.steal || 0);
+    if(steal > 0){
+      const h = Math.round(Math.min(dmg, pvpHitCap(skill))*steal*PVP_STEAL_K);
+      if(h > 0){ S.hp = Math.min(st.maxhp, S.hp + h); healCP(h, true); }
+    }
+    return r;
   };
   const prevBal = onNetExtra;
   onNetExtra = function(d){
     if(d.t === "pvp_hit" && pvpZone() && p && !p.dead){
       if(d.sl){ p.slowP = Math.min(0.5, (p.slowT > now ? p.slowP || 0 : 0) + 0.1); p.slowT = now + 10; }
-      if(d.st){ p.stunT = now + 0.3; }
+      if(d.st){ p.rootT = Math.max(p.rootT || 0, now + 0.3); }                 // «заминка» от Жнеца: стоишь, но бьёшь
       if(d.br){ p.brkT = now + 5; }
+      const stn = Math.min(1.2, +d.stn || 0);
+      if(stn > 0){ p.stunT = Math.max(p.stunT || 0, now + stn); firing = false; addText(p.x, p.y - 70, "оглушение", "#FFD27A"); }
+      const sls = Math.min(0.6, +d.sls || 0);
+      if(sls > 0){ p.slowP = Math.max(p.slowT > now ? p.slowP || 0 : 0, sls); p.slowT = Math.max(p.slowT > now ? p.slowT : 0, now + Math.min(4, +d.sld || 3)); }
     }
     if(d.t === "healed"){ healCP(Math.max(0, +d.amount || 0)); }
     prevBal(d);
@@ -9846,36 +9987,134 @@ setInterval(() => {
   C.skills.forEach((sk, i) => { if(sk.buff === "steal" && !(CB.cd[i] > 0)) useSkill(i); });
 }, 400);
 // ===================== НОВЫЕ КЛАССЫ: ПРИЗРАК И ГЛИФОНОСЕЦ =====================
-// Иконки умений
+// Иконки умений: объёмный металл, светящаяся энергия с ореолом, блики — в стиле иконок первых классов
+// (раньше у Призрака и Глифоносца были плоские контурные значки)
 Object.assign(SKILL_ART, {
-  phase:I => `<path d="M10 50 54 14" stroke="${I.L}" stroke-width="7" opacity=".45" filter="url(#${I.u}sg)"/>
-    <path d="M12 52 30 30" stroke="url(#${I.u}e)" stroke-width="4" stroke-linecap="round"/><path d="M36 26 52 12" stroke="url(#${I.u}e)" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 3"/>
-    <circle cx="33" cy="28" r="7" fill="none" stroke="#fff" stroke-width="1.4" stroke-dasharray="2 3"/><path d="M20 22c6 2 10 6 12 12" stroke="#fff" stroke-width="1.2" fill="none" opacity=".7"/>`,
-  echo:I => `<path d="M26 14l8 4v16l-8 6-8-6V18z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.4"/>
-    <path d="M40 18l8 4v16l-8 6-8-6V22z" fill="${I.L}" opacity=".35" stroke="${I.L}" stroke-width="1.2" stroke-dasharray="2 2"/>
-    <path d="M22 26h8M36 30h8" stroke="url(#${I.u}e)" stroke-width="2.4"/><path d="M14 52 30 40M34 54 50 42" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/>`,
-  siren:I => `<circle cx="32" cy="32" r="8" fill="url(#${I.u}e)" stroke="#fff" stroke-width="1.2"/>
-    <path d="M18 18a20 20 0 0 0 0 28M46 18a20 20 0 0 1 0 28" stroke="${I.L}" stroke-width="3" fill="none" stroke-linecap="round"/>
-    <path d="M11 12a29 29 0 0 0 0 40M53 12a29 29 0 0 1 0 40" stroke="${I.L}" stroke-width="2" fill="none" opacity=".6" stroke-linecap="round" stroke-dasharray="4 3"/>`,
-  nulltrace:I => `<path d="M32 10c12 0 20 10 20 22S44 54 32 54 12 44 12 32s8-22 20-22z" fill="none" stroke="${I.L}" stroke-width="2" stroke-dasharray="3 4" opacity=".8"/>
-    <path d="M22 30h20" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/><circle cx="26" cy="30" r="2" fill="#fff"/><circle cx="38" cy="30" r="2" fill="#fff"/>
-    <path d="M20 44h24" stroke="${I.L}" stroke-width="1.4" opacity=".5"/>`,
-  gravity:I => `<circle cx="32" cy="32" r="20" fill="none" stroke="${I.L}" stroke-width="2.2" stroke-dasharray="5 3"/>
-    <circle cx="32" cy="32" r="11" fill="none" stroke="url(#${I.u}e)" stroke-width="2.6"/><circle cx="32" cy="32" r="4" fill="#fff"/>
-    <path d="M10 14l9 9M54 14l-9 9M10 50l9-9M54 50l-9-9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>`,
-  chain:I => `<path d="M10 46 22 30l10 12 10-20 12 8" stroke="${I.L}" stroke-width="6" fill="none" opacity=".4" filter="url(#${I.u}sg)"/>
-    <path d="M10 46 22 30l10 12 10-20 12 8" stroke="url(#${I.u}e)" stroke-width="2.8" fill="none" stroke-linejoin="round"/>
-    ${[[10, 46], [22, 30], [32, 42], [42, 22], [54, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.4" fill="url(#${I.u}dm)" stroke="#fff" stroke-width="1.1"/>`).join("")}`,
-  seal:I => `<path d="M32 8 52 18v14c0 12-9 20-20 24C21 52 12 44 12 32V18z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.6"/>
-    <path d="M24 30h16M32 22v16" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round"/><path d="M46 40 56 48M50 36l8-2" stroke="${I.L}" stroke-width="2" stroke-linecap="round"/>`,
-  recall:I => `<circle cx="32" cy="34" r="16" fill="none" stroke="url(#${I.u}e)" stroke-width="3"/>
-    <path d="M32 22v12l8 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M14 22a20 20 0 0 1 8-10l-1 8z" fill="${I.L}"/>
-    <path d="M24 54h16" stroke="${I.L}" stroke-width="2" opacity=".6"/>`
+  phase:I => `
+    <path d="M7 55C19 42 33 27 57 7" stroke="${I.L}" stroke-width="11" opacity=".32" filter="url(#${I.u}sg)" stroke-linecap="round"/>
+    <g opacity=".22" transform="translate(-11 9)"><path d="M17 47 44 15c3-3 7-4 9-3-1 3-2 6-5 9L22 51z" fill="${I.L}"/></g>
+    <g opacity=".45" transform="translate(-5.5 4.5)"><path d="M17 47 44 15c3-3 7-4 9-3-1 3-2 6-5 9L22 51z" fill="none" stroke="${I.L}" stroke-width="1.3" stroke-dasharray="2.5 2"/></g>
+    <path d="M17 47 44 15c3-3 7-4 9-3-1 3-2 6-5 9L22 51z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.5"/>
+    <path d="M20.5 46.5 45.5 17.5" stroke="#fff" stroke-width="1.4" opacity=".85"/>
+    <path d="M44 15c3-3 7-4 9-3-1 3-2 6-5 9" fill="none" stroke="url(#${I.u}e)" stroke-width="2.6" filter="url(#${I.u}g)"/>
+    <path d="M11 49l7 7M14 45l9 9" stroke="#1B2129" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M11 49l7 7M14 45l9 9" stroke="url(#${I.u}dm)" stroke-width="2.8" stroke-linecap="round"/>
+    <circle cx="13.5" cy="53.5" r="3" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>
+    <path d="M9 30c11-5 23-2 31 6" stroke="url(#${I.u}e)" stroke-width="2.6" fill="none" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <path d="M9 30c11-5 23-2 31 6" stroke="#fff" stroke-width=".9" fill="none" stroke-linecap="round"/>
+    ${[[54, 26], [47, 6], [8, 22], [36, 50]].map(([x, y], i) => `<path d="M${x} ${y - (i < 2 ? 3 : 2)}v${i < 2 ? 6 : 4}M${x - (i < 2 ? 3 : 2)} ${y}h${i < 2 ? 6 : 4}" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>`).join("")}`,
+  echo:I => `
+    <g transform="translate(13 -6)">
+      <path d="M28 16c9 0 15 7 15 16v13l-4 6H17l-4-6V32c0-9 6-16 15-16z" fill="${I.L}" opacity=".35" filter="url(#${I.u}sg)"/>
+      <path d="M28 16c9 0 15 7 15 16v13l-4 6H17l-4-6V32c0-9 6-16 15-16z" fill="${I.L}" opacity=".32" stroke="#fff" stroke-width="1.3" stroke-dasharray="3 2"/>
+      <path d="M19 33h18l-2 7H21z" fill="${I.c}" opacity=".55"/>
+      <circle cx="28" cy="36.5" r="2.6" fill="#fff"/>
+    </g>
+    <path d="M26 18c9 0 15 7 15 16v13l-4 6H15l-4-6V34c0-9 6-16 15-16z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.6"/>
+    <path d="M14.5 33c1.5-6.5 5.5-10.5 11-11.5" stroke="#fff" stroke-width="1.4" fill="none" opacity=".85" stroke-linecap="round"/>
+    <path d="M26 18v-4" stroke="#2A323C" stroke-width="2"/><circle cx="26" cy="12.5" r="2.2" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>
+    <path d="M16 35h20l-2.5 8h-15z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.1"/>
+    <circle cx="26" cy="39" r="3.2" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/><circle cx="26" cy="38.2" r="1.1" fill="#fff"/>
+    <path d="M14 48h24" stroke="#2A323C" stroke-width="1" opacity=".6"/>
+    <path d="M8 18a14 14 0 0 0 0 18M4 13a20 20 0 0 0 0 28" stroke="${I.L}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/>`,
+  siren:I => {
+    const zig = (r, n, a) => Array.from({length:n}, (_, i) => { const t = i/n*Math.PI*2, rr = r + (i % 2 ? a : -a); return (i ? "L" : "M") + (32 + Math.cos(t)*rr).toFixed(1) + " " + (32 + Math.sin(t)*rr).toFixed(1); }).join("") + "z";
+    return `
+    <circle cx="32" cy="32" r="27" fill="${I.L}" opacity=".12"/>
+    <path d="${zig(25, 28, 1.8)}" fill="none" stroke="${I.L}" stroke-width="1.6" opacity=".55" filter="url(#${I.u}g)"/>
+    <path d="${zig(18.5, 22, 2.2)}" fill="none" stroke="url(#${I.u}e)" stroke-width="2.2" filter="url(#${I.u}g)"/>
+    <circle cx="32" cy="32" r="11" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.6"/>
+    <circle cx="32" cy="32" r="7.5" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1"/>
+    ${[0, 1, 2, 3, 4, 5].map(i => { const a = i*Math.PI/3 + .3; return `<path d="M${(32 + Math.cos(a)*3).toFixed(1)} ${(32 + Math.sin(a)*3).toFixed(1)}L${(32 + Math.cos(a)*6.5).toFixed(1)} ${(32 + Math.sin(a)*6.5).toFixed(1)}" stroke="#1B2129" stroke-width="1.2"/>`; }).join("")}
+    <circle cx="32" cy="32" r="3" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>
+    <path d="M24 26a10 10 0 0 1 9-5" stroke="#fff" stroke-width="1.3" fill="none" opacity=".85" stroke-linecap="round"/>
+    ${[[6, 13, 9], [47, 9, 11], [50, 52, 8], [8, 49, 10], [53, 30, 6]].map(([x, y, w]) => `<rect x="${x}" y="${y}" width="${w}" height="2" fill="${I.L}" opacity=".85"/><rect x="${x + 2}" y="${y + 3}" width="${w - 4}" height="1.2" fill="#fff" opacity=".6"/>`).join("")}`;
+  },
+  nulltrace:I => {
+    const px = [];
+    for(let y = 40; y <= 58; y += 3) for(let x = 15; x <= 47; x += 3){
+      const k = (y - 40)/18, h = (x*7 + y*13) % 10/10;
+      if(h < k*0.9 || Math.abs(x - 31) > 16 - k*3) continue;
+      px.push(`<rect x="${x}" y="${y}" width="2.4" height="2.4" fill="${h > .6 ? I.L : "#7C8894"}" opacity="${(1 - k*0.8).toFixed(2)}"/>`);
+    }
+    return `
+    <path d="M32 9c10 0 17 8 17 18v8c0 5-3 8-6 10H21c-3-2-6-5-6-10v-8c0-10 7-18 17-18z" fill="${I.L}" opacity=".25" filter="url(#${I.u}sg)"/>
+    <path d="M32 9c10 0 17 8 17 18v8c0 5-3 8-6 10H21c-3-2-6-5-6-10v-8c0-10 7-18 17-18z" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.5"/>
+    <path d="M32 9c4 6 4 14 0 20" stroke="#2A323C" stroke-width="1" fill="none" opacity=".7"/>
+    <path d="M19 22c2-6 7-9.5 12-10" stroke="#C9D1D8" stroke-width="1.3" fill="none" opacity=".75" stroke-linecap="round"/>
+    <path d="M21 28h22l-3 7H24z" fill="#06080B" stroke="#1B2129" stroke-width="1"/>
+    <path d="M24.5 31h15" stroke="url(#${I.u}e)" stroke-width="3" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <circle cx="32" cy="31" r="1.6" fill="#fff"/>
+    ${px.join("")}
+    <circle cx="50" cy="51" r="6" fill="none" stroke="${I.L}" stroke-width="1.8" filter="url(#${I.u}g)"/><path d="M45 56l10-10" stroke="${I.L}" stroke-width="1.8" stroke-linecap="round"/>`;
+  },
+  // ===== Глифоносец =====,
+  gravity:I => `
+    <ellipse cx="32" cy="42" rx="26" ry="11" fill="${I.L}" opacity=".16"/>
+    <ellipse cx="32" cy="42" rx="25" ry="10.5" fill="none" stroke="url(#${I.u}e)" stroke-width="2.4" filter="url(#${I.u}g)"/>
+    <ellipse cx="32" cy="42" rx="17" ry="7" fill="none" stroke="${I.L}" stroke-width="1.3" stroke-dasharray="3 2.5"/>
+    ${[0, 1, 2, 3, 4, 5, 6, 7].map(i => { const a = i*Math.PI/4 + .2, x = 32 + Math.cos(a)*21, y = 42 + Math.sin(a)*8.8; return `<path d="M${x.toFixed(1)} ${(y - 1.6).toFixed(1)}l1.6 1.6-1.6 1.6-1.6-1.6z" fill="#fff"/>`; }).join("")}
+    ${[[9, 14, 1], [55, 12, -1], [8, 30, 1], [56, 29, -1]].map(([x, y, d]) => `<g><path d="M${x} ${y}L${32 - (32 - x)*0.45} ${30 - (30 - y)*0.45}" stroke="${I.L}" stroke-width="1.6" stroke-dasharray="2 3" opacity=".8"/>
+      <path d="M${x - 3.5} ${y - 2.5}l6 -1 2 5 -5 3 -4 -3z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1" transform="rotate(${d*25} ${x} ${y})"/></g>`).join("")}
+    <circle cx="32" cy="30" r="10" fill="${I.L}" opacity=".45" filter="url(#${I.u}sg)"/>
+    <circle cx="32" cy="30" r="6.5" fill="url(#${I.u}e)"/>
+    <circle cx="32" cy="30" r="9" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="4 3" opacity=".8"/>
+    <circle cx="32" cy="30" r="2.4" fill="#fff"/>`,
+  chain:I => {
+    const S = [[11, 47], [25, 23], [40, 41], [54, 16]];
+    const zz = (a, b) => { const [x1, y1] = a, [x2, y2] = b, mx = (x1 + x2)/2, my = (y1 + y2)/2, nx = -(y2 - y1)*0.18, ny = (x2 - x1)*0.18; return `M${x1} ${y1}L${(mx + nx).toFixed(1)} ${(my + ny).toFixed(1)}L${(mx - nx*0.6).toFixed(1)} ${(my - ny*0.6).toFixed(1)}L${x2} ${y2}`; };
+    const path = S.slice(1).map((p, i) => zz(S[i], p)).join("");
+    const hex = (x, y, r) => Array.from({length:6}, (_, i) => { const a = i*Math.PI/3 + Math.PI/6; return (i ? "L" : "M") + (x + Math.cos(a)*r).toFixed(1) + " " + (y + Math.sin(a)*r).toFixed(1); }).join("") + "z";
+    return `
+    <path d="${path}" stroke="${I.L}" stroke-width="7" fill="none" opacity=".4" filter="url(#${I.u}sg)" stroke-linejoin="round"/>
+    <path d="${path}" stroke="url(#${I.u}e)" stroke-width="2.8" fill="none" stroke-linejoin="round" filter="url(#${I.u}g)"/>
+    <path d="${path}" stroke="#fff" stroke-width="1" fill="none" stroke-linejoin="round"/>
+    ${S.map(([x, y], i) => { const r = 5.2 + i*0.5; return `<path d="${hex(x, y, r + 1.2)}" fill="${I.L}" opacity=".35" filter="url(#${I.u}sg)"/>
+      <path d="${hex(x, y, r)}" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.2"/>
+      <path d="M${x} ${(y - r*0.5).toFixed(1)}v${(r).toFixed(1)}M${(x - r*0.4).toFixed(1)} ${y}h${(r*0.8).toFixed(1)}" stroke="url(#${I.u}e)" stroke-width="1.6" filter="url(#${I.u}g)"/>`; }).join("")}`;
+  },
+  seal:I => `
+    <path d="M32 7 52 15v15c0 13-9 21-20 26-11-5-20-13-20-26V15z" fill="${I.L}" opacity=".3" filter="url(#${I.u}sg)"/>
+    <path d="M32 8 51 15.5V30c0 12-8.5 20-19 24.5C21.5 50 13 42 13 30V15.5z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.8"/>
+    <path d="M32 13 46 18.5V30c0 9-6 15.5-14 19.5-8-4-14-10.5-14-19.5V18.5z" fill="url(#${I.u}ed)" stroke="${I.L}" stroke-width="1.4"/>
+    <path d="M22 21 42 41M26 17l20 20" stroke="#fff" stroke-width="1.2" opacity=".45"/>
+    <path d="M32 21l7 9-7 9-7-9z" fill="none" stroke="url(#${I.u}e)" stroke-width="2.4" filter="url(#${I.u}g)"/>
+    <circle cx="32" cy="30" r="2.2" fill="#fff"/>
+    <path d="M15 15.5 32 9l17 6.5" stroke="#fff" stroke-width="1.2" fill="none" opacity=".75"/>
+    <path d="M3 49 17 39" stroke="#E0694A" stroke-width="2.4" stroke-linecap="round" opacity=".85"/>
+    <path d="M17 39 8 30" stroke="${I.L}" stroke-width="2.6" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <path d="M8 30l1 5M8 30l5 .5" stroke="${I.L}" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="17" cy="39" r="3" fill="#fff" filter="url(#${I.u}g)"/>`,
+  recall:I => {
+    // круговая стрелка «назад» над руной: путь от 330° до 40° по часовой → против часовой
+    const cx = 32, cy = 25, r = 14, a0 = -0.6, a1 = 3.9;
+    const P = a => [(cx + Math.cos(a)*r).toFixed(1), (cy + Math.sin(a)*r).toFixed(1)];
+    const [x0, y0] = P(a0), [x1, y1] = P(a1);
+    const arc = `M${x0} ${y0}A${r} ${r} 0 1 1 ${x1} ${y1}`;
+    const tx = Math.cos(a1 + Math.PI/2), ty = Math.sin(a1 + Math.PI/2);            // касательная в конце (по ходу стрелки)
+    const hx = +x1 - tx*1, hy = +y1 - ty*1, nx = -ty, ny = tx;
+    const head = `M${(hx - tx*6 + nx*5).toFixed(1)} ${(hy - ty*6 + ny*5).toFixed(1)}L${(hx + tx*2).toFixed(1)} ${(hy + ty*2).toFixed(1)}L${(hx - tx*6 - nx*5).toFixed(1)} ${(hy - ty*6 - ny*5).toFixed(1)}z`;
+    return `
+    <ellipse cx="32" cy="51" rx="17" ry="6" fill="${I.L}" opacity=".32" filter="url(#${I.u}sg)"/>
+    <ellipse cx="32" cy="51" rx="16" ry="5.5" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.2"/>
+    <ellipse cx="32" cy="50" rx="12.5" ry="3.9" fill="none" stroke="url(#${I.u}e)" stroke-width="2" filter="url(#${I.u}g)"/>
+    ${[0, 1, 2, 3, 4, 5].map(i => { const a = i*Math.PI/3, x = 32 + Math.cos(a)*8, y = 50 + Math.sin(a)*2.5; return `<rect x="${(x - 1).toFixed(1)}" y="${(y - 1).toFixed(1)}" width="2" height="2" fill="#fff"/>`; }).join("")}
+    <path d="M32 46V40" stroke="url(#${I.u}ev)" stroke-width="2.4" stroke-dasharray="2.5 1.5" filter="url(#${I.u}g)"/>
+    <path d="${arc}" stroke="${I.L}" stroke-width="8" fill="none" opacity=".3" filter="url(#${I.u}sg)" stroke-linecap="round"/>
+    <path d="${arc}" stroke="#2A323C" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="${arc}" stroke="url(#${I.u}m)" stroke-width="3.8" fill="none" stroke-linecap="round"/>
+    <path d="${head}" fill="url(#${I.u}e)" stroke="#fff" stroke-width="1" stroke-linejoin="round" filter="url(#${I.u}g)"/>
+    <circle cx="32" cy="25" r="5" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1"/>
+    <path d="M32 22v3.5l2.5 1.5" stroke="url(#${I.u}e)" stroke-width="1.6" fill="none" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <rect x="47" y="45" width="12" height="4" rx="1.2" fill="#7BE08A"/><rect x="51" y="41" width="4" height="12" rx="1.2" fill="#7BE08A"/>
+    <rect x="48.5" y="46.3" width="9" height="1.4" fill="#E8FFE8"/>`;
+  },
+  // ===== Ремонтник =====
 });
 BUFF_COLOR.reflect = "#FFB347";
 
 // ---- логика новых умений (по мобам; по игрокам — через pvpAs в PvP-обёртке) ----
-const NC = {echo:null, rune:null, grav:null};
+const NC = {echo:null, rune:null, grav:null}, CHAIN_BACK = 2;
 function ncTarget(r){ const lk = typeof lockedEnemy === "function" ? lockedEnemy() : null;
   return lk && Math.hypot(lk.x - p.x, lk.y - p.y) <= r + NPCS[lk.type].r && los(p.x, p.y, lk.x, lk.y) && canReach(lk) ? lk : nearestEnemy(r); }
 function ncSkill(i, s){
@@ -9893,7 +10132,7 @@ function ncSkill(i, s){
   if(s.type === "echo"){ NC.echo = {x:p.x, y:p.y, aim:p.aim, until:now + s.dur, v:s.v}; CB.fx.push({type:"ring", x:p.x, y:p.y, r:40, life:.4, max:.4, c:C.color}); done(); return; }
   if(s.type === "siren"){
     for(const e of enemies){ if(e.dead || Math.hypot(e.x - p.x, e.y - p.y) > s.radius + NPCS[e.type].r || !los(p.x, p.y, e.x, e.y)) continue;   // сквозь стену — нет
-      hitEnemy(e, atk*s.mult, "aoe"); e.brkT = now + 5; e.chase = false; e.roomAggro = false; e.slowP = Math.max(e.slowT > now ? e.slowP || 0 : 0, 0.3); e.slowT = now + 3; }
+      hitEnemy(e, atk*s.mult, "aoe"); e.brkT = now + 5; e.chase = false; e.roomAggro = false; slowMob(e, s.slow || 0.3, s.slowDur || 3); }
     for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:p.x, y:p.y, r:s.radius*(0.5 + k*0.25), life:.45 + k*.1, max:.45 + k*.1, c:C.color});
     done(); return;
   }
@@ -9908,12 +10147,17 @@ function ncSkill(i, s){
   }
   if(s.type === "chain"){
     let cur = ncTarget(classParams().range + st.range + 60); if(!cur){ toast("Нет цели рядом"); return; }
-    const hit = new Set(); let px = p.x, py = p.y;
-    for(let k = 0; k < s.n && cur; k++){
+    const hit = new Set(), first = cur; let px = p.x, py = p.y, k = 0;
+    for(; k < s.n && cur; k++){
       hit.add(cur); beams.push({x1:px, y1:py - 16, x2:cur.x, y2:cur.y - 16, life:0.25}); hitEnemy(cur, atk*s.mult*(1 + 0.15*k), "beam");
       px = cur.x; py = cur.y;
       let best = null, bd = 160; for(const e of enemies){ if(e.dead || hit.has(e)) continue; const d = Math.hypot(e.x - px, e.y - py); if(d < bd && los(px, py, e.x, e.y) && canReach(e)){ bd = d; best = e; } }
       cur = best;
+    }
+    // целей меньше, чем прыжков: до двух разрядов возвращаются в первую цель с половиной силы (одиночная цель не «съедает» умение)
+    for(let j = 0; j < Math.min(CHAIN_BACK, s.n - k) && !first.dead; j++){
+      const fx = px, fy = py; CB.queue.push({t:0.12*(j + 1), e:first, dmg:atk*s.mult*0.5, done:false});
+      beams.push({x1:fx, y1:fy - 16, x2:first.x, y2:first.y - 16, life:0.3}); px = first.x; py = first.y;
     }
     done(); return;
   }
@@ -9922,7 +10166,7 @@ function ncSkill(i, s){
       const r = NC.rune; NC.rune = null;
       CB.fx.push({type:"trail", x1:p.x, y1:p.y, x2:r.x, y2:r.y, life:.4, max:.4, c:C.color});
       p.x = r.x; p.y = r.y; unstick(p, p.r);
-      const h = st.maxhp*s.v; S.hp = Math.min(st.maxhp, S.hp + h); healCP(h); addText(p.x, p.y - 40, "+" + Math.round(h), "#7BC98A");
+      const h = st.maxhp*s.v; S.hp = Math.min(st.maxhp, S.hp + h); healCP(h, true); addText(p.x, p.y - 40, "+" + Math.round(h), "#7BC98A");
       done(); return;
     }
     NC.rune = {x:p.x, y:p.y, until:now + 10}; CB.cd[i] = 0.5; toast("Руна поставлена — нажми ещё раз в течение 10 сек"); Sfx.play("ui"); return;
@@ -9951,12 +10195,18 @@ function ncSkill(i, s){
     }
     return r;
   };
-  // Печать отражения: −40% входящего урона и 40% возвращается атакующему мобу
+  // Печать отражения: от мобов −v урона и rf их урона возвращается атакующему. Удары пилотов режет сервер (щит pshield).
+  // Раньше обёртка принимала (dmg, src), а hurtPlayer вызывают как (dmg, by, src): моб приходил строкой с именем,
+  // и урон не отражался никогда; заодно терялся src, из-за чего не работал и «Ответный удар» Стража.
   const _hurtNC = hurtPlayer;
-  hurtPlayer = function(dmg, src){
+  hurtPlayer = function(dmg, by, src){
     const rv = buffV("reflect");
-    if(rv > 0){ if(src && typeof src === "object" && !src.dead) _hitNC(src, dmg*rv, "aoe"); dmg *= 1 - rv; }
-    return _hurtNC(dmg, src);
+    if(rv > 0 && !(p && p._pvpHit)){
+      const sk = clsOf(S.cls) && clsOf(S.cls).skills.find(k => k.buff === "reflect"), rf = sk && sk.rf || 0.4;
+      if(src && typeof src === "object" && !src.dead && !(p.dead || p.inv > 0)) _hitNC(src, dmg*rf, "reflect");
+      dmg *= 1 - rv;
+    }
+    return _hurtNC(dmg, by, src);
   };
   // мобы: стягивание глифом, детонация, невидимость
   const _updNC = updateEnemies;
@@ -10281,8 +10531,8 @@ setInterval(() => {
   };
   // смерть в башне — выбывание
   const _hurtTW = hurtPlayer;
-  hurtPlayer = function(dmg, src){
-    const was = p && !p.dead; const r = _hurtTW(dmg, src);
+  hurtPlayer = function(dmg, by, src){
+    const was = p && !p.dead; const r = _hurtTW(dmg, by, src);
     if(locKey === "tower" && was && p.dead && TW.run){ TW.run = false; TW.out = true; if(NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify({t:"twdead"})); toast("🩸 Ты выбыл из Кровавой башни"); }
     return r;
   };
@@ -13550,6 +13800,8 @@ Object.assign(I18N, {"Обычная руна": ["Common rune", "Звичайн�
 Object.assign(I18N, {"Ржавая глефа": ["Rusty Glaive", "Іржава глефа", "Guja oxidada", "Paslı Teber", "Glaive enferrujada"], "Ржавые фазовые клинки": ["Rusty Phase Blades", "Іржаві фазові клинки", "Hojas de fase oxidadas", "Paslı Faz Bıçakları", "Lâminas de fase enferrujadas"], "Ржавый ремонтный излучатель": ["Rusty Repair Emitter", "Іржавий ремонтний випромінювач", "Emisor de reparación oxidado", "Paslı Onarım Yayıcısı", "Emissor de reparo enferrujado"], "Железная глефа": ["Iron Glaive", "Залізна глефа", "Guja de hierro", "Demir Teber", "Glaive de ferro"], "Железные фазовые клинки": ["Iron Phase Blades", "Залізні фазові клинки", "Hojas de fase de hierro", "Demir Faz Bıçakları", "Lâminas de fase de ferro"], "Железный ремонтный излучатель": ["Iron Repair Emitter", "Залізний ремонтний випромінювач", "Emisor de reparación de hierro", "Demir Onarım Yayıcısı", "Emissor de reparo de ferro"], "Стальная глефа": ["Steel Glaive", "Сталева глефа", "Guja de acero", "Çelik Teber", "Glaive de aço"], "Стальные фазовые клинки": ["Steel Phase Blades", "Сталеві фазові клинки", "Hojas de fase de acero", "Çelik Faz Bıçakları", "Lâminas de fase de aço"], "Стальной ремонтный излучатель": ["Steel Repair Emitter", "Сталевий ремонтний випромінювач", "Emisor de reparación de acero", "Çelik Onarım Yayıcısı", "Emissor de reparo de aço"], "Хромовая глефа": ["Chrome Glaive", "Хромова глефа", "Guja cromada", "Krom Teber", "Glaive cromada"], "Хромовые фазовые клинки": ["Chrome Phase Blades", "Хромові фазові клинки", "Hojas de fase cromadas", "Krom Faz Bıçakları", "Lâminas de fase cromadas"], "Хромовый ремонтный излучатель": ["Chrome Repair Emitter", "Хромовий ремонтний випромінювач", "Emisor de reparación cromado", "Krom Onarım Yayıcısı", "Emissor de reparo cromado"], "Титановая глефа": ["Titanium Glaive", "Титанова глефа", "Guja de titanio", "Titanyum Teber", "Glaive de titânio"], "Титановые фазовые клинки": ["Titanium Phase Blades", "Титанові фазові клинки", "Hojas de fase de titanio", "Titanyum Faz Bıçakları", "Lâminas de fase de titânio"], "Титановый ремонтный излучатель": ["Titanium Repair Emitter", "Титановий ремонтний випромінювач", "Emisor de reparación de titanio", "Titanyum Onarım Yayıcısı", "Emissor de reparo de titânio"], "Кобальтовая глефа": ["Cobalt Glaive", "Кобальтова глефа", "Guja de cobalto", "Kobalt Teber", "Glaive de cobalto"], "Кобальтовые фазовые клинки": ["Cobalt Phase Blades", "Кобальтові фазові клинки", "Hojas de fase de cobalto", "Kobalt Faz Bıçakları", "Lâminas de fase de cobalto"], "Кобальтовый ремонтный излучатель": ["Cobalt Repair Emitter", "Кобальтовий ремонтний випромінювач", "Emisor de reparación de cobalto", "Kobalt Onarım Yayıcısı", "Emissor de reparo de cobalto"], "Плазменная глефа": ["Plasma Glaive", "Плазмова глефа", "Guja de plasma", "Plazma Teber", "Glaive de plasma"], "Плазменные фазовые клинки": ["Plasma Phase Blades", "Плазмові фазові клинки", "Hojas de fase de plasma", "Plazma Faz Bıçakları", "Lâminas de fase de plasma"], "Плазменный ремонтный излучатель": ["Plasma Repair Emitter", "Плазмовий ремонтний випромінювач", "Emisor de reparación de plasma", "Plazma Onarım Yayıcısı", "Emissor de reparo de plasma"], "Нейтронная глефа": ["Neutron Glaive", "Нейтронна глефа", "Guja de neutrones", "Nötron Teber", "Glaive de nêutrons"], "Нейтронные фазовые клинки": ["Neutron Phase Blades", "Нейтронні фазові клинки", "Hojas de fase de neutrones", "Nötron Faz Bıçakları", "Lâminas de fase de nêutrons"], "Нейтронный ремонтный излучатель": ["Neutron Repair Emitter", "Нейтронний ремонтний випромінювач", "Emisor de reparación de neutrones", "Nötron Onarım Yayıcısı", "Emissor de reparo de nêutrons"], "Квантовая глефа": ["Quantum Glaive", "Квантова глефа", "Guja cuántica", "Kuantum Teber", "Glaive quântica"], "Квантовые фазовые клинки": ["Quantum Phase Blades", "Квантові фазові клинки", "Hojas de fase cuánticas", "Kuantum Faz Bıçakları", "Lâminas de fase quânticas"], "Квантовый ремонтный излучатель": ["Quantum Repair Emitter", "Квантовий ремонтний випромінювач", "Emisor de reparación cuántico", "Kuantum Onarım Yayıcısı", "Emissor de reparo quântico"], "Звёздная глефа": ["Stellar Glaive", "Зоряна глефа", "Guja estelar", "Yıldız Teber", "Glaive estelar"], "Звёздные фазовые клинки": ["Stellar Phase Blades", "Зоряні фазові клинки", "Hojas de fase estelares", "Yıldız Faz Bıçakları", "Lâminas de fase estelares"], "Звёздный ремонтный излучатель": ["Stellar Repair Emitter", "Зоряний ремонтний випромінювач", "Emisor de reparación estelar", "Yıldız Onarım Yayıcısı", "Emissor de reparo estelar"]});   // шаг 6: оружие новых классов
 Object.assign(I18N, {"с {n} ур.": ["lv. {n}+", "з {n} рів.", "nv. {n}+", "Sv. {n}+", "nv. {n}+"], "{n} из {m}": ["{n} of {m}", "{n} з {m}", "{n} de {m}", "{n}/{m}", "{n} de {m}"], "с {n} уровня": ["from level {n}", "з {n} рівня", "desde el nivel {n}", "{n}. seviyeden itibaren", "a partir do nível {n}"], "Нужен {n} уровень": ["Requires level {n}", "Потрібен {n} рівень", "Requiere nivel {n}", "{n}. seviye gerekli", "Requer nível {n}"], "провода": ["wires", "дротів", "cables", "kablo", "fios"], "бронепластина": ["armor plates", "бронепластин", "placas blindadas", "zırh plakası", "placas blindadas"], "микросхема": ["microchips", "мікросхем", "microchips", "mikroçip", "microchips"], "Есть": ["Owned", "Є", "Lo tienes", "Var", "Você tem"], "Сервер не ответил, попробуй ещё раз": ["The server didn't respond, try again", "Сервер не відповів, спробуй ще раз", "El servidor no respondió, inténtalo de nuevo", "Sunucu yanıt vermedi, tekrar dene", "O servidor não respondeu, tente de novo"], "🔒 Сезонная зона: вход с билетом сезона": ["🔒 Season zone: entry with a season pass", "🔒 Сезонна зона: вхід із квитком сезону", "🔒 Zona de temporada: entrada con pase de temporada", "🔒 Sezon bölgesi: sezon biletiyle giriş", "🔒 Zona da temporada: entrada com passe da temporada"], "Создай свою и пригласи друзей": ["Create your own and invite friends", "Створи свою й запроси друзів", "Crea el tuyo e invita a tus amigos", "Kendi loncanı kur ve arkadaşlarını davet et", "Crie a sua e convide amigos"], "✓ сервер": ["✓ server", "✓ сервер", "✓ servidor", "✓ sunucu", "✓ servidor"], "Уровень {n} ждёт подтверждения сервера — продолжай бой": ["Level {n} is waiting for server confirmation — keep fighting", "Рівень {n} чекає підтвердження сервера — продовжуй бій", "El nivel {n} espera la confirmación del servidor: sigue luchando", "{n}. seviye sunucu onayını bekliyor — savaşmaya devam et", "O nível {n} aguarda confirmação do servidor — continue lutando"], "+{n} очков сезона": ["+{n} season points", "+{n} очок сезону", "+{n} puntos de temporada", "+{n} sezon puanı", "+{n} pontos da temporada"], "⇄ можно продать за GRAM": ["⇄ can be sold for GRAM", "⇄ можна продати за GRAM", "⇄ se puede vender por GRAM", "⇄ GRAM'a satılabilir", "⇄ pode ser vendido por GRAM"], "🔒 привязана: нельзя продать за GRAM": ["🔒 bound: can't be sold for GRAM", "🔒 прив'язана: не можна продати за GRAM", "🔒 vinculado: no se puede vender por GRAM", "🔒 bağlı: GRAM'a satılamaz", "🔒 vinculado: não pode ser vendido por GRAM"], "⇄ за GRAM можно продать {n} шт.": ["⇄ {n} pcs. can be sold for GRAM", "⇄ за GRAM можна продати {n} шт.", "⇄ se pueden vender {n} uds. por GRAM", "⇄ {n} adedi GRAM'a satılabilir", "⇄ {n} un. podem ser vendidas por GRAM"], "🔒 нельзя продать за GRAM": ["🔒 can't be sold for GRAM", "🔒 не можна продати за GRAM", "🔒 no se puede vender por GRAM", "🔒 GRAM'a satılamaz", "🔒 não pode ser vendido por GRAM"]});   // шаг 6: числа и дополнения
 Object.assign(I18N, {"Распродажа": ["Sale", "Розпродаж", "Rebajas", "İndirim", "Promoção"], "конец:": ["ends:", "кінець:", "termina:", "bitiş:", "termina:"], "Распродажа в магазине GRAM": ["Sale in the GRAM Shop", "Розпродаж у магазині GRAM", "Rebajas en la Tienda GRAM", "GRAM Mağazasında indirim", "Promoção na Loja GRAM"], "Магазин обновился: закрой игру и открой её снова": ["The shop has been updated: close the game and open it again", "Магазин оновився: закрий гру й відкрий її знову", "La tienda se ha actualizado: cierra el juego y vuelve a abrirlo", "Mağaza güncellendi: oyunu kapatıp yeniden aç", "A loja foi atualizada: feche o jogo e abra de novo"], "Цена изменилась: теперь {n} GRAM": ["The price has changed: now {n} GRAM", "Ціна змінилася: тепер {n} GRAM", "El precio ha cambiado: ahora {n} GRAM", "Fiyat değişti: artık {n} GRAM", "O preço mudou: agora {n} GRAM"]});   // шаг 7: распродажа
+// шаг 8: баланс классов — роли, описания умений и пассивок, строки окна навыков
+Object.assign(I18N, {"Танк · ближний бой": ["Tank · melee", "Танк · ближній бій", "Tanque · cuerpo a cuerpo", "Tank · yakın dövüş", "Tanque · corpo a corpo"], "Боец · ближний бой": ["Fighter · melee", "Боєць · ближній бій", "Luchador · cuerpo a cuerpo", "Dövüşçü · yakın dövüş", "Lutador · corpo a corpo"], "Стрелок · дальний бой": ["Marksman · ranged", "Стрілець · далекий бій", "Tirador · a distancia", "Nişancı · uzak dövüş", "Atirador · à distância"], "Маг · дальний бой": ["Mage · ranged", "Маг · далекий бій", "Mago · a distancia", "Büyücü · uzak dövüş", "Mago · à distância"], "Убийца · ближний бой": ["Assassin · melee", "Вбивця · ближній бій", "Asesino · cuerpo a cuerpo", "Suikastçı · yakın dövüş", "Assassino · corpo a corpo"], "Контроль · ближний бой": ["Control · melee", "Контроль · ближній бій", "Control · cuerpo a cuerpo", "Kontrol · yakın dövüş", "Controle · corpo a corpo"], "×2,5 урона по цели и оглушение на 2,5 сек (пилота — на 0,8 сек)": ["×2.5 damage to the target and a 2.5 s stun (0.8 s on pilots)", "×2,5 шкоди по цілі та оглушення на 2,5 с (пілота — на 0,8 с)", "×2,5 de daño al objetivo y aturdimiento de 2,5 s (a pilotos, 0,8 s)", "Hedefe ×2,5 hasar ve 2,5 sn sersemletme (pilotlara 0,8 sn)", "×2,5 de dano no alvo e atordoamento de 2,5 s (em pilotos, 0,8 s)"], "Урон всем врагам в радиусе 120 и замедление на 30% на 3 сек": ["Damage to all enemies within 120 and a 30% slow for 3 s", "Шкода всім ворогам у радіусі 120 і сповільнення на 30% на 3 с", "Daño a todos los enemigos en radio 120 y ralentización del 30% durante 3 s", "120 yarıçapta tüm düşmanlara hasar ve 3 sn boyunca %30 yavaşlatma", "Dano a todos os inimigos num raio de 120 e lentidão de 30% por 3 s"], "+60% брони на 8 сек; в бою с пилотами — −25% входящего урона": ["+60% armor for 8 s; vs pilots, −25% damage taken", "+60% броні на 8 с; у бою з пілотами — −25% вхідної шкоди", "+60% de blindaje durante 8 s; contra pilotos, −25% de daño recibido", "8 sn boyunca +%60 zırh; pilotlara karşı −%25 gelen hasar", "+60% de blindagem por 8 s; contra pilotos, −25% de dano recebido"], "Прыжок к цели с уроном и оглушением на 1 сек (пилота — на 0,4 сек)": ["Leap to the target, dealing damage and a 1 s stun (0.4 s on pilots)", "Стрибок до цілі зі шкодою та оглушенням на 1 с (пілота — на 0,4 с)", "Salta al objetivo, hace daño y aturde 1 s (a pilotos, 0,4 s)", "Hedefe atlayıp hasar verir ve 1 sn sersemletir (pilotları 0,4 sn)", "Salta até o alvo causando dano e atordoamento de 1 s (em pilotos, 0,4 s)"], "8 сек: 18% нанесённого урона чинит корпус, в том числе в бою с пилотами": ["8 s: 18% of damage dealt repairs your hull, including against pilots", "8 с: 18% завданої шкоди лагодить корпус, зокрема в бою з пілотами", "8 s: el 18% del daño causado repara tu casco, también contra pilotos", "8 sn: verilen hasarın %18'i gövdeni onarır, pilotlara karşı da", "8 s: 18% do dano causado repara o casco, inclusive contra pilotos"], "Урон всем врагам в радиусе 115; каждый задетый враг чинит 2% прочности": ["Damage to all enemies within 115; each enemy hit repairs 2% hull", "Шкода всім ворогам у радіусі 115; кожен зачеплений ворог лагодить 2% міцності", "Daño a todos los enemigos en radio 115; cada enemigo alcanzado repara un 2% de integridad", "115 yarıçapta tüm düşmanlara hasar; vurulan her düşman %2 dayanıklılık onarır", "Dano a todos os inimigos num raio de 115; cada inimigo atingido repara 2% de integridade"], "+25% атаки и +15% скорости атаки на 6 сек": ["+25% attack and +15% attack speed for 6 s", "+25% атаки та +15% швидкості атаки на 6 с", "+25% de ataque y +15% de velocidad de ataque durante 6 s", "6 sn boyunca +%25 saldırı ve +%15 saldırı hızı", "+25% de ataque e +15% de velocidade de ataque por 6 s"], "Прыжок к цели с уроном и замедлением на 40% на 3 сек": ["Leap to the target, dealing damage and a 40% slow for 3 s", "Стрибок до цілі зі шкодою та сповільненням на 40% на 3 с", "Salta al objetivo, hace daño y lo ralentiza un 40% durante 3 s", "Hedefe atlayıp hasar verir ve 3 sn boyunca %40 yavaşlatır", "Salta até o alvo causando dano e deixa-o 40% mais lento por 3 s"], "Рывок на 180 вперёд": ["Dash 180 forward", "Ривок на 180 вперед", "Impulso de 180 hacia delante", "180 ileri atılma", "Arrancada de 180 à frente"], "+40% скорости атаки на 5 сек": ["+40% attack speed for 5 s", "+40% швидкості атаки на 5 с", "+40% de velocidad de ataque durante 5 s", "5 sn boyunca +%40 saldırı hızı", "+40% de velocidade de ataque por 5 s"], "Снаряд с ×2,1 урона": ["Projectile with ×2.1 damage", "Снаряд із ×2,1 шкоди", "Proyectil con ×2,1 de daño", "×2,1 hasarlı mermi", "Projétil com ×2,1 de dano"], "Урон в радиусе 130, оглушение на 2 сек (пилота — на 0,6 сек) и −20% защиты на 5 сек": ["Damage in radius 130, a 2 s stun (0.6 s on pilots) and −20% defense for 5 s", "Шкода в радіусі 130, оглушення на 2 с (пілота — на 0,6 с) і −20% захисту на 5 с", "Daño en un radio de 130, aturdimiento de 2 s (a pilotos, 0,6 s) y −20% de defensa durante 5 s", "130 yarıçapta hasar, 2 sn sersemletme (pilotlara 0,6 sn) ve 5 sn −%20 savunma", "Dano num raio de 130, atordoamento de 2 s (em pilotos, 0,6 s) e −20% de defesa por 5 s"], "+40% брони и +30% атаки на 5 сек; в бою с пилотами — −20% входящего урона": ["+40% armor and +30% attack for 5 s; vs pilots, −20% damage taken", "+40% броні та +30% атаки на 5 с; у бою з пілотами — −20% вхідної шкоди", "+40% de blindaje y +30% de ataque durante 5 s; contra pilotos, −20% de daño recibido", "5 sn boyunca +%40 zırh ve +%30 saldırı; pilotlara karşı −%20 gelen hasar", "+40% de blindagem e +30% de ataque por 5 s; contra pilotos, −20% de dano recebido"], "Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит (по пилоту — ×2,5 и крит)": ["Invisible to mobs for 4 s, +30% speed; the first strike from the shadows deals ×3 and crits (×2.5 and a crit vs pilots)", "Невидимість для мобів на 4 с, +30% швидкості; перший удар із тіні — ×3 і крит (по пілоту — ×2,5 і крит)", "Invisible para los monstruos durante 4 s, +30% de velocidad; el primer golpe desde las sombras hace ×3 y es crítico (a pilotos, ×2,5 y crítico)", "4 sn boyunca canavarlara görünmezlik, +%30 hız; gölgeden ilk vuruş ×3 ve kritik (pilotlara ×2,5 ve kritik)", "Invisível para monstros por 4 s, +30% de velocidade; o primeiro golpe das sombras causa ×3 e é crítico (em pilotos, ×2,5 e crítico)"], "Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30% на 3 сек": ["Radius 130: damage, −20% defense for 5 s, enemies lose their target and are slowed by 30% for 3 s", "Радіус 130: шкода, −20% захисту на 5 с, вороги втрачають ціль і сповільнюються на 30% на 3 с", "Radio 130: daño, −20% de defensa durante 5 s; los enemigos pierden el objetivo y se ralentizan un 30% durante 3 s", "Yarıçap 130: hasar, 5 sn boyunca −%20 savunma; düşmanlar hedefini kaybeder ve 3 sn boyunca %30 yavaşlar", "Raio 130: dano, −20% de defesa por 5 s; os inimigos perdem o alvo e ficam 30% mais lentos por 3 s"], "Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×2 урона; пилота замедляет на 40% на 2 сек": ["Pulls enemies within radius 150 to the target and explodes after 0.6 s for ×2 damage; slows pilots by 40% for 2 s", "Стягує ворогів у радіусі 150 до цілі й через 0,6 с вибухає з ×2 шкоди; пілота сповільнює на 40% на 2 с", "Atrae a los enemigos en un radio de 150 hacia el objetivo y explota a los 0,6 s con ×2 de daño; ralentiza a los pilotos un 40% durante 2 s", "150 yarıçaptaki düşmanları hedefe çeker ve 0,6 sn sonra ×2 hasarla patlar; pilotları 2 sn boyunca %40 yavaşlatır", "Puxa os inimigos num raio de 150 até o alvo e explode após 0,6 s com ×2 de dano; deixa pilotos 40% mais lentos por 2 s"], "Разряд по 5 целям подряд, каждый прыжок +15% урона; если целей мало, до 2 разрядов возвращаются в первую цель с 50% силы": ["A discharge hits 5 targets in a row, each jump deals +15% damage; with few targets, up to 2 discharges return to the first target at 50% power", "Розряд по 5 цілях поспіль, кожен стрибок +15% шкоди; якщо цілей мало, до 2 розрядів повертаються в першу ціль із 50% сили", "Una descarga golpea a 5 objetivos seguidos, cada salto hace +15% de daño; si hay pocos objetivos, hasta 2 descargas vuelven al primero con el 50% de fuerza", "Art arda 5 hedefe deşarj, her sıçrama +%15 hasar; hedef azsa en fazla 2 deşarj ilk hedefe %50 güçle döner", "Uma descarga atinge 5 alvos em sequência, cada salto causa +15% de dano; com poucos alvos, até 2 descargas voltam ao primeiro alvo com 50% da força"], "5 сек: −35% урона от мобов, 40% их урона возвращается атакующему; в бою с пилотами — −25% входящего урона": ["5 s: −35% damage from mobs, 40% of their damage is returned to the attacker; vs pilots, −25% damage taken", "5 с: −35% шкоди від мобів, 40% їхньої шкоди повертається атакувальнику; у бою з пілотами — −25% вхідної шкоди", "5 s: −35% de daño de los monstruos y el 40% de su daño vuelve al atacante; contra pilotos, −25% de daño recibido", "5 sn: canavarlardan −%35 hasar, hasarlarının %40'ı saldırgana geri döner; pilotlara karşı −%25 gelen hasar", "5 s: −35% de dano de monstros e 40% do dano deles volta para o atacante; contra pilotos, −25% de dano recebido"], "Ставит руну на 10 сек; повторное нажатие — возврат к руне и +12% прочности": ["Places a rune for 10 s; press again to return to the rune and restore +12% hull", "Ставить руну на 10 с; повторне натискання — повернення до руни і +12% міцності", "Coloca una runa durante 10 s; pulsa otra vez para volver a ella y recuperar +12% de integridad", "10 sn için bir rün yerleştirir; tekrar basınca rüne dönersin ve +%12 dayanıklılık kazanırsın", "Coloca uma runa por 10 s; toque de novo para voltar a ela e recuperar +12% de integridade"], "Разряд по врагу ×2,5 урона; 50% нанесённого урона чинит самого раненого союзника рядом или тебя": ["Discharge at an enemy for ×2.5 damage; 50% of the damage dealt repairs the most wounded ally nearby or you", "Розряд по ворогу ×2,5 шкоди; 50% завданої шкоди лагодить найпораненішого союзника поруч або тебе", "Descarga contra un enemigo con ×2,5 de daño; el 50% del daño causado repara al aliado más herido cercano o a ti", "Düşmana ×2,5 hasarlı deşarj; verilen hasarın %50'si yakındaki en yaralı müttefiki ya da seni onarır", "Descarga num inimigo com ×2,5 de dano; 50% do dano causado repara o aliado mais ferido por perto ou você"], "+4% к силе лечения за уровень (в бою с пилотами — только союзников)": ["+4% healing power per level (vs pilots, allies only)", "+4% до сили лікування за рівень (у бою з пілотами — лише союзників)", "+4% de poder de curación por nivel (contra pilotos, solo a aliados)", "Seviye başına +%4 iyileştirme gücü (pilotlara karşı yalnızca müttefiklere)", "+4% de poder de cura por nível (contra pilotos, só aliados)"], "+6% лечения по целям с прочностью ниже 40% за уровень (в бою с пилотами — только союзников)": ["+6% healing on targets below 40% hull per level (vs pilots, allies only)", "+6% лікування по цілях з міцністю нижче 40% за рівень (у бою з пілотами — лише союзників)", "+6% de curación en objetivos con menos del 40% de integridad por nivel (contra pilotos, solo a aliados)", "Seviye başına dayanıklılığı %40'ın altındaki hedeflere +%6 iyileştirme (pilotlara karşı yalnızca müttefiklere)", "+6% de cura em alvos abaixo de 40% de integridade por nível (contra pilotos, só aliados)"], "+4% урона по целям с прочностью ниже 50% за уровень": ["+4% damage to targets below 50% hull per level", "+4% шкоди по цілях з міцністю нижче 50% за рівень", "+4% de daño a objetivos con menos del 50% de integridad por nivel", "Seviye başına dayanıklılığı %50'nin altındaki hedeflere +%4 hasar", "+4% de dano a alvos abaixo de 50% de integridade por nível"], "Тень": ["Shade", "Тінь", "Sombra", "Gölge", "Sombra"], "+2% уклонения от атак мобов, −1,5% урона от пилотов и +1,5% скорости бега за уровень": ["+2% dodge vs mob attacks, −1.5% damage from pilots and +1.5% run speed per level", "+2% ухилення від атак мобів, −1,5% шкоди від пілотів і +1,5% швидкості бігу за рівень", "+2% de esquiva contra ataques de monstruos, −1,5% de daño de pilotos y +1,5% de velocidad de carrera por nivel", "Seviye başına canavar saldırılarına karşı +%2 kaçınma, pilotlardan −%1,5 hasar ve +%1,5 koşu hızı", "+2% de esquiva contra ataques de monstros, −1,5% de dano de pilotos e +1,5% de velocidade de corrida por nível"], "Монолит": ["Monolith", "Моноліт", "Monolito", "Monolit", "Monólito"], "+2% брони и прочности за уровень": ["+2% armor and hull per level", "+2% броні та міцності за рівень", "+2% de blindaje e integridad por nivel", "Seviye başına +%2 zırh ve dayanıklılık", "+2% de blindagem e integridade por nível"], "Вязь глифов": ["Glyph Weave", "В'язь гліфів", "Trama de glifos", "Glif Örgüsü", "Trama de glifos"], "уклонение": ["dodge", "ухилення", "esquiva", "kaçınma", "esquiva"], "Оглушение: умения недоступны": ["Stunned: skills unavailable", "Оглушення: уміння недоступні", "Aturdido: habilidades no disponibles", "Sersemledin: yetenekler kullanılamaz", "Atordoado: habilidades indisponíveis"], "ИЗ ТЕНИ": ["FROM THE SHADOWS", "З ТІНІ", "DESDE LAS SOMBRAS", "GÖLGEDEN", "DAS SOMBRAS"], "Скрытность": ["Stealth", "Скритність", "Sigilo", "Gizlilik", "Furtividade"], "Перемещение · лечение": ["Mobility · healing", "Переміщення · лікування", "Movilidad · curación", "Hareket · iyileştirme", "Mobilidade · cura"], "Защита от мобов": ["Mob protection", "Захист від мобів", "Protección contra monstruos", "Canavar koruması", "Proteção contra monstros"], "(пилота — {n} сек)": ["({n} s on pilots)", "(пілота — {n} с)", "(a pilotos, {n} s)", "(pilotlara {n} sn)", "(em pilotos, {n} s)"], "оглушение {n} сек (пилота — {m} сек)": ["stun {n} s ({m} s on pilots)", "оглушення {n} с (пілота — {m} с)", "aturdimiento {n} s (a pilotos, {m} s)", "sersemletme {n} sn (pilotlara {m} sn)", "atordoamento {n} s (em pilotos, {m} s)"], "замедление {n}% на {m} сек": ["slow {n}% for {m} s", "сповільнення {n}% на {m} с", "ralentización {n}% durante {m} s", "{m} sn boyunca {n}% yavaşlatma", "lentidão {n}% por {m} s"], "−20% защиты на 5 сек": ["−20% defense for 5 s", "−20% захисту на 5 с", "−20% de defensa durante 5 s", "5 sn boyunca −%20 savunma", "−20% de defesa por 5 s"], "в бою с пилотами −{n}% урона": ["vs pilots −{n}% damage taken", "у бою з пілотами −{n}% шкоди", "contra pilotos −{n}% de daño recibido", "pilotlara karşı −{n}% gelen hasar", "contra pilotos −{n}% de dano recebido"], "+{n}% прочности за каждого врага": ["+{n}% hull per enemy hit", "+{n}% міцності за кожного ворога", "+{n}% de integridad por cada enemigo", "her düşman için +{n}% dayanıklılık", "+{n}% de integridade por inimigo"], "Урон от мобов −{n}%": ["Damage from mobs −{n}%", "Шкода від мобів −{n}%", "Daño de monstruos −{n}%", "Canavar hasarı −{n}%", "Dano de monstros −{n}%"], "{n}% отражается": ["{n}% reflected", "{n}% відбивається", "{n}% se refleja", "{n}% yansıtılır", "{n}% refletido"], "Проход сквозь цель (до {n}): {m}% атаки": ["Dash through the target (up to {n}): {m}% attack", "Прохід крізь ціль (до {n}): {m}% атаки", "Atraviesa el objetivo (hasta {n}): {m}% de ataque", "Hedefin içinden geçiş (en fazla {n}): {m}% saldırı", "Atravessa o alvo (até {n}): {m}% de ataque"], "по целям ниже 50% прочности — крит": ["crit on targets below 50% hull", "по цілях нижче 50% міцності — крит", "crítico a objetivos con menos del 50% de integridad", "dayanıklılığı %50'nin altındaki hedeflere kritik", "crítico em alvos abaixo de 50% de integridade"], "Двойник на {n} сек повторяет обычные удары: {m}% урона": ["A double repeats your basic attacks for {n} s: {m}% damage", "Двійник на {n} с повторює звичайні удари: {m}% шкоди", "Un doble repite tus ataques básicos durante {n} s: {m}% de daño", "İkiz {n} sn boyunca normal saldırılarını tekrarlar: {m}% hasar", "Um duplo repete seus ataques básicos por {n} s: {m}% de dano"], "Помехи в радиусе {n}: {m}% атаки": ["Jamming in radius {n}: {m}% attack", "Перешкоди в радіусі {n}: {m}% атаки", "Interferencia en radio {n}: {m}% de ataque", "{n} yarıçapta parazit: {m}% saldırı", "Interferência num raio de {n}: {m}% de ataque"], "мобы теряют цель": ["mobs lose their target", "моби втрачають ціль", "los monstruos pierden el objetivo", "canavarlar hedefini kaybeder", "os monstros perdem o alvo"], "Невидимость для мобов на {n} сек · +30% скорости · удар из тени ×3 и крит (по пилоту ×2,5)": ["Invisible to mobs for {n} s · +30% speed · strike from the shadows ×3 and crit (×2.5 vs pilots)", "Невидимість для мобів на {n} с · +30% швидкості · удар із тіні ×3 і крит (по пілоту ×2,5)", "Invisible para los monstruos durante {n} s · +30% de velocidad · golpe desde las sombras ×3 y crítico (a pilotos, ×2,5)", "{n} sn boyunca canavarlara görünmezlik · +%30 hız · gölgeden vuruş ×3 ve kritik (pilotlara ×2,5)", "Invisível para monstros por {n} s · +30% de velocidade · golpe das sombras ×3 e crítico (em pilotos, ×2,5)"], "Глиф (радиус {n}) стягивает врагов и взрывается: {m}% атаки": ["Glyph (radius {n}) pulls enemies in and explodes: {m}% attack", "Гліф (радіус {n}) стягує ворогів і вибухає: {m}% атаки", "Glifo (radio {n}) atrae a los enemigos y explota: {m}% de ataque", "Glif (yarıçap {n}) düşmanları çeker ve patlar: {m}% saldırı", "Glifo (raio {n}) puxa os inimigos e explode: {m}% de ataque"], "пилота замедляет на {n}% на {m} сек": ["slows pilots by {n}% for {m} s", "пілота сповільнює на {n}% на {m} с", "ralentiza a los pilotos un {n}% durante {m} s", "pilotları {m} sn boyunca {n}% yavaşlatır", "deixa pilotos {n}% mais lentos por {m} s"], "Разряд по {n} целям: {m}% атаки, +15% за прыжок": ["Discharge on {n} targets: {m}% attack, +15% per jump", "Розряд по {n} цілях: {m}% атаки, +15% за стрибок", "Descarga a {n} objetivos: {m}% de ataque, +15% por salto", "{n} hedefe deşarj: {m}% saldırı, sıçrama başına +%15", "Descarga em {n} alvos: {m}% de ataque, +15% por salto"], "до 2 возвратов в первую цель с 50% силы": ["up to 2 returns to the first target at 50% power", "до 2 повернень у першу ціль із 50% сили", "hasta 2 regresos al primer objetivo con el 50% de fuerza", "ilk hedefe %50 güçle en fazla 2 dönüş", "até 2 retornos ao primeiro alvo com 50% da força"], "Руна на 10 сек · возврат к ней и +{n}% прочности": ["Rune for 10 s · return to it and +{n}% hull", "Руна на 10 с · повернення до неї та +{n}% міцності", "Runa durante 10 s · vuelta a ella y +{n}% de integridad", "10 sn rün · rüne dönüş ve +{n}% dayanıklılık", "Runa por 10 s · retorno a ela e +{n}% de integridade"]});
 
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
@@ -13904,29 +14156,71 @@ function adSuspects(sx){
 }
 
 // ===================== РЕМОНТНИК: ЛЕЧЕНИЕ, ЩИТ-КОНТУР, РОЙ НАНИТОВ =====================
-// Баланс: урон класса низкий (×0,7 атаки), лечение считается от прочности цели (не от атаки — иначе снаряжение
-// на урон делало бы из лекаря «бога»), щит не сильнее −45%, в PvP-бою лечение слабее на 40%.
+// Баланс: урон класса низкий, лечение считается от прочности цели (не от атаки — иначе снаряжение
+// на урон делало бы из лекаря «бога»), щит не сильнее −45%, в PvP-бою лечение союзников слабее на 40%,
+// а лечение себя — на 60% и без бонусов «Полевого ремонта» и «Сортировки раненых»: лекарь силён в группе,
+// а в дуэли его можно победить (раньше самолечение перекрывало урон любого класса).
 // Лечение союзников проверяет сервер: только пати/гильдия, рядом, и не больше «запаса лечения» лекаря в секунду.
 const MED = {field:null, pvpT:0};
-const MED_RANGE = 380, MED_SHIELD_MAX = 0.45, MED_SIPHON_MAX = 0.75, MED_PVP = 0.6;
+const MED_RANGE = 380, MED_SHIELD_MAX = 0.45, MED_SIPHON_MAX = 0.75, MED_PVP = 0.6, MED_PVP_SELF = 0.4;
 BUFF_COLOR.shield = "#6EE7A8";
 Object.assign(SKILL_ART, {
-  mend:I => `<path d="M12 50 44 18" stroke="${I.L}" stroke-width="8" opacity=".35" filter="url(#${I.u}sg)"/>
-    <path d="M12 50 44 18" stroke="url(#${I.u}e)" stroke-width="3.4" stroke-linecap="round"/>
-    <rect x="38" y="8" width="8" height="22" rx="2" fill="#fff"/><rect x="31" y="15" width="22" height="8" rx="2" fill="#fff"/>
-    <rect x="40" y="10" width="4" height="18" fill="${I.c}"/><rect x="33" y="17" width="18" height="4" fill="${I.c}"/>
-    <circle cx="12" cy="50" r="5" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1.4"/>`,
-  nanoswarm:I => `<circle cx="32" cy="34" r="20" fill="${I.L}" opacity=".18"/><circle cx="32" cy="34" r="20" fill="none" stroke="${I.L}" stroke-width="2" stroke-dasharray="3 4"/>
-    ${[[22, 26], [40, 22], [30, 40], [44, 38], [18, 40], [34, 28], [26, 48], [42, 48]].map(([x, y], k) => `<circle cx="${x}" cy="${y}" r="${k % 3 ? 2.4 : 3.2}" fill="url(#${I.u}e)"/>`).join("")}
-    <path d="M28 34h8M32 30v8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`,
-  aegis:I => `<path d="M32 8 52 16v16c0 12-9 20-20 24C21 52 12 44 12 32V16z" fill="${I.L}" opacity=".25" stroke="url(#${I.u}e)" stroke-width="3"/>
-    <path d="M22 22h20M20 30h24M22 38h20M27 16v30M37 16v30" stroke="${I.L}" stroke-width="1.2" opacity=".7"/>
-    <path d="M32 24v14M25 31h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`,
-  surge:I => `<path d="M36 6 18 34h12l-4 24 20-30H34z" fill="url(#${I.u}e)" stroke="#1B2129" stroke-width="1.4"/>
-    <path d="M46 44a10 10 0 1 1-6-12" stroke="${I.L}" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M40 28l2 5-5 1" stroke="${I.L}" stroke-width="2.6" fill="none"/>`
+  mend:I => `
+    <path d="M14 50 47 17" stroke="${I.L}" stroke-width="10" opacity=".35" filter="url(#${I.u}sg)" stroke-linecap="round"/>
+    <path d="M15 49 46 18" stroke="url(#${I.u}e)" stroke-width="3.6" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <path d="M15 49 46 18" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
+    ${[[22, 38], [30, 31], [37, 23]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#fff"/>`).join("")}
+    <path d="M4 56l6-14 12 12z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M7 50 12 45" stroke="#fff" stroke-width="1.1" opacity=".8"/>
+    <circle cx="14" cy="50" r="3.4" fill="url(#${I.u}dm)" stroke="#1B2129" stroke-width="1"/><circle cx="14" cy="50" r="1.8" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>
+    <circle cx="47" cy="17" r="13" fill="${I.L}" opacity=".4" filter="url(#${I.u}sg)"/>
+    <path d="M43 6h8v7h7v8h-7v7h-8v-7h-7v-8h7z" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M44.5 8h5v6.5H56v5h-6.5V26h-5v-6.5H38v-5h6.5z" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>
+    <path d="M45.5 9.5v5.5h-5.5" stroke="#fff" stroke-width="1.1" fill="none"/>
+    ${[[58, 30], [33, 8]].map(([x, y]) => `<path d="M${x} ${y - 3}v6M${x - 3} ${y}h6" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>`).join("")}`,
+  nanoswarm:I => {
+    const hex = (x, y, r) => Array.from({length:6}, (_, i) => { const a = i*Math.PI/3; return (i ? "L" : "M") + (x + Math.cos(a)*r).toFixed(1) + " " + (y + Math.sin(a)*r).toFixed(1); }).join("") + "z";
+    const bots = [[14, 22, 3.6], [24, 13, 3], [42, 12, 3.4], [53, 24, 3], [52, 41, 3.8], [40, 52, 3.2], [22, 52, 3.6], [11, 40, 3], [31, 8, 2.4], [56, 33, 2.2], [8, 31, 2.2], [31, 57, 2.4]];
+    return `
+    <circle cx="32" cy="32" r="26" fill="${I.L}" opacity=".14"/>
+    <path d="M10 26c4-12 18-17 30-12M54 38c-4 12-18 17-30 12" stroke="${I.L}" stroke-width="1.6" fill="none" stroke-dasharray="3 3" opacity=".7"/>
+    ${bots.map(([x, y, r]) => `<path d="${hex(x, y, r)}" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width=".9"/><circle cx="${x}" cy="${y}" r="${(r*0.45).toFixed(1)}" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>`).join("")}
+    <circle cx="32" cy="32" r="12" fill="${I.L}" opacity=".45" filter="url(#${I.u}sg)"/>
+    <path d="M28.5 21h7v7.5H43v7h-7.5V43h-7v-7.5H21v-7h7.5z" fill="url(#${I.u}e)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M30 22.5v7.5h-7.5" stroke="#fff" stroke-width="1" fill="none" opacity=".9"/>`;
+  },
+  aegis:I => {
+    const cells = [];
+    for(let r = 0; r < 4; r++) for(let q = -3; q <= 3; q++){
+      const x = 32 + q*7.4 + (r % 2 ? 3.7 : 0), y = 44 - r*6.4;
+      if(Math.hypot((x - 32)/24, (y - 46)/30) > 0.95) continue;
+      cells.push(Array.from({length:6}, (_, i) => { const a = i*Math.PI/3 + Math.PI/6; return (i ? "L" : "M") + (x + Math.cos(a)*3.9).toFixed(1) + " " + (y + Math.sin(a)*3.9).toFixed(1); }).join("") + "z");
+    }
+    return `
+    <path d="M6 48a26 30 0 0 1 52 0z" fill="${I.L}" opacity=".22" filter="url(#${I.u}sg)"/>
+    <path d="M8 48a24 28 0 0 1 48 0z" fill="url(#${I.u}ed)"/>
+    <path d="${cells.join("")}" fill="none" stroke="${I.L}" stroke-width="1.1" opacity=".85"/>
+    <path d="M8 48a24 28 0 0 1 48 0" fill="none" stroke="url(#${I.u}e)" stroke-width="2.6" filter="url(#${I.u}g)"/>
+    <path d="M13 34a22 26 0 0 1 16-14" stroke="#fff" stroke-width="1.6" fill="none" opacity=".85" stroke-linecap="round"/>
+    <rect x="12" y="47" width="40" height="8" rx="3" fill="url(#${I.u}m)" stroke="#2A323C" stroke-width="1.4"/>
+    <path d="M14 49h36" stroke="#fff" stroke-width="1" opacity=".7"/>
+    ${[20, 32, 44].map(x => `<circle cx="${x}" cy="51.5" r="1.6" fill="url(#${I.u}e)" filter="url(#${I.u}g)"/>`).join("")}
+    <path d="M29.5 26h5v5h5v5h-5v5h-5v-5h-5v-5h5z" fill="#fff" stroke="${I.c}" stroke-width="1"/>`;
+  },
+  surge:I => `
+    <path d="M36 4 19 33h12l-5 25 21-31H34l6-23z" fill="${I.L}" opacity=".45" filter="url(#${I.u}sg)"/>
+    <path d="M36 5 20 33h11.5L27 56l19-28.5H34.5L40 5z" fill="url(#${I.u}e)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M35 9 24 30" stroke="#fff" stroke-width="1.2" opacity=".85"/>
+    <path d="M44 30c6 2 10 6 13 11" stroke="#FF6A5A" stroke-width="2.8" fill="none" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <path d="M52 37l5 4.5-1.5 6" stroke="#FF6A5A" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M23 40c-6 1-10 4-11.5 9" stroke="#7BE08A" stroke-width="2.8" fill="none" stroke-linecap="round" filter="url(#${I.u}g)"/>
+    <rect x="6.5" y="47" width="11" height="3.6" rx="1" fill="#7BE08A"/><rect x="10.2" y="43.3" width="3.6" height="11" rx="1" fill="#7BE08A"/>
+    <rect x="8" y="48.2" width="8" height="1.2" fill="#E8FFE8"/>
+    ${[[50, 12], [12, 20], [57, 54]].map(([x, y]) => `<path d="M${x} ${y - 2.5}v5M${x - 2.5} ${y}h5" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>`).join("")}`
 });
-const medMul = () => 1 + 0.04*pasLv("fieldrep");
 const medInPvp = () => typeof pvpZone === "function" && pvpZone() && now - MED.pvpT < 10;
+const medSelfPvp = target => target === "self" && medInPvp();
+const medMul = target => medSelfPvp(target) ? 1 : 1 + 0.04*pasLv("fieldrep");
 const medFrac = o => o === "self" ? S.hp/Math.max(1, stat().maxhp) : (+o.hp || 0)/Math.max(1, +o.mhp || 1);
 // союзники (пати/гильдия) рядом с точкой
 function medFriends(r, x, y){
@@ -13951,15 +14245,15 @@ function medPick(r){
 }
 function medAmount(target, frac){
   const mhp = target === "self" ? stat().maxhp : +target.mhp || 1;
-  let a = mhp*frac*medMul();
-  if(medFrac(target) < 0.4) a *= 1 + 0.06*pasLv("triage");
+  let a = mhp*frac*medMul(target);
+  if(!medSelfPvp(target) && medFrac(target) < 0.4) a *= 1 + 0.06*pasLv("triage");
   return Math.max(1, Math.round(a));
 }
 function medHeal(target, amount, quiet){
   if(target === "self"){
-    if(medInPvp()) amount = Math.round(amount*MED_PVP);
+    if(medInPvp()) amount = Math.round(amount*MED_PVP_SELF);
     const mx = stat().maxhp, got = Math.min(amount, Math.max(0, mx - S.hp));
-    S.hp = Math.min(mx, S.hp + amount); healCP(amount);
+    S.hp = Math.min(mx, S.hp + amount); healCP(amount, true);
     if(!quiet || got > 0) addText(p.x + (Math.random()*16 - 8), p.y - 44, "+" + Math.round(amount), "#6EE7A8");
     netSend({t:"cheal", to:(typeof NET !== "undefined" ? NET.id : 0), amount});            // сервер видит лечение (PvP-учёт прочности)
     return;
@@ -14003,7 +14297,7 @@ function medSkill(i, s){
     const t = medPick(MED_RANGE) || "self";
     const [x, y] = medTx(t);
     beams.push({x1:e.x, y1:e.y - 16, x2:x, y2:y - 20, life:0.3});
-    medHeal(t, Math.max(1, Math.round(dealt*Math.min(MED_SIPHON_MAX, s.v)*medMul())));
+    medHeal(t, Math.max(1, Math.round(dealt*Math.min(MED_SIPHON_MAX, s.v)*medMul(t))));
     done(); return;
   }
 }
@@ -14025,7 +14319,7 @@ function medSkill(i, s){
 // щит: −X% входящего урона от мобов (урон в PvP уже уменьшает сервер)
 {
   const _hurtMed = hurtPlayer;
-  hurtPlayer = function(dmg, by, src){ const v = buffV("shield"); if(v > 0) dmg *= 1 - v; return _hurtMed(dmg, by, src); };
+  hurtPlayer = function(dmg, by, src){ const v = buffV("shield"); if(v > 0 && !(p && p._pvpHit)) dmg *= 1 - v; return _hurtMed(dmg, by, src); };
 }
 // входящее: щит от союзного лекаря; удары игроков — для учёта «PvP-боя»
 {
@@ -14046,7 +14340,7 @@ setInterval(() => {
   if(now >= F.until || !p || p.dead){ MED.field = null; return; }
   if(now < F.next) return;
   F.next = now + 1;
-  if(Math.hypot(p.x - F.x, p.y - F.y) <= F.r) medHeal("self", Math.round(stat().maxhp*F.v*medMul()), true);
+  if(Math.hypot(p.x - F.x, p.y - F.y) <= F.r) medHeal("self", Math.round(stat().maxhp*F.v*medMul("self")), true);
   for(const o of medFriends(F.r, F.x, F.y)) medHeal(o, medAmount(o, F.v));
 }, 200);
 {
@@ -14064,29 +14358,32 @@ setInterval(() => {
     ctx.restore();
   };
 }
-// описание умений в окне навыков
-{
-  const _skT = skillText, _skTy = skillType;
-  skillText = function(s){
-    if(s.type === "mend") return `Лечение цели: ${pct(s.v)} её прочности · дальность ${s.dist}`;
-    if(s.type === "nanofield") return `Облако (радиус ${s.radius}): ${(s.v*100).toFixed(1).replace(".", ",")}% прочности в секунду · ${s.dur} сек`;
-    if(s.type === "shieldcast") return `Щит: −${pct(Math.min(MED_SHIELD_MAX, s.v))} входящего урона · ${s.dur} сек`;
-    if(s.type === "siphon") return `Разряд: ${pct(s.mult)} атаки · ${pct(Math.min(MED_SIPHON_MAX, s.v))} урона уходит на лечение`;
-    return _skT(s);
-  };
-  skillType = function(s){ return ["mend", "nanofield"].includes(s.type) ? "Лечение" : s.type === "shieldcast" ? "Защита" : s.type === "siphon" ? "Урон · лечение" : _skTy(s); };
-}
+// описание умений Ремонтника в окне навыков — теперь в общем skillText (там же все остальные классы)
 // АВТО для Ремонтника: лечит раненых, ставит щит, бросает рой в бою и бьёт Разрядником
 setInterval(() => {
   if(typeof auto === "undefined" || !auto || S.cls !== "medic" || !p || p.dead || paused) return;
   const C = clsOf(S.cls), idx = ty => C.skills.findIndex(k => k.type === ty), ready = i => i >= 0 && !(CB.cd[i] > 0);
-  let low = medFrac("self"); for(const f of medFriends(MED_RANGE, p.x, p.y)) low = Math.min(low, medFrac(f));
+  // в бою с пилотами себя лечим и по CP: они принимают удары первыми, а лечение их восстанавливает
+  const st0 = stat(), selfFr = medInPvp() ? (S.hp + (S.cp || 0))/Math.max(1, st0.maxhp + st0.maxcp) : medFrac("self");
+  let low = selfFr; for(const f of medFriends(MED_RANGE, p.x, p.y)) low = Math.min(low, medFrac(f));
   const iM = idx("mend"), iS = idx("shieldcast"), iN = idx("nanofield"), iD = idx("siphon");
   if(low < 0.45 && ready(iS)) return useSkill(iS);
   if(low < 0.65 && ready(iM)) return useSkill(iM);
   if(p.target && low < 0.85 && ready(iN)) return useSkill(iN);
   if(p.target && locKey !== "lobby" && ready(iD) && Math.hypot(p.target.x - p.x, p.target.y - p.y) < classParams().range + stat().range + 60) useSkill(iD);
 }, 400);
+// ===================== ОГЛУШЕНИЕ В БОЮ С ПИЛОТАМИ =====================
+// Оглушение умением (Шоковый удар и Таран Стража, ЭМИ-волна Техноманта) длится меньше секунды, но на это время
+// робот не ездит, не бьёт и не применяет умения. «Заминка» от ударов Жнеца (rootT) только останавливает.
+{
+  const _useStun = useSkill;
+  useSkill = function(i){
+    if(p && !p.dead && p.stunT > now){ if(now > (p._stunWarn || 0)){ p._stunWarn = now + 0.6; toast("Оглушение: умения недоступны"); } return; }
+    return _useStun(i);
+  };
+  const _dashStun = dash;
+  dash = function(){ if(p && p.stunT > now) return; return _dashStun(); };
+}
 
 // ===================== ТАБЛИЧКА ЦЕЛИ И ОКНО «ИНФО» (по эталону) =====================
 // Компактная табличка по центру под плашкой игрока: прицел + имя, красная полоса прочности с цифрами.

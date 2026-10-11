@@ -1410,6 +1410,27 @@ med_bucket = {}              # tg_id Ремонтника -> [запас леч�
 med_shield = {}              # tg_id Ремонтника -> время последнего щита
 MED_RANGE = 460              # с запасом к дальности умений на телефоне (380) и задержке позиций
 MED_PVP = 0.6                # лечение по цели в PvP-бою слабее на 40%
+# ---------- баланс классов в PvP (зеркало game.html → CLASSES, сверяет test_class_balance.py) ----------
+# Множитель класса в бою с пилотами: предел урона удара (и обычного, и умения) умножается на него, сам удар телефон
+# умножает на √множителя. Раньше предел был один на всех: с хорошим снаряжением удар упирался в него у любого класса,
+# урон выравнивался, а прочность и броня — нет, и «танки» выигрывали почти все дуэли. Подобрано моделью дуэлей.
+PVP_HIT_K = {"guard": 0.74, "reaper": 1.1, "sniper": 1.13, "techno": 1.07, "ghost": 1.45, "glyph": 0.8, "medic": 0.88}
+# Наибольшее оглушение пилота умением (сек) и замедление умением (доля) у класса; у остальных классов не пропускаем.
+PVP_SKILL_STUN = {"guard": 0.9, "techno": 0.7}
+PVP_SKILL_SLOW = {"guard": 0.3, "reaper": 0.4, "ghost": 0.3, "glyph": 0.4}
+# Щит на себя от умений (Броневой контур, Печать отражения, Силовое поле): (наибольшее снижение урона, длительность, не чаще раза в N сек).
+# Снижение применяет сервер, как у Щит-контура Ремонтника, — иначе он считал бы урон без щита и «добивал» живого.
+# N — чуть меньше самой короткой честной перезарядки (10 уровень умения, «Холодный расчёт», «Циклотрон», сет): чаще — только подделка.
+SELF_SHIELD = {"guard": (0.25, 10.0, 11.0), "glyph": (0.25, 7.0, 10.5), "techno": (0.2, 7.0, 6.0)}
+self_shield = {}             # tg_id -> время последнего щита на себя
+
+
+def put_shield(tgt, v, dur):
+    """Щит на пилота: сильный щит не перебивается слабым, пока действует."""
+    now = time.time()
+    if tgt.get("shield_until", 0) > now and tgt.get("shield_v", 0) > v:
+        return
+    tgt["shield_v"], tgt["shield_until"] = v, now + dur
 # Командный опыт — только тем, кто в пределах экрана от убившего. Мир рисуется 1:1 в CSS-пикселях, робот стоит
 # по центру: половина экрана телефона ≈ 195 × 420 px. Небольшой запас — на задержку позиций по сети.
 PXP_HALF_W = 220
@@ -1684,9 +1705,27 @@ async def handle_party(d, info):
         # общий «Подхил» в пати отключён: лечить союзников может только Ремонтник (cheal)
         return
     elif t in ("cheal", "cbuff"):
-        # умения Ремонтника: лечение и щит. Себя — всегда, других — только пати/гильдию рядом в той же локации
-        if info.get("cls") != "medic" or info.get("dead"):
+        if info.get("dead"):
             return
+        if info.get("cls") != "medic":
+            # Страж, Глифоносец и Техномант: щит умения только на себя и в пределах умения класса (SELF_SHIELD)
+            lim = SELF_SHIELD.get(info.get("cls"))
+            if t != "cbuff" or not lim or other not in (0, uid) or d.get("k") != "shield":
+                return
+            v_max, dur_max, every = lim
+            if time.time() - self_shield.get(uid, 0) < every:
+                return
+            try:
+                v = max(0.0, min(float(d.get("v", 0)), v_max))
+                dur = max(0.0, min(float(d.get("dur", 0)), dur_max))
+            except (TypeError, ValueError):
+                return
+            if v <= 0 or dur <= 0:
+                return
+            self_shield[uid] = time.time()
+            put_shield(info, v, dur)
+            return
+        # умения Ремонтника: лечение и щит. Себя — всегда, других — только пати/гильдию рядом в той же локации
         tgt = info if other in (0, uid) else online(other)
         if not tgt or tgt.get("dead"):
             return
@@ -1722,7 +1761,7 @@ async def handle_party(d, info):
                 dur = max(0.0, min(float(d.get("dur", 0)), 9.0))
             except (TypeError, ValueError):
                 return
-            tgt["shield_v"], tgt["shield_until"] = v, time.time() + dur
+            put_shield(tgt, v, dur)
             if tgt is not info:
                 await push_to_player(tgt["id"], {"t": "cbuff", "k": "shield", "v": v, "dur": dur, "from": info["nick"]})
     elif t == "pxp":
@@ -2107,9 +2146,12 @@ async def handle_pvp(d, info):
     else:
         info["pvp_t"] = time.time()
     info["pvp_last"] = time.time()
-    dmg = max(1, min(dmg, (40 + info["lvl"] * 8) * (4 if skill else 1)))
+    cls = info.get("cls")
+    # предел урона: по уровню, ×множитель класса, у умения — ещё ×4
+    cap = (40 + info["lvl"] * 8) * PVP_HIT_K.get(cls, 1.0) * (4 if skill else 1)
+    dmg = max(1, min(dmg, int(cap)))
     if tgt.get("shield_until", 0) > time.time():
-        dmg = max(1, int(dmg * (1 - tgt.get("shield_v", 0))))     # Щит-контур Ремонтника
+        dmg = max(1, int(dmg * (1 - tgt.get("shield_v", 0))))     # щиты: Щит-контур, Броневой контур, Печать, Силовое поле
     pvp.on_hit(info, tgt)
     pvp.record_hit(info["id"], to, dmg)
     dead = pvpguard.on_hit(tgt, dmg)                # сервер сам ведёт CP и прочность жертвы
@@ -2117,13 +2159,24 @@ async def handle_pvp(d, info):
     hit = {"t": "pvp_hit", "from": info["id"], "nick": info["nick"], "dmg": dmg, "crit": crit, "skill": skill}
     if d.get("hid"):
         hit["hid"] = str(d.get("hid"))[:24]
-    # баланс 4 сезона: замедление (Страж/Жнец), оглушение (Жнец), снятие защиты (ЭМИ, Залп)
-    if d.get("sl") and info.get("cls") in ("guard", "reaper") and not skill:
+    # баланс 4 сезона: замедление (Страж/Жнец), «заминка» (Жнец), снятие защиты (ЭМИ, Залп, Сирена)
+    if d.get("sl") and cls in ("guard", "reaper") and not skill:
         hit["sl"] = 1
-    if d.get("st") and info.get("cls") == "reaper" and not skill:
+    if d.get("st") and cls == "reaper" and not skill:
         hit["st"] = 1
-    if d.get("br") and skill and info.get("cls") in ("techno", "sniper", "ghost"):
+    if d.get("br") and skill and cls in ("techno", "sniper", "ghost"):
         hit["br"] = 1
+    # оглушение и замедление умением — только у классов, у которых такие умения есть, и не сильнее, чем в игре
+    if skill:
+        try:
+            stn, sls, sld = float(d.get("stn") or 0), float(d.get("sls") or 0), float(d.get("sld") or 0)
+        except (TypeError, ValueError):
+            stn = sls = sld = 0.0
+        if stn > 0 and PVP_SKILL_STUN.get(cls):
+            hit["stn"] = round(min(stn, PVP_SKILL_STUN[cls]), 2)
+        if sls > 0 and PVP_SKILL_SLOW.get(cls):
+            hit["sls"] = round(min(sls, PVP_SKILL_SLOW[cls]), 2)
+            hit["sld"] = round(max(0.5, min(sld, 3.5)), 1)
     hub.to_uid(to, hit)
     broadcast_pvp_fx(info, tgt, dmg, crit, skill)
     metrics.inc("pvp.hit")
@@ -2630,6 +2683,8 @@ async def cleanup_loop():
                 med_bucket.pop(uid, None)
             for uid in [u for u, t in med_shield.items() if now - t > 60]:
                 med_shield.pop(uid, None)
+            for uid in [u for u, t in self_shield.items() if now - t > 60]:
+                self_shield.pop(uid, None)
             for uid in [u for u, t in last_seen.items() if now - t > 3 * 86400]:
                 last_seen.pop(uid, None)                       # дальше «заходил в …» берётся из базы
             for key in [k for k in chat_limits if k[0] not in online_ids]:
