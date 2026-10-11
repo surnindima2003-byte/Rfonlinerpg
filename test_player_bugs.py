@@ -240,5 +240,59 @@ class PortalTouch(unittest.TestCase):
         self.assertIn('data-go="lobby"', back)                             # выход — по кнопке в окне, а не сразу
 
 
+class Shop(unittest.TestCase):
+    """Магазин: 3 вкладки вместо 8 кнопок, ни один раздел не потерян; вместо «Мало» — «Пополнить, не хватает …»."""
+    def test_every_section_is_in_a_tab(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        harness = (ROOT / "tools" / "stat_caps.js").read_text(encoding="utf-8").split("\nconst out = JSON.parse")[0]
+        js = "process.argv[2] = " + json.dumps(str(ROOT / "game.html")) + ";\n" + harness + "\nconsole.log(run(`JSON.stringify({tabs:[...new Set(PACKS.map(p => p.tab))], groups:SHOP_GROUPS.map(g => g.secs.map(s => s[0])), need:[gramNeed(13.65), gramNeed(0.001), gramNeed(2.6449)]})`));"
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr[-1500:])
+        d = json.loads(out.stdout.strip().splitlines()[-1])
+        in_groups = [k for g in d["groups"] for k in g]
+        self.assertEqual(len(d["groups"]), 3)
+        self.assertEqual(sorted(set(d["tabs"])), sorted(in_groups))          # каждый раздел в какой-то вкладке, ровно один раз
+        self.assertEqual(len(in_groups), len(set(in_groups)))
+        self.assertEqual(d["need"], ["13,65", "0,01", "2,65"])                # не хватает — с округлением вверх
+
+    def test_topup_instead_of_low(self):
+        card = GAME[GAME.index("function shopCard(pk, bal)"):GAME.index("function renderShop()")]
+        self.assertIn('data-shop="topup"', card)
+        self.assertIn("не хватает ${gramNeed(price - bal)}", card)
+        self.assertNotIn('"Мало"', card)
+        shop = GAME[GAME.index("function renderShop()"):GAME.index("// ===================== СЕЗОН")]
+        self.assertIn("SHOP_GROUPS.map(g =>", shop)
+        self.assertIn('"#shopSec-" + sec', shop)                             # ссылка на раздел прокручивает к нему
+
+
+class Market(unittest.TestCase):
+    """Маркет: разделы — ровно то, что можно продать; у каждого лота виден продавец."""
+    def test_categories_match_tradable_items(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        harness = (ROOT / "tools" / "stat_caps.js").read_text(encoding="utf-8").split("\nconst out = JSON.parse")[0]
+        js = ("process.argv[2] = " + json.dumps(str(ROOT / "game.html")) + ";\n" + harness +
+              "\nconsole.log(run(`JSON.stringify({cats:MK_CATS.map(c => c[0]), sell:[...GEAR_IDS, ...REG_IDS].map(id => [id, mkCatOf(id)]),"
+              " notSell:[...BOOK_IDS.slice(0, 3), 'wire', 'chip', 'plate'].map(id => mkCatOf(id))})`));")
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr[-1500:])
+        d = json.loads(out.stdout.strip().splitlines()[-1])
+        self.assertNotIn("book", d["cats"])
+        self.assertNotIn("mat", d["cats"])
+        bad = [(i, c) for i, c in d["sell"] if c not in d["cats"]]
+        self.assertEqual(bad, [])                                         # дроны, крылья, плащи — в своих разделах
+        self.assertEqual({c for i, c in d["sell"] if i.startswith(("d_", "wg_", "ck_"))}, {"drone", "look"})
+        self.assertTrue(all(c not in d["cats"] for c in d["notSell"]))
+
+    def test_seller_shown_for_gear(self):
+        row = GAME[GAME.index("function mkRow(lot, mine)"):GAME.index("// сравнение артефактов")]
+        self.assertIn('class="mk-seller"', row)
+        self.assertNotIn('it.type === "gear" ? gearDesc(x.id, x.g, x.e) : "@"', row)   # раньше у снаряжения продавца не было
+        self.assertIn("MK_CATS.filter(([k]) => k === \"all\" || k === mkCat || cats[k])", GAME)
+
+
 if __name__ == "__main__":
     unittest.main()

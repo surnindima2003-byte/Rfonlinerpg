@@ -35,8 +35,8 @@ def data_strings():
     out += re.findall(r'\["\w+", "([^"]+)", \d+\]', block("const WB_DROP = [", "];"))
     packs = block("const PACKS = [", "\n];")
     out += re.findall(r'SP\("\w+", "([^"]+)"', packs) + re.findall(r'(?:name|desc):"([^"]+)"', packs)
-    tabs = GAME[GAME.index('const tabs = [["packs", "Паки"]'):]
-    out += re.findall(r'\["\w+", "([^"]+)"\]', tabs[:tabs.index("];")])
+    shop = block("const SHOP_GROUPS = [", "\n];")              # вкладки магазина и разделы внутри них
+    out += re.findall(r'name:"([^"]+)"', shop) + re.findall(r'\["\w+", "([^"]+)"\]', shop)
     out += re.findall(r':"([^"]+)"', block("const FAC_INFO = {", "};"))
     return [s for s in dict.fromkeys(out) if re.search("[А-Яа-яЁё]", s)]
 
@@ -266,7 +266,7 @@ class PlayerContentIsNotTranslated(unittest.TestCase):
         self.has('<div class="pod-n" data-notr>')
         self.has('<span>${w.place}</span><b data-notr>${esc(w.nick)}</b>')
         self.has('`<span data-notr>${["🥇", "🥈", "🥉"][w.place - 1]} ${esc(w.nick)}')
-        self.has('<small ${it.type === "gear" ? "" : "data-notr"}>')                                  # «@ник» продавца на маркете
+        self.has('<small class="mk-seller" data-notr>@${esc(lot.seller || S.name)}</small>')             # «@ник» продавца на маркете
 
 
 class ScreensBuildTranslatableText(unittest.TestCase):

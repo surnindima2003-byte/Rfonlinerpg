@@ -653,7 +653,7 @@ async def escrow_for_market(s, uid, item):
             what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы и осколки с мобов, руны, дронов и артефакты"
+    return None, "За GRAM можно продавать только снаряжение, сферы и осколки с мобов, руны, дронов, артефакты, крылья и плащи"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
