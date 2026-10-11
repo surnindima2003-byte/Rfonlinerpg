@@ -325,5 +325,46 @@ class ProfileAndSeason(unittest.TestCase):
         self.assertIn('toast("Уровень пропуска: " + now)', GAME)
 
 
+class DeathAndSeasonPortal(unittest.TestCase):
+    """Гибель стоит 3% лома (кроме арен событий); портал сезонной зоны открывается касанием."""
+    def test_death_scrap_loss(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        a = GAME.index("const DEATH_SCRAP_PCT = ")
+        block = GAME[a:GAME.index("\n", GAME.index("const deathScrapLoss", a))]
+        js = "\n".join([
+            "const LOCS = {scrapfields:{}, lobby:{safe:true}, arena_fear:{arena:true}, tower:{arena:true}, season1:{}};",
+            "let locKey = 'scrapfields'; const S = {scrap: 123456};",
+            block,
+            "const r = {field: deathScrapLoss()};",
+            "S.scrap = 20; r.small = deathScrapLoss();",
+            "S.scrap = 123456; for(const k of ['lobby', 'arena_fear', 'tower', 'season1']){ locKey = k; r[k] = deathScrapLoss(); }",
+            "console.log(JSON.stringify({r, pct: DEATH_SCRAP_PCT}));"])
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        d = json.loads(out.stdout)
+        r = d["r"]
+        self.assertEqual(r["field"], 3703)                       # 3% от 123 456, вниз
+        self.assertEqual(r["small"], 0)
+        self.assertEqual((r["lobby"], r["arena_fear"], r["tower"]), (0, 0, 0))
+        self.assertEqual(r["season1"], 3703)
+        self.assertIn("ремонт обойдётся в %d%% лома" % round(d["pct"] * 100), GAME)    # обучение говорит то же число
+
+    def test_death_applies_loss_once(self):
+        a = GAME.index("function hurtPlayer(dmg, by, src)")
+        fn = GAME[a:GAME.index("function killEnemy", a)]
+        self.assertIn("const lose = deathScrapLoss();", fn)
+        self.assertIn('class="death-box"', fn)
+        self.assertNotIn("при гибели ничего не теряется", GAME)
+
+    def test_season_portal_by_touch(self):
+        self.assertIn('const PORTAL_KINDS = ["portal", "back", "season"]', GAME)
+        fn = GAME[GAME.index("function openSeasonPortal()"):GAME.index("function portalTouch()")]
+        self.assertIn('data-go="season1"', fn)
+        self.assertIn('data-shop="season"', fn)
+        self.assertNotIn("openShop()", fn)                         # касание не открывает магазин само
+
+
 if __name__ == "__main__":
     unittest.main()
