@@ -3453,7 +3453,7 @@ function hud(){
   hudText("hCls", C0 ? C0.name : "Пилот");
   // аватар — портрет своего робота; перерисовывается только при смене класса, фракции или снаряжения
   const avKey = (S.cls || "") + "|" + (S.faction || "") + "|" + JSON.stringify(typeof eqGrades === "function" ? eqGrades(S.eq) : {});
-  if(HUDC.av !== avKey && typeof mechImg === "function"){ HUDC.av = avKey; try{ $("hAv").innerHTML = mechImg(S.cls || "guard", S.faction || "aegis", typeof eqGrades === "function" ? eqGrades(S.eq) : {}, 46); }catch(e){} $("hClsIc").textContent = ({guard:"🛡", reaper:"⚔", sniper:"🎯", techno:"✦"})[S.cls] || "•"; $("hClsIc").style.background = C0 ? C0.color : "#7A2E36"; }
+  if(HUDC.av !== avKey && typeof mechImg === "function"){ HUDC.av = avKey; try{ $("hAv").innerHTML = mechImg(S.cls || "guard", S.faction || "aegis", typeof eqGrades === "function" ? eqGrades(S.eq) : {}, 46); }catch(e){} $("hClsIc").textContent = ({guard:"🛡", reaper:"⚔", sniper:"🎯", techno:"✦", ghost:"🗡", glyph:"◈", medic:"✚"})[S.cls] || "•"; $("hClsIc").style.background = C0 ? C0.color : "#7A2E36"; }
   hudWidth("hHpBar", S.hp/st.maxhp*100);
   const cp = Math.ceil(Math.min(S.cp ?? st.maxcp, st.maxcp));
   hudWidth("hCpBar", cp/st.maxcp*100); hudText("hCpTxt", "CP " + cp.toLocaleString("ru-RU") + " / " + st.maxcp.toLocaleString("ru-RU"));
@@ -6628,458 +6628,757 @@ function mechImg(cls, fac, eq, size){
 }
 const eqGrades = eq => { const o = {}; for(const k in eq || {}) if(eq[k]) o[k] = typeof eq[k] === "object" ? eq[k].g : eq[k]; return o; };
 // ===================== ПИКСЕЛЬ-АРТ МЕХИ =====================
-// Каждый кадр рисуется попиксельно в сетке 48×44: детали с бликом и тенью, автоматическая тёмная обводка,
-// светящиеся пиксели получают отдельный слой свечения. Кадры: покой (2), шаг (4), атака (2).
-// Спрайт смотрит вправо, точка опоры — между ступнями (20, 42).
+// Каждый кадр рисуется попиксельно в сетке 48×44. Детали — фигуры с автоматическим объёмом (блик сверху, светлая
+// левая грань, тень справа и снизу; свет сверху-слева), броня класса окрашена в его цвет, грейды снаряжения
+// подсвечивают глаза, оружие, ядро, полосы брони и ног. Тёмная обводка ставится автоматически,
+// светящиеся пиксели получают отдельный слой свечения.
+// Ракурсы: e — профиль вправо, se/ne — три четверти, s — лицом, n — спиной (левые — зеркало правых).
+// Кадры: покой (2), шаг (4), атака (2: замах и удар). Точка опоры — между ступнями (20, 42).
 const SPR_W = 48, SPR_H = 44, SPR_AX = 20, SPR_AY = 42;
 const sprCache = new Map();
 
 function sprPalette(o){
   const F = FACTIONS[o.fac] || FACTIONS.aegis, C = CLASSES[o.cls], eq = o.eq || {};
-  const gc = s => eq[s] !== undefined && eq[s] !== null ? gradeColor(eq[s]) : null;
+  const gc = s => eq[s] !== undefined && eq[s] !== null && eq[s] > 0 ? gradeColor(eq[s]) : null;   // обычный грейд — цвет класса
   const md = F.body, glow = C ? C.color : F.color;
+  // краска брони класса: цвет класса, приглушённый к металлу корпуса (светится только то, что должно светиться)
+  const pc = C ? mix(shade(C.color, .86), md, .14) : mix(F.color, md, .5);
+  const wpn = gc("weapon") || glow;
   return {
     hi:mix(md, "#FFFFFF", .55), lt:mix(md, "#FFFFFF", .25), md, dk:F.dark, dd:shade(F.dark, .55),
-    trim:F.color, glow, glowHi:mix(glow, "#FFFFFF", .55),
-    eye:gc("head") || glow, wpn:gc("weapon") || glow, arm:gc("armor") || F.color, core:gc("core") || glow,
+    trim:F.color, trimD:shade(F.color, .62), glow, glowHi:mix(glow, "#FFFFFF", .55),
+    pH:mix(pc, "#FFFFFF", .42), pL:mix(pc, "#FFFFFF", .16), pM:pc, pD:shade(pc, .66), pX:shade(pc, .44),
+    eye:gc("head") || glow, wpn, wpnHi:mix(wpn, "#FFFFFF", .55), arm:gc("armor") || mix(pc, "#FFFFFF", .55), core:gc("core") || glow,
     legs:gc("legs") || shade(F.dark, .8), mod:gc("module") || glow,
     steel:"#9AA6B2", steelHi:"#D5DCE3", steelDk:"#4B5561", gun:"#2F3842", gunHi:"#56626F"
   };
 }
 
 function buildSprite(kind, P, anim, f, view){
-  const buf = new Array(SPR_W*SPR_H).fill(null), glowPx = [];
-  const put = (x, y, c, g) => { x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= SPR_W || y >= SPR_H || !c) return; buf[y*SPR_W + x] = c; if(g) glowPx.push([x, y, c]); };
-  const rect = (x, y, w, h, c, g) => { for(let j = 0; j < h; j++) for(let i = 0; i < w; i++) put(x + i, y + j, c, g); };
-  // деталь с объёмом: блик сверху, светлый левый край, тень справа и снизу
-  const block = (x, y, w, h, base, lt, dk, hi) => {
-    rect(x, y, w, h, base);
-    for(let i = 0; i < w; i++){ put(x + i, y, hi || lt); put(x + i, y + h - 1, dk); }
-    for(let j = 1; j < h - 1; j++){ put(x, y + j, lt); put(x + w - 1, y + j, dk); }
+  const W = SPR_W, H = SPR_H;
+  const buf = new Array(W*H).fill(null), glowPx = [];
+  const put = (x, y, c, g) => { x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= W || y >= H || !c) return; buf[y*W + x] = c; if(g) glowPx.push([x, y, c]); };
+  const gp = (x, y, c) => put(x, y, c, true);
+  // палитры объёма: [блик, свет, основа, тень, глубокая тень]
+  const MET = [P.hi, P.lt, P.md, P.dk, P.dd];
+  const FAR = [P.lt, P.md, P.dk, P.dd, shade(P.dd, .75)];           // дальняя сторона — на тон темнее
+  const PNT = [P.pH, P.pL, P.pM, P.pD, P.pX];
+  const PNF = [P.pL, P.pM, P.pD, P.pX, shade(P.pX, .75)];
+  const DRK = [P.md, P.dk, P.dd, shade(P.dd, .75), shade(P.dd, .55)];
+  const STL = ["#EEF2F5", P.steelHi, P.steel, P.steelDk, "#323B45"];
+  const GUN = ["#7A8794", P.gunHi, P.gun, "#232A32", "#161B21"];
+  // фигура с автоматическим объёмом: верхняя кромка — блик, левая — свет, правая — тень, нижняя — глубокая тень
+  const blendCache = new Map();
+  const blend = ramp => { let b = blendCache.get(ramp); if(!b){ b = [mix(ramp[2], ramp[1], .5), mix(ramp[2], ramp[3], .45)]; blendCache.set(ramp, b); } return b; };
+  // ol — внутренний контур: там, где деталь ложится поверх уже нарисованного, по краю идёт тёмная линия
+  // (оттенок того, что под ней) — рука на фоне корпуса, оружие на фоне брони читаются отдельно
+  const fill = (pts, ramp, flat, ol) => {
+    const s = new Set(); for(const [x, y] of pts) s.add(x + y*64);
+    const has = (x, y) => s.has(x + y*64);
+    if(ol) for(const [x, y] of pts) for(const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+      const X = x + dx, Y = y + dy; if(X < 0 || Y < 0 || X >= W || Y >= H || has(X, Y)) continue;
+      const under = buf[Y*W + X]; if(under && under !== "#0B0E12") buf[Y*W + X] = shade(under, .42);
+    }
+    // крупные детали получают мягкий объём: свет сверху-слева, тень к низу
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    if(!flat) for(const [x, y] of pts){ if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; }
+    const big = !flat && y1 - y0 >= 5 && x1 - x0 >= 4, bl = big ? blend(ramp) : null;
+    for(const [x, y] of pts){
+      let c = ramp[2];
+      if(!flat){
+        if(!has(x, y - 1)) c = ramp[0];
+        else if(!has(x - 1, y)) c = ramp[1];
+        else if(!has(x + 1, y)) c = ramp[3];
+        else if(!has(x, y + 1)) c = ramp[4];
+        else if(big){ const u = (x - x0)/(x1 - x0 || 1), v = (y - y0)/(y1 - y0 || 1);
+          if(v > .72 || (u > .78 && v > .3)) c = bl[1]; else if(u < .3 && v < .45) c = bl[0]; }
+      }
+      put(x, y, c);
+    }
   };
+  const R = (x, y, w, h) => { const o = []; for(let j = 0; j < h; j++) for(let i = 0; i < w; i++) o.push([x + i, y + j]); return o; };
+  const inPoly = (px, py, vs) => { let c = false; for(let i = 0, j = vs.length - 1; i < vs.length; j = i++){ const [xi, yi] = vs[i], [xj, yj] = vs[j]; if((yi > py) !== (yj > py) && px < (xj - xi)*(py - yi)/(yj - yi) + xi) c = !c; } return c; };
+  const PG = vs => { const xs = vs.map(v => v[0]), ys = vs.map(v => v[1]), o = [];
+    for(let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++) for(let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) if(inPoly(x + .5, y + .5, vs)) o.push([x, y]);
+    return o; };
+  const EL = (cx, cy, rx, ry) => { const o = []; for(let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for(let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++){ const dx = (x + .5 - cx)/rx, dy = (y + .5 - cy)/ry; if(dx*dx + dy*dy <= 1.05) o.push([x, y]); } return o; };
+  // толстый отрезок (конечности, рукояти)
+  const SG = (x0, y0, x1, y1, w) => { const o = [], r = w/2, dx = x1 - x0, dy = y1 - y0, L2 = dx*dx + dy*dy || 1;
+    for(let y = Math.floor(Math.min(y0, y1) - r - 1); y <= Math.ceil(Math.max(y0, y1) + r + 1); y++) for(let x = Math.floor(Math.min(x0, x1) - r - 1); x <= Math.ceil(Math.max(x0, x1) + r + 1); x++){
+      const px = x + .5, py = y + .5; let t = ((px - x0)*dx + (py - y0)*dy)/L2; t = Math.max(0, Math.min(1, t));
+      const qx = x0 + dx*t - px, qy = y0 + dy*t - py; if(qx*qx + qy*qy <= r*r + .15) o.push([x, y]); }
+    return o; };
   const line = (x0, y0, x1, y1, c, g) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1; for(let i = 0; i <= n; i++) put(x0 + (x1 - x0)*i/n, y0 + (y1 - y0)*i/n, c, g); };
-  const disc = (cx, cy, r, c, g) => { for(let y = -r; y <= r; y++) for(let x = -r; x <= r; x++) if(x*x + y*y <= r*r + r*0.6) put(cx + x, cy + y, c, g); };
-  const M = [P.md, P.lt, P.dk, P.hi];            // металл корпуса
-  const S = [P.steel, P.steelHi, P.steelDk, "#EEF2F5"];
+  // шаблон из символов: . — пусто; остальное — цвета из LEG (заглавные «светящиеся» — из GLOW)
+  const LEG = {h:P.hi, l:P.lt, m:P.md, d:P.dk, x:P.dd, H:P.pH, L:P.pL, M:P.pM, D:P.pD, X:P.pX, t:P.trim, T:P.trimD,
+    v:"#07090C", o:"#0B0E12", e:P.eye, E:"#FFFFFF", g:P.glow, G:P.glowHi, c:P.core, C:"#FFFFFF", w:P.wpn, W:P.wpnHi,
+    a:P.arm, q:P.legs, z:P.mod, s:P.steel, S:P.steelHi, k:P.steelDk, K:"#EEF2F5", n:P.gun, N:P.gunHi, b:"#1B2129", r:"#FFE08A", y:"#FFF6D8"};
+  const GLOW = new Set(["e", "E", "g", "G", "c", "C", "w", "W", "z", "r", "y"]);
+  const T = (rows, x0, y0, flip) => rows.forEach((row, j) => { for(let i = 0; i < row.length; i++){ const ch = row[flip ? row.length - 1 - i : i]; if(ch === "." || ch === " ") continue; put(x0 + i, y0 + j, LEG[ch], GLOW.has(ch)); } });
 
-  // кадры анимации: смещения ног и корпуса
-  let bob = 0, legF = 0, legB = 0, liftF = 0, liftB = 0;
-  if(anim === "walk"){ const W = [[2, -2, 0, 1, 0], [0, 0, 0, 0, -1], [-2, 2, 1, 0, 0], [0, 0, 0, 0, -1]][f]; [legF, legB, liftF, liftB, bob] = W; }
-  if(anim === "idle") bob = f ? 0 : 0;
-  const B = bob, idleGlow = anim === "idle" && f === 1;
+  // ---- ракурс и поза ----
+  const side = !view || view === "e", back = view === "n" || view === "ne", tq = view === "se" || view === "ne" ? 1 : 0;
+  const walk = anim === "walk", wind = anim === "attack" && f === 0, hit = anim === "attack" && f === 1, idle1 = anim === "idle" && f === 1;
+  // профиль: [ближняя стопа dx, подъём, дальняя стопа dx, подъём, корпус вниз]
+  const WS = walk ? [[4, 0, -4, 0, 1], [1, 0, -2, 2, 0], [-4, 0, 4, 0, 1], [-2, 2, 1, 0, 0]][f] : [1, 0, -2, 0, idle1 ? 1 : 0];
+  // лицом и спиной: [левая нога вверх, правая вверх, корпус вниз, левая кисть dy, правая кисть dy]
+  const WF = walk ? [[0, 2, 0, 1, -1], [0, 0, -1, 0, 0], [2, 0, 0, -1, 1], [0, 0, -1, 0, 0]][f] : [0, 0, idle1 ? 1 : 0, 0, 0];
+  const B = side ? WS[4] : WF[2];
+  const swing = side ? (walk ? [-2, 0, 2, 0][f] : 0) : 0;            // мах ближней руки в профиль
 
-  const legPair = (thick, xb, xf) => {
-    const leg = (x, dx, lift, front) => {
-      const c = front ? M : [P.dk, P.md, P.dd, P.lt];
-      block(x + dx, 32 - lift, thick, 5, c[0], c[1], c[2], c[3]);              // бедро
-      rect(x + dx, 34 - lift, thick, 1, P.legs);                                // полоса грейда
-      block(x + dx - (thick > 4 ? 0 : 0), 37 - lift, thick, 4, c[2], c[0], P.dd); // голень
-      block(x + dx - 1, 41 - lift, thick + 3, 2, P.dd, c[2], P.dd);              // ступня
-      put(x + dx + (thick >> 1), 36 - lift, P.glow, true);                      // коленный огонёк
-    };
-    leg(xb, legB, liftB, false); leg(xf, legF, liftF, true);
+  // ---- общие детали ----
+  // ступня в профиль: носок вперёд
+  const bootSide = (x, y, w, ramp, cap) => { fill(R(x, y, w, 2), ramp); put(x + w - 1, y, ramp[3]); if(cap) for(let i = 2; i < w - 1; i++) put(x + i, y, cap); };
+  // нога в профиль: бедро и голень (колено вперёд), наколенник краской, стопа
+  const legSide = (hx, hy, fdx, lift, near, o) => {
+    const fx = hx + fdx, fy = 39 - lift, L = o.L || 5.4, th = o.th || 4;
+    const dx = fx - hx, dy = fy - hy, d = Math.hypot(dx, dy) || 1, k = Math.sqrt(Math.max(0, L*L - d*d/4));
+    let px = -dy/d, py = dx/d; if(px < 0){ px = -px; py = -py; }
+    const kx = (hx + fx)/2 + px*k, ky = (hy + fy)/2 + py*k;
+    const ramp = near ? (o.ramp || MET) : (o.far || FAR);
+    fill(SG(hx, hy, kx, ky, th), ramp);
+    fill(SG(kx, ky, fx, fy, th - (o.taper || 1)), near ? (o.shin || ramp) : (o.far || FAR));
+    if(o.pad) fill(EL(kx + .3, ky, th*.48, th*.5), near ? PNT : PNF);
+    if(o.stripe) put(Math.round(kx - .5), Math.round(ky + 2), P.legs);
+    bootSide(Math.round(fx - (o.heel || 2)), 40 - lift, o.foot || 6, near ? DRK : FAR, near && o.toe ? o.toe : null);
+    if(o.kneeGlow && near) gp(Math.round(kx), Math.round(ky), P.glow);
+  };
+  // нога лицом/спиной: бедро, колено, голень, ступня
+  const legFront = (x, hy, lift, th, near, o) => {
+    const ramp = near ? (o.ramp || MET) : (o.far || FAR), top = hy, ky = 34 - lift;
+    fill(R(x, top, th, Math.max(1, ky - top)), ramp);
+    fill(R(x, ky, th, 40 - lift - ky), near ? (o.shin || DRK) : FAR);
+    if(o.pad) fill(R(x, ky - 1, th, 3), back ? (near ? DRK : FAR) : PNT);
+    if(o.stripe) for(let i = 1; i < th - 1; i++) put(x + i, ky + 3, P.legs);
+    fill(R(x - 1, 40 - lift, th + 2, 2), DRK);
+    if(o.kneeGlow && !back) gp(x + (th >> 1), ky, P.glow);
+  };
+  // рука отрезками: плечо → локоть → кисть
+  const arm = (sx, sy, ex, ey, hx, hy, w, ramp) => { fill(SG(sx, sy, ex, ey, w), ramp, false, true); fill(SG(ex, ey, hx, hy, w - 1), ramp, false, true); };
+  const fist = (x, y, ramp) => fill(R(x - 1, y - 1, 3, 3), ramp || DRK, false, true);
+  const core = (x, y, big) => { if(big){ gp(x, y, P.core); gp(x + 1, y, P.core); gp(x, y + 1, P.core); gp(x + 1, y + 1, P.core); gp(x, y, "#FFFFFF"); } else { gp(x, y, P.core); } };
+  const spark = (x, y, c) => { gp(x, y, c || "#FFE08A"); };
+  // полумесяц-лезвие: внешний эллипс минус внутренний; кромка (выпуклая сторона d) — светлая
+  const crescent = (cx, cy, d, rx, ry, bright) => {
+    const c1 = bright ? P.wpn : shade(P.wpn, .6), c2 = bright ? P.wpnHi : shade(P.wpn, .5), c3 = bright ? shade(P.wpn, .62) : shade(P.wpn, .38);
+    for(let y = Math.floor(cy - ry - 1); y <= Math.ceil(cy + ry + 1); y++) for(let x = Math.floor(cx - rx - 2); x <= Math.ceil(cx + rx + 2); x++){
+      const ox = (x + .5 - cx)/rx, oy = (y + .5 - cy)/ry, ix = (x + .5 - (cx - d*rx*.55))/(rx*.95), iy = (y + .5 - cy)/(ry*.82);
+      if(ox*ox + oy*oy > 1 || ix*ix + iy*iy <= 1) continue;
+      const edge = (x + .5 - cx)*d > rx*.35;
+      put(x, y, edge ? c2 : (x + .5 - cx)*d > -rx*.1 ? c1 : c3, bright);
+    }
   };
 
-  // ===== виды спереди, сзади и в три четверти (8 направлений, как в эталоне) =====
-  // view: "s" — к нам лицом, "se" — лицом вправо-вниз, "ne" — спиной вправо-вверх, "n" — спиной. Левые стороны — зеркало.
-  if(view && view !== "e"){
-    const back = view === "n" || view === "ne", tq = view === "se" || view === "ne" ? 1 : 0;
-    const CX = 20 + 2*tq;
-    let lL = 0, lR = 0, bb = 0, aL = 0, aR = 0;
-    if(anim === "walk"){ [lL, lR, bb, aL, aR] = [[0, 2, 0, 1, -1], [0, 0, -1, 0, 0], [2, 0, 0, -1, 1], [0, 0, -1, 0, 0]][f]; }
-    const Y = bb, atk = anim === "attack", up = atk && f === 0;
-    const far = [P.dk, P.md, P.dd, P.lt];                      // дальняя сторона в 3/4 темнее
-    const legF = (x, lift, th, near) => {
-      const c = near ? M : far;
-      block(x, 32 - lift, th, 5, c[0], c[1], c[2], c[3]); rect(x, 34 - lift, th, 1, P.legs);
-      block(x, 37 - lift, th, 4, c[2], c[0], P.dd); block(x - 1, 41 - lift, th + 2, 2, P.dd, c[2], P.dd);
-      if(!back) put(x + (th >> 1), 36 - lift, P.glow, true);
+  // ======================= СТРАЖ: тяжёлый танк — башенный щит, боевой молот, массивные наплечники =======================
+  const guard = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    // молот: rest — на плече (рукоять уходит за спину), up — над головой, down — удар вперёд-вниз
+    const hammer = (hx, hy, mode, dir) => {
+      const d = dir || 1;
+      if(mode === "rest"){ fill(SG(hx, hy + 2, hx - 8*d, hy - 13, 2), GUN, false, true); fill(PG([[hx - 14*d, hy - 19], [hx - 4*d, hy - 19], [hx - 4*d, hy - 12], [hx - 14*d, hy - 12]]), STL, false, true);
+        line(hx - 13*d, hy - 16, hx - 5*d, hy - 16, P.steelDk); gp(hx - 9*d, hy - 17, P.wpn); gp(hx - 8*d, hy - 17, P.wpnHi); }
+      if(mode === "up"){ fill(SG(hx, hy + 2, hx, hy - 11, 2), GUN, false, true); fill(R(hx - 5, hy - 17, 11, 7), STL, false, true); line(hx - 4, hy - 14, hx + 4, hy - 14, P.steelDk); gp(hx, hy - 15, P.wpn); gp(hx + 1, hy - 15, P.wpnHi);
+        for(const [x, y] of [[hx - 7, hy - 18], [hx + 7, hy - 17], [hx, hy - 20]]) gp(x, y, P.wpnHi); }
+      if(mode === "down"){ fill(SG(hx, hy, hx + 7*d, hy + 7, 2), GUN, false, true); fill(PG([[hx + 5*d, hy + 4], [hx + 12*d, hy + 4], [hx + 12*d, hy + 15], [hx + 5*d, hy + 15]]), STL, false, true);
+        line(hx + 8*d, hy + 5, hx + 8*d, hy + 14, P.steelDk); gp(hx + 9*d, hy + 9, P.wpn); gp(hx + 9*d, hy + 10, P.wpnHi);
+        for(const [x, y] of [[14, 13], [16, 9], [15, 16], [3, 15], [13, 6], [10, 17], [17, 13]]) spark(hx + x*d, hy + y); }
     };
-    const legsStd = (th, gap) => { legF(CX - gap - th, lL + tq, th, !tq); legF(CX + gap - tq, lR, th, true); };
-    const slimLegs = () => { for(const [x, l, near] of [[CX - 4, lL, !tq], [CX + 1 - tq, lR, true]]){ rect(x, 36 - l, 3, 5, near ? P.md : P.dk); rect(x - 1, 41 - l, 5, 1, P.dd); } };
-    const torso = (w, h, top) => { const x = CX - (w >> 1); block(x, top + Y, w, h, P.md, P.lt, P.dk, P.hi); if(tq) for(let j = 1; j < h - 1; j++){ put(x, top + Y + j, P.dk); put(x + 1, top + Y + j, P.md); } return x; };
-    // голова: спереди с лицом/визором, сзади — гладкий затылок с гребнем
-    const headBox = (w, h, top, visor) => {
-      const x = CX - (w >> 1) + 2*tq; block(x, top + Y, w, h, P.md, P.lt, P.dk, P.hi);
-      if(back){ line(x + 1, top + Y + 2, x + w - 2, top + Y + 2, P.trim); rect(x + 2, top + Y + h - 3, w - 4, 1, P.dk); }
-      else if(visor){ rect(x + 1 + 2*tq, top + Y + (h >> 1) - 1, w - 2 - tq, 2, "#0B0F13"); rect(x + 2 + 2*tq, top + Y + (h >> 1) - 1, w - 4 - tq, 1, P.eye, true); }
-      return x;
+    if(side){
+      // профиль: щит в ближней руке закрывает грудь, молот в дальней — на спине, над головой или в ударе
+      const nb = B;
+      if(!wind && !hit){ fill(SG(25, 29 + nb, 13, 12 + nb, 2), GUN); fill(R(6, 6 + nb, 11, 7), STL); line(7, 9 + nb, 15, 9 + nb, P.steelDk); gp(11, 8 + nb, P.wpn); gp(12, 8 + nb, P.wpnHi); }
+      fill(R(9, 18 + nb, 5, 11), DRK); line(10, 20 + nb, 12, 20 + nb, P.dd); line(10, 23 + nb, 12, 23 + nb, P.dd); gp(11, 26 + nb, P.mod); gp(11, 25 + nb, P.mod);
+      legSide(18, 31 + nb, WS[2], WS[3], false, {th:5, L:5.6, foot:7, heel:3});
+      legSide(22, 31 + nb, WS[0], WS[1], true, {th:5, L:5.6, pad:true, foot:7, heel:3, stripe:true, toe:P.pM});
+      fill(R(14, 28 + nb, 12, 4), DRK); line(15, 29 + nb, 24, 29 + nb, P.trimD);
+      fill(PG([[13, 18], [24, 17], [28, 20], [28, 27], [25, 30], [14, 30]].map(([x, y]) => [x, y + nb])), MET);
+      line(14, 27 + nb, 22, 27 + nb, P.trim); line(24, 19 + nb, 27, 21 + nb, P.pM); core(21, 23 + nb, false);
+      if(wind){ arm(21, 19 + nb, 21, 15 + nb, 21, 11 + nb, 4, FAR); fill(SG(21, 13 + nb, 21, 3 + nb, 2), GUN, false, true); fill(R(15, -1 + nb, 13, 6), STL, false, true); line(16, 2 + nb, 26, 2 + nb, P.steelDk); gp(21, 1 + nb, P.wpn); gp(22, 1 + nb, P.wpnHi);
+        for(const [x, y] of [[13, 0], [29, 1], [21, -2]]) gp(x, y + nb, P.wpnHi); }
+      // шлем
+      fill(R(18, 10 + nb, 8, 8), MET, false, true); fill(R(19, 8 + nb, 5, 2), PNT);
+      fill(R(21, 13 + nb, 5, 2), VIS, true);
+      for(let x = 22; x <= 25; x++) gp(x, 13 + nb, P.eye); gp(25, 13 + nb, "#FFFFFF");
+      line(18, 16 + nb, 21, 16 + nb, P.dk); put(19, 11 + nb, P.hi);
+      // ближний наплечник
+      fill(EL(18.2, 19 + nb, 5.4, 4.3), PNT, false, true); line(14, 22 + nb, 22, 22 + nb, P.trim); put(16, 17 + nb, P.pH); put(17, 17 + nb, P.pH);
+      // башенный щит в ближней руке
+      const sx = hit ? 21 : 24, sy = (hit ? 19 : 16) + nb + (walk ? [0, -1, 0, -1][f] : 0);
+      fill(PG([[sx, sy + 1], [sx + 5, sy], [sx + 9, sy + 2], [sx + 9, sy + 17], [sx + 5, sy + 22], [sx, sy + 19]]), PNT, false, true);
+      line(sx + 1, sy + 2, sx + 1, sy + 18, P.pH); line(sx + 8, sy + 3, sx + 8, sy + 16, P.pX); line(sx + 2, sy + 1, sx + 5, sy + 1, P.pH);
+      for(const [x, y] of [[5, 5], [5, 6], [4, 7], [5, 7], [6, 7], [5, 8], [5, 9], [5, 10]]) put(sx + x, sy + y, P.arm);
+      gp(sx + 5, sy + 14, P.wpn); put(sx + 5, sy + 15, P.pX);
+      if(hit){ arm(22, 20 + nb, 26, 20 + nb, 30, 21 + nb, 4, MET); fist(30, 21 + nb); fill(SG(30, 21 + nb, 36, 28 + nb, 2), GUN, false, true); fill(R(33, 28 + nb, 7, 11), STL, false, true); line(36, 29 + nb, 36, 37 + nb, P.steelDk); gp(37, 32 + nb, P.wpn); gp(37, 33 + nb, P.wpnHi);
+        for(const [x, y] of [[41, 38], [43, 35], [42, 41], [31, 40], [40, 32], [44, 39], [34, 42]]) spark(x, y + nb); }
+      return;
+    }
+    // ---- лицом, спиной, три четверти ----
+    const CX = 20, Y = B, s = tq, hx = CX + 2*s;
+    const [lL, lR, , aL, aR] = WF;
+    legFront(CX - 7 + s, 31 + Y, lL, 5, !s || back, {pad:true, stripe:true});
+    legFront(CX + 2, 31 + Y, lR, 5, true, {pad:true, stripe:true});
+    fill(R(CX - 7 + s, 28 + Y, 15 - s, 4), DRK);
+    // молот: в правой руке персонажа — слева на экране лицом, справа спиной
+    const hamX = back ? CX + 11 : CX - 11 + s, hd = back ? -1 : 1, ad = back ? aR : aL;
+    const hamFront = () => {
+      if(wind){ fill(SG(hamX + 2*hd, 18 + Y, hamX + 2*hd, 6 + Y, 2), GUN, false, true); fill(R(hamX + 2*hd - 5, Y, 11, 7), STL, false, true); line(hamX + 2*hd - 4, 3 + Y, hamX + 2*hd + 4, 3 + Y, P.steelDk); gp(hamX + 2*hd, 2 + Y, P.wpn); gp(hamX + 2*hd + 1, 2 + Y, P.wpnHi); }
+      else if(hit){ fill(SG(hamX, 25 + Y, hamX, 32 + Y, 2), GUN, false, true); fill(R(hamX - 5, 32 + Y, 11, 7), STL, false, true); line(hamX - 4, 35 + Y, hamX + 4, 35 + Y, P.steelDk); gp(hamX, 34 + Y, P.wpn); gp(hamX + 1, 34 + Y, P.wpnHi);
+        for(const [x, y] of [[-8, 40], [7, 40], [-7, 36], [8, 35], [0, 42], [-3, 41], [4, 41]]) spark(hamX + x, y + Y); }
+      else { fill(SG(hamX, 28 + Y + ad, hamX, 12 + Y, 2), GUN, false, true); fill(R(hamX - 4, 5 + Y, 9, 7), STL, false, true); line(hamX - 3, 8 + Y, hamX + 3, 8 + Y, P.steelDk); gp(hamX, 7 + Y, P.wpn); gp(hamX + 1, 7 + Y, P.wpnHi); }
     };
-    const coreDot = (y) => { if(back) return; disc(CX + 2*tq, y + Y, 1, P.core, true); put(CX + 2*tq, y + Y, "#fff", true); };
-    // оружие в правой руке (справа на экране); при атаке — поднято/выброшено вперёд
-    const handR = () => { const hx = CX + 9 - tq, hy = (up ? 18 : 25) + Y + aR; block(hx - 1, 20 + Y, 3, 6, P.md, P.lt, P.dk); return [hx, hy]; };
-    const handL = () => { const hx = CX - 10, hy = 25 + Y + aL; block(hx, 20 + Y, 3, 6, back ? P.md : P.dk, P.md, P.dd); return [hx, hy]; };
+    if(back) hamFront();
+    // корпус
+    fill(PG([[CX - 8 + s, 18 + Y], [CX + 8 + s, 18 + Y], [CX + 8, 26 + Y], [CX + 5, 30 + Y], [CX - 5 + s, 30 + Y], [CX - 7 + s, 26 + Y]]), MET);
+    if(!back){
+      fill(PG([[CX - 5 + 2*s, 19 + Y], [CX + 5 + s, 19 + Y], [CX + 4 + s, 26 + Y], [CX + s, 29 + Y], [CX - 4 + 2*s, 26 + Y]]), PNT);
+      core(CX + s, 22 + Y, true); line(CX - 5 + s, 29 + Y, CX + 5, 29 + Y, P.trim);
+      if(s) line(CX + 8, 19 + Y, CX + 8, 26 + Y, P.dd);
+    } else {
+      fill(R(CX - 5 + s, 19 + Y, 10, 9), DRK); line(CX - 3 + s, 21 + Y, CX + 3 + s, 21 + Y, P.dd); line(CX - 3 + s, 24 + Y, CX + 3 + s, 24 + Y, P.dd);
+      gp(CX - 3 + s, 26 + Y, P.mod); gp(CX + s, 26 + Y, P.mod); gp(CX + 3 + s, 26 + Y, P.mod); line(CX - 5 + s, 29 + Y, CX + 5, 29 + Y, P.trimD);
+    }
+    // шлем
+    fill(R(hx - 4, 10 + Y, 9, 8), MET, false, true); fill(R(hx - 1, 8 + Y, 3, 2), PNT);
+    if(!back){
+      fill(R(hx - 3 + s, 13 + Y, 7 - s, 2), VIS, true); fill(R(hx - 1 + s, 15 + Y, 3, 2), VIS, true);
+      for(let x = hx - 2 + s; x <= hx + 2 + s; x++) gp(x, 13 + Y, P.eye); gp(hx + s, 14 + Y, P.eye); gp(hx + s, 15 + Y, P.eye); gp(hx + 2 + s, 13 + Y, "#FFFFFF");
+    } else { line(hx - 3, 12 + Y, hx + 3, 12 + Y, P.trimD); line(hx - 3, 15 + Y, hx + 3, 15 + Y, P.dk); }
+    // наплечники
+    fill(EL(CX - 9 + s, 19 + Y, 5.4 - s*.4, 4.3), PNT, false, true); line(CX - 13 + s, 22 + Y, CX - 6 + s, 22 + Y, P.trim);
+    fill(EL(CX + 9, 19 + Y, 5.4 - s, 4.3), s && !back ? PNF : PNT, false, true); line(CX + 6, 22 + Y, CX + 13 - s, 22 + Y, P.trim);
+    // руки, молот и щит
+    const lx = CX - 11 + s, rx = CX + 11 - s;
+    if(!back){
+      arm(CX - 9 + s, 22 + Y, lx, 25 + Y, lx, 27 + Y + aL, 4, MET); fist(lx, 27 + Y + aL);
+      hamFront();
+      const sx = CX + 7 - s, sy = 19 + Y + aR;
+      fill(PG([[sx, sy], [sx + 9, sy], [sx + 9, sy + 13], [sx + 4.5, sy + 18], [sx, sy + 13]]), PNT, false, true);
+      line(sx + 1, sy + 1, sx + 7, sy + 1, P.pH); line(sx + 4, sy + 3, sx + 4, sy + 12, P.arm); line(sx + 2, sy + 6, sx + 6, sy + 6, P.arm);
+      gp(sx + 4, sy + 6, P.wpn); line(sx + 1, sy + 14, sx + 4, sy + 17, P.pX); line(sx + 8, sy + 2, sx + 8, sy + 12, P.pD);
+    } else {
+      const sx = CX - 17 + s, sy = 19 + Y + aL;
+      fill(PG([[sx, sy], [sx + 9, sy], [sx + 9, sy + 13], [sx + 4.5, sy + 18], [sx, sy + 13]]), DRK, false, true);
+      line(sx + 2, sy + 4, sx + 6, sy + 4, P.dk); line(sx + 2, sy + 9, sx + 6, sy + 9, P.dk); line(sx + 4, sy + 4, sx + 4, sy + 9, P.dk);
+      arm(CX + 9, 22 + Y, rx, 25 + Y, rx, 27 + Y + aR, 4, MET); fist(rx, 27 + Y + aR);
+    }
+  };
 
-    if(kind === "guard"){
-      legsStd(5, 1);
-      rect(CX - 6, 30 + Y, 13, 2, P.dd);
-      const tx = torso(15, 12, 19);
-      if(!back){ line(tx + 2, 23 + Y, tx + 12, 23 + Y, P.arm); coreDot(26); } else { rect(tx + 3, 21 + Y, 9, 7, P.dk); put(CX, 24 + Y, P.glow, true); }
-      headBox(10, 8, 12, true); line(CX - 4 + 2*tq, 11 + Y, CX + 3 + 2*tq, 11 + Y, P.trim);
-      block(CX - 13, 16 + Y, 7, 6, P.md, P.lt, P.dk, P.hi); block(CX + 6 - tq, 16 + Y, 7, 6, P.md, P.lt, P.dk, P.hi);
-      rect(CX - 12, 20 + Y, 5, 1, P.trim); rect(CX + 7 - tq, 20 + Y, 5, 1, P.arm);
-      const [hx, hy] = handR();
-      if(up){ line(hx, hy, hx, hy - 12, P.gunHi); block(hx - 4, hy - 16, 9, 5, S[0], S[1], S[2], S[3]); put(hx, hy - 14, P.wpn, true); }
-      else { line(hx, hy, hx, hy + 10, P.gunHi); block(hx - 3, hy + 9, 7, 4, S[0], S[1], S[2], S[3]); put(hx, hy + 10, P.wpn, true); }
-      // щит на левой руке: спереди — лицевая сторона с гербом, сзади — изнанка
-      const sx = CX - 16 + (atk && !up ? 3 : 0);
-      block(sx, 19 + Y, 7, 15, back ? P.dk : P.md, back ? P.md : P.lt, P.dd, back ? P.md : P.hi);
-      if(!back){ line(sx + 1, 20 + Y, sx + 5, 20 + Y, P.arm); line(sx + 1, 32 + Y, sx + 5, 32 + Y, P.arm); disc(sx + 3, 26 + Y, 1, P.wpn, true); }
-    }
-    else if(kind === "reaper"){
-      // ноги коленями назад (спереди видно как узкие голени)
-      for(const [x, l, near] of [[CX - 5, lL, !tq], [CX + 2 - tq, lR, true]]){ const c = near ? M : far;
-        block(x, 30 - l, 4, 5, c[0], c[1], c[2], c[3]); rect(x + 1, 35 - l, 2, 6, c[2]); rect(x - 1, 41 - l, 5, 1, P.dd); if(!back) put(x + 1, 33 - l, P.glow, true); }
-      if(back) for(let i = 0; i < 9; i++) put(CX + Math.round(Math.sin(i*0.9 + f)*1.5), 28 + Y + i, i % 2 ? P.glow : shade(P.glow, .6), i % 3 === 0);   // кабель-хвост
-      for(let j = 0; j < 11; j++){ const w = 15 - Math.round(j*0.6), x0 = CX - (w >> 1); rect(x0, 19 + Y + j, w, 1, j < 2 ? P.hi : j > 8 ? P.dk : P.md); put(x0, 19 + Y + j, P.lt); put(x0 + w - 1, 19 + Y + j, P.dk); }
-      if(!back){ line(CX - 4, 21 + Y, CX, 26 + Y, P.arm); line(CX + 4, 21 + Y, CX, 26 + Y, P.arm); coreDot(23); }
-      const hx0 = headBox(8, 7, 11, false);
-      if(!back){ rect(hx0 + 1, 14 + Y, 6, 2, "#0B0F13"); put(hx0 + 2 + 2*tq, 14 + Y, P.eye, true); put(hx0 + 5, 14 + Y, P.eye, true); }
-      line(hx0, 11 + Y, hx0 - 3, 6 + Y, P.lt); line(hx0 + 7, 11 + Y, hx0 + 10, 6 + Y, P.md);               // рога
-      for(const [x, d] of [[CX - 9, -1], [CX + 8 - tq, 1]]){ line(x, 19 + Y, x + d*3, 15 + Y, P.md); line(x + d, 20 + Y, x + d*4, 16 + Y, P.hi); }   // шипы
-      const blade = (x0, y0, x1, y1) => { line(x0, y0, x1, y1, P.wpn, true); line(x0 + 1, y0, x1 + 1, y1, mix(P.wpn, "#FFFFFF", .5), true); };
-      const [hx, hy] = handR(), [lx, ly] = handL();
-      if(up){ blade(hx, hy, hx + 4, hy - 12); blade(lx, ly, lx - 4, ly - 10); }
-      else if(atk){ blade(hx, hy, hx + 10, hy + 2); blade(lx, ly, lx - 10, ly + 2); for(let i = 0; i < 4; i++) put(hx + 4 + i*2, hy - 3 - i, P.glowHi, true); }
-      else { blade(hx, hy, hx + 3, hy + 11); blade(lx, ly, lx - 3, ly + 11); }
-    }
-    else if(kind === "sniper"){
-      legsStd(4, 1);
-      // ранец с антенной: спереди виден краями из-за плеч, сзади — целиком
-      if(back){ block(CX - 5, 18 + Y, 11, 11, P.dk, P.md, P.dd, P.lt); put(CX, 22 + Y, P.mod, true); put(CX, 25 + Y, P.mod, true); }
-      line(CX - 5 + 2*tq, 18 + Y, CX - 7 + 2*tq, 7 + Y, P.dd); put(CX - 7 + 2*tq, 6 + Y, idleGlow ? P.glowHi : P.glow, true);
-      rect(CX - 5, 30 + Y, 11, 2, P.dd);
-      if(!back){ torso(11, 12, 19); rect(CX - 4, 26 + Y, 9, 1, P.arm); coreDot(23); } else rect(CX - 5, 29 + Y, 11, 1, P.arm);
-      const hx0 = headBox(9, 9, 10, false);
-      if(!back){ disc(hx0 + 6, 14 + Y, 2, "#0B0F13"); put(hx0 + 6, 14 + Y, P.eye, true); put(hx0 + 6, 13 + Y, "#fff", true); put(hx0 + 2, 14 + Y, P.eye, true); }
-      rect(hx0 + 1, 9 + Y, 5, 1, P.trim);
-      // винтовка поперёк корпуса; в атаке — к плечу, стволом вперёд
-      const [hx, hy] = handR();
-      if(atk && !back){ rect(hx - 2, hy - 2, 4, 6, P.gun); rect(hx - 1, hy + 4, 2, 6, P.gun); rect(hx - 1, hy + 9, 2, 1, P.wpn, true);
-        if(up) for(const [x, y] of [[hx, hy + 11], [hx - 1, hy + 12], [hx + 1, hy + 12]]) put(x, y, "#FFE08A", true); }
-      else { line(CX - 9, 31 + Y, hx + 4, hy - 8, P.gun); line(CX - 8, 31 + Y, hx + 5, hy - 8, P.gunHi); put(hx + 5, hy - 9, P.wpn, true); rect(CX - 1, 24 + Y, 4, 2, P.gun); }
-      handL();
-    }
-    else if(kind === "techno"){
-      slimLegs();
-      // мантия расширяется книзу, по ней бегут светящиеся схемы
-      for(let j = 0; j < 18; j++){ const w = 9 + Math.floor(j*0.6), x0 = CX - (w >> 1); rect(x0, 19 + Y + j, w, 1, j > 15 ? P.dd : P.dk); put(x0, 19 + Y + j, P.md); put(x0 + w - 1, 19 + Y + j, P.dd); }
-      if(!back){ line(CX - 2, 22 + Y, CX - 2, 32 + Y, P.glow, true); line(CX + 2, 22 + Y, CX + 2, 30 + Y, P.glow, true); put(CX + 2, 31 + Y, P.glowHi, true); rect(CX - 3, 20 + Y, 7, 1, P.trim); }
-      else { line(CX, 22 + Y, CX, 34 + Y, P.glow, true); for(let i = 0; i < 3; i++) put(CX - 3 + i*3, 27 + Y, P.glow, true); }
-      // острый капюшон
-      const hood = [[1, 0], [3, 1], [5, 2], [7, 3], [9, 4], [9, 5], [9, 6], [9, 7], [8, 8]];
-      hood.forEach(([w, j]) => { const x0 = CX - (w >> 1) + 2*tq; rect(x0, 8 + Y + j, w, 1, j < 2 ? P.hi : j < 5 ? P.lt : P.md); put(x0 + w - 1, 8 + Y + j, P.dk); });
-      if(!back){ rect(CX - 3 + 2*tq, 12 + Y, 7, 4, "#05070A"); put(CX - 2 + 2*tq, 13 + Y, P.eye, true); put(CX + 2 + 2*tq, 13 + Y, P.eye, true); put(CX + 2*tq, 15 + Y, P.eye, true); }
-      // посох с кристаллом
-      const [hx, hy] = handR(), sx = hx + 2, top = up ? 4 : 9;
-      line(sx, top + 6 + Y, sx, 41 + Y, P.gun); line(sx + 1, top + 6 + Y, sx + 1, 40 + Y, P.gunHi);
-      for(let j = -3; j <= 3; j++){ const w = 3 - Math.abs(j); for(let i = -w + 1; i < w; i++) put(sx + i, top + 2 + j + Y, j < 0 && i <= 0 ? mix(P.wpn, "#FFFFFF", .5) : P.wpn, true); }
-      put(sx, top + 2 + Y, "#fff", true);
-      if(up) for(let i = 0; i < 16; i++){ const a = i/16*Math.PI*2; put(sx + Math.round(Math.cos(a)*5), top + 2 + Y + Math.round(Math.sin(a)*5), i % 4 ? P.glow : P.glowHi, true); }
-      handL(); put(CX - 9, 26 + Y + aL, P.glowHi, true);
-    }
-    else if(kind === "ghost"){
-      const wave = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
-      // фазовые клинки-крылья за спиной — видны с обеих сторон
-      for(const d of [-1, 1]) for(const [y0, x1, y1] of [[19, 11, 9], [22, 13, 16], [25, 10, 26]]){ line(CX + d*3, y0 + Y, CX + d*x1, y1 + Y + wave, P.glow, true); put(CX + d*x1, y1 + Y + wave, P.glowHi, true); }
-      for(let y = 16; y <= 36; y++){ const half = 3 + Math.floor((y - 16)*0.4);
-        for(let x = CX - half; x <= CX + half; x++){ if(y > 32 && (x + y + wave) % 3 === 0) continue; put(x, y + Y, y < 20 ? P.md : (x === CX - half || x === CX + half) ? P.dd : P.dk); } }
-      for(let y = 20; y <= 34; y += 2) put(CX + (back ? 0 : tq), y + Y, P.glow, true);
-      rect(CX - 3, 37 - lL, 2, 4, P.dd); rect(CX + 2, 37 - lR, 2, 4, P.md);
-      for(let y = 7; y <= 16; y++){ const half = Math.min(5, 2 + Math.floor((y - 7)*0.6)); for(let x = CX - half + 2*tq; x <= CX + half + 2*tq; x++) put(x, y + Y, y < 9 ? P.lt : P.md); }
-      if(!back){ rect(CX - 3 + 2*tq, 11 + Y, 7, 4, "#07090C"); disc(CX + 2*tq, 13 + Y, 1, P.eye, true); put(CX + 2*tq, 12 + Y, "#FFFFFF", true); }
-      put(CX + 2*tq, 6 + Y, P.glow, true);
-      const [hx, hy] = handR();
-      if(up){ line(hx, hy, hx + 3, hy - 11, P.glow, true); put(hx + 3, hy - 12, P.glowHi, true); }
-      else if(atk){ line(hx, hy, hx + 11, hy + 1, P.glow, true); for(const [x, y] of [[hx + 6, hy - 3], [hx + 9, hy + 4], [hx + 12, hy]]) put(x, y, P.glowHi, true); }
-      else { line(hx, hy, hx + 3, hy + 9, P.glow, true); put(hx + 3, hy + 10, P.glowHi, true); }
-    }
-    else if(kind === "glyph"){
-      legsStd(6, 1);
-      rect(CX - 7, 30 + Y, 15, 2, P.dd);
-      for(let a = 0; a < 16; a++){ const x = CX + 2*tq + Math.round(Math.cos(a/16*Math.PI*2)*7), y = 4 + Y + Math.round(Math.sin(a/16*Math.PI*2)*2); put(x, y, a % 4 === (f % 4) ? P.glowHi : P.glow, true); }
-      for(const px of [CX - 15, CX + 12]){ const fl = (f % 2) && anim !== "walk" ? 1 : 0;
-        rect(px, 18 + Y - fl, 3, 7, P.dk); put(px + 1, 20 + Y - fl, P.glow, true); put(px + 1, 22 + Y - fl, P.glow, true); put(px + 1, 17 + Y - fl, P.glowHi, true); }
-      const tx = torso(18, 14, 17);
-      if(!back){ for(const [dx, dy] of [[0, -4], [1, -3], [2, -2], [3, -1], [4, 0], [3, 1], [2, 2], [1, 3], [0, 4], [-1, 3], [-2, 2], [-3, 1], [-4, 0], [-3, -1], [-2, -2], [-1, -3]]) put(CX + 2*tq + dx, 24 + dy + Y, P.glow, true); coreDot(24); }
-      else { rect(tx + 4, 20 + Y, 10, 8, P.dk); for(let i = 0; i < 4; i++) put(tx + 6 + i*2, 24 + Y, P.glow, true); }
-      line(tx + 1, 29 + Y, tx + 16, 29 + Y, P.arm);
-      headBox(9, 8, 9, true);
-      const [hx, hy] = handR(), cres = (cx, cy) => { for(const [dx, dy] of [[0, -3], [1, -4], [2, -3], [3, -2], [4, -1], [4, 0], [4, 1], [3, 2], [2, 3], [1, 4], [0, 3]]) put(cx + dx, cy + dy, P.wpn, true); put(cx + 3, cy, P.glowHi, true); };
-      if(up){ line(hx + 1, hy + 8, hx + 4, hy - 10, P.gunHi); cres(hx + 4, hy - 11); }
-      else if(atk){ line(hx, hy, hx + 11, hy + 2, P.gunHi); cres(hx + 11, hy + 2); }
-      else { line(hx + 2, 38 + Y, hx + 2, 9 + Y, P.gunHi); cres(hx + 2, 8 + Y); }
-      handL();
-    }
-    else if(kind === "medic"){
-      legsStd(4, 1);
-      // бак с нанитами за спиной: спереди торчат края, сзади — бак со шкалой и крестом
-      if(back){ block(CX - 5, 17 + Y, 11, 13, P.dk, P.md, P.dd, P.lt); for(let j = 0; j < 9; j++) put(CX + 3, 19 + Y + j, j % 2 ? P.glow : P.glowHi, true);
-        rect(CX - 2, 20 + Y, 2, 6, P.glow, true); rect(CX - 4, 22 + Y, 6, 2, P.glow, true); }
-      else { rect(CX - 8, 17 + Y, 2, 3, P.dk); rect(CX + 7 - tq, 17 + Y, 2, 3, P.dk); }
-      line(CX - 5 + 2*tq, 16 + Y, CX - 5 + 2*tq, 9 + Y, P.dd); put(CX - 5 + 2*tq, 8 + Y, idleGlow ? P.glowHi : P.glow, true);
-      rect(CX - 5, 30 + Y, 11, 2, P.dd);
-      if(!back){ torso(13, 13, 18); rect(CX - 1 + 2*tq, 21 + Y, 3, 7, P.glow, true); rect(CX - 3 + 2*tq, 23 + Y, 7, 3, P.glow, true); put(CX + 2*tq, 24 + Y, "#fff", true); line(CX - 5, 29 + Y, CX + 5, 29 + Y, P.arm); }
-      disc(CX + 2*tq, 13 + Y, 4, P.md); for(let x = CX - 3 + 2*tq; x <= CX + 3 + 2*tq; x++) put(x, 9 + Y, P.hi);
-      if(!back){ rect(CX - 3 + 2*tq, 13 + Y, 6, 2, "#0B0F13"); rect(CX - 2 + 2*tq, 13 + Y, 5, 1, P.eye, true); } else line(CX - 2 + 2*tq, 12 + Y, CX + 2 + 2*tq, 12 + Y, P.trim);
-      const [hx, hy] = handR();
-      if(atk){ rect(hx - 1, hy, 2, 6, P.gun); for(let a = 0; a < 12; a++) put(hx + Math.round(Math.cos(a/12*Math.PI*2)*3), hy + 9 + Math.round(Math.sin(a/12*Math.PI*2)*3), a % 3 ? P.wpn : P.glowHi, true);
-        if(up) for(const [x, y] of [[hx, hy + 13], [hx - 1, hy + 14], [hx + 1, hy + 14]]) put(x, y, P.glowHi, true); }
-      else { rect(hx - 1, hy, 2, 6, P.gun); put(hx, hy + 6, P.wpn, true); put(hx, hy + 7, P.glowHi, true); }
-      handL();
-    }
-    else {
-      legsStd(4, 1);
-      rect(CX - 5, 30 + Y, 11, 2, P.dd);
-      torso(12, 12, 19); coreDot(24);
-      headBox(9, 8, 11, true);
-      const [hx, hy] = handR(); rect(hx - 1, hy, 3, 8, P.gun); put(hx, hy + 8, P.wpn, true);
-      if(atk && f === 0) for(const [x, y] of [[hx, hy + 10], [hx - 1, hy + 11], [hx + 1, hy + 11]]) put(x, y, "#FFE08A", true);
-      handL();
-    }
-  }
-  else
-  if(kind === "guard"){
-    legPair(5, 14, 21);
-    rect(14, 30 + B, 13, 3, P.dd);                                              // таз
-    block(12, 19 + B, 17, 12, P.md, P.lt, P.dk, P.hi);                          // корпус
-    line(14, 23 + B, 26, 23 + B, P.arm); line(14, 28 + B, 26, 28 + B, P.dk);
-    disc(20, 25 + B, 2, "#0B0F13"); disc(20, 25 + B, 1, P.core, true); put(20, 25 + B, "#fff", true);
-    // голова в шлеме, утоплена между плеч
-    block(16, 12 + B, 10, 8, P.md, P.lt, P.dk, P.hi);
-    rect(19, 15 + B, 7, 2, "#0B0F13"); rect(20, 15 + B, 5, 1, P.eye, true);
-    line(17, 11 + B, 24, 11 + B, P.trim);
-    // задняя рука с молотом
-    if(anim === "attack" && f === 0){ block(9, 17 + B, 4, 6, P.dk, P.md, P.dd); line(10, 16 + B, 12, 4 + B, P.gunHi); block(7, 1 + B, 9, 5, P.steel, P.steelHi, P.steelDk, "#EEF2F5"); put(11, 3 + B, P.wpn, true); }
-    else if(anim === "attack"){ block(27, 22 + B, 5, 4, P.dk, P.md, P.dd); line(30, 24 + B, 40, 28 + B, P.gunHi); block(38, 25 + B, 6, 8, P.steel, P.steelHi, P.steelDk, "#EEF2F5"); put(41, 29 + B, P.wpn, true); for(const [x, y] of [[45, 26], [46, 30], [44, 34]]) put(x, y + B, "#FFE08A", true); }
-    else { block(9, 22 + B, 4, 8, P.dk, P.md, P.dd); line(10, 29 + B, 10, 37 + B, P.gunHi); block(7, 36 + B, 8, 4, P.steel, P.steelHi, P.steelDk, "#EEF2F5"); put(10, 37 + B, P.wpn, true); }
-    // огромные наплечники
-    block(8, 16 + B, 8, 6, P.md, P.lt, P.dk, P.hi); rect(9, 20 + B, 6, 1, P.trim);
-    block(25, 16 + B, 8, 6, P.md, P.lt, P.dk, P.hi); rect(26, 20 + B, 6, 1, P.arm);
-    // башенный щит спереди
-    if(!(anim === "attack" && f === 1)){
-      block(29, 20 + B, 8, 16, P.md, P.lt, P.dk, P.hi);
-      line(30, 21 + B, 35, 21 + B, P.arm); line(30, 34 + B, 35, 34 + B, P.arm); line(30, 21 + B, 30, 34 + B, P.arm); line(35, 21 + B, 35, 34 + B, P.arm);
-      disc(32, 27 + B, 1, P.wpn, true); put(32, 25 + B, P.trim); put(32, 29 + B, P.trim);
-    } else block(31, 22 + B, 5, 12, P.md, P.lt, P.dk, P.hi);
-  }
-
-  else if(kind === "reaper"){
-    // ноги коленями назад
-    const dleg = (x, dx, lift, front) => {
-      const c = front ? M : [P.dk, P.md, P.dd, P.lt];
-      block(x + dx, 30 - lift, 4, 5, c[0], c[1], c[2], c[3]);
-      line(x + dx + 3, 35 - lift, x + dx - 1, 38 - lift, c[2]); line(x + dx + 2, 35 - lift, x + dx - 2, 38 - lift, c[0]);
-      line(x + dx - 2, 38 - lift, x + dx, 41 - lift, c[2]);
-      rect(x + dx - 1, 41 - lift, 5, 1, P.dd); put(x + dx + 4, 41 - lift, P.dd);
-      put(x + dx + 1, 32 - lift, P.legs); put(x + dx + 2, 35 - lift, P.glow, true);
+  // ======================= ЖНЕЦ: боец — ноги коленями назад, гребень и рога, шипастые наплечники, два серпа, энергохвост =======================
+  const reaper = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    const wave = walk ? [1, 0, -1, 0][f] : (idle1 ? 1 : 0);
+    // серп: рукоять в кисти (x, y), лезвие уходит по (ux, uy) и изгибается в сторону d; выпуклая кромка светлая
+    const sickle = (x, y, ux, uy, d, bright) => {
+      const c1 = bright ? P.wpn : shade(P.wpn, .6), c2 = bright ? P.wpnHi : shade(P.wpn, .5), c3 = bright ? shade(P.wpn, .6) : shade(P.wpn, .36);
+      const nx = -uy*d, ny = ux*d;
+      fill(SG(x - ux, y - uy, x + ux*2, y + uy*2, 2), GUN, false, true);
+      for(let i = 0; i <= 24; i++){ const t = i/24, bend = Math.sin(t*Math.PI*.8)*3.6, px = x + ux*(2.5 + t*9.5) + nx*bend, py = y + uy*(2.5 + t*9.5) + ny*bend, w = 2.3*(1 - t) + .5;
+        for(let k = 0; k <= 4; k++){ const off = k/4*w; put(px - nx*off, py - ny*off, k === 0 ? c2 : k < 3 ? c1 : c3, bright); } }
     };
-    dleg(15, legB, liftB, false); dleg(21, legF, liftF, true);
-    // энергокабель-хвост
-    for(let i = 0; i < 9; i++) put(13 - i, 27 + B + Math.round(Math.sin(i*0.9 + f)*1.2) + (i >> 1), i % 2 ? P.glow : shade(P.glow, .6), i % 3 === 0);
-    // V-образный корпус
-    for(let j = 0; j < 11; j++){ const w = 13 - Math.round(j*0.6), x0 = 14 + Math.round(j*0.3); rect(x0, 19 + B + j, w, 1, j < 2 ? P.hi : j > 8 ? P.dk : P.md); put(x0, 19 + B + j, P.lt); put(x0 + w - 1, 19 + B + j, P.dk); }
-    line(16, 21 + B, 20, 28 + B, P.arm); line(25, 21 + B, 21, 28 + B, P.arm);
-    put(20, 23 + B, P.core, true); put(21, 23 + B, P.core, true); put(20, 24 + B, P.core, true); put(21, 24 + B, "#fff", true);
+    const digi = (hx, hy, fdx, lift, near) => {
+      const ramp = near ? MET : FAR, ax = hx + fdx - 1, ay = 38 - lift, kx = hx + 3 + fdx*.35, ky = hy + 4 - lift*.4;
+      fill(SG(hx, hy, kx, ky, 4), ramp); fill(SG(kx, ky, ax, ay, 3), near ? DRK : FAR);
+      fill(SG(ax, ay, ax + 3, 41 - lift, 2), near ? DRK : FAR); fill(R(Math.round(ax) + 1, 41 - lift, 4, 1), near ? DRK : FAR);
+      if(near){ fill(EL(kx + .5, ky, 1.9, 1.9), PNT); gp(Math.round(ax), Math.round(ay), P.glow); put(Math.round(hx + 1), Math.round(hy + 2), P.legs); }
+    };
+    const tail = (x0, y0, dx, dy) => { for(let i = 0; i < 12; i++){ const x = x0 + dx*i, y = y0 + dy*i + Math.sin(i*.65 + f*1.5)*1.3*(i/11); put(x, y, P.dk); put(x, y + 1, P.dd); if(i % 4 === 2) gp(x, y, P.glow); }
+      gp(x0 + dx*12, y0 + dy*12 + Math.sin(12*.65 + f*1.5)*1.3, P.glowHi); };
+    if(side){
+      const nb = B;
+      tail(15, 27 + nb, -.85, .7);
+      digi(17, 30 + nb, WS[2], WS[3], false); digi(20, 30 + nb, WS[0], WS[1], true);
+      // дальний серп — тусклый, за корпусом
+      if(wind) sickle(18, 13 + nb, -.2, -1, 1, false); else if(hit) sickle(28, 26 + nb, 1, .35, 1, false); else sickle(24, 27 + nb - wave, .45, 1, 1, false);
+      fill(R(16, 27 + nb, 8, 3), DRK);
+      // корпус: широкая грудь, узкая талия, наклон вперёд
+      fill(PG([[14, 19], [22, 17], [27, 19], [26, 25], [22, 29], [16, 28]].map(([x, y]) => [x, y + nb])), MET);
+      fill(PG([[20, 18], [24, 18], [27, 20], [26, 24], [22, 26]].map(([x, y]) => [x, y + nb])), PNT);
+      core(24, 21 + nb, false); line(17, 26 + nb, 21, 27 + nb, P.trim);
+      // голова-клин, гребень назад, V-визор
+      fill(PG([[20, 12], [26, 12], [29, 15], [26, 18], [21, 18], [19, 15]].map(([x, y]) => [x, y + nb])), MET, false, true);
+      fill(PG([[20, 12.5], [25, 11.5], [16, 6], [14, 6.5]].map(([x, y]) => [x, y + nb])), PNT);
+      fill(PG([[24, 14], [29, 15], [26, 17]].map(([x, y]) => [x, y + nb])), VIS, true); gp(26, 15 + nb, P.eye); gp(27, 15 + nb, P.eye); gp(28, 15 + nb, "#FFFFFF");
+      // наплечник с большим шипом
+      fill(PG([[15, 19], [22, 18], [23, 21], [20, 23], [15, 22]].map(([x, y]) => [x, y + nb])), PNT, false, true);
+      fill(PG([[15.5, 19], [16.5, 12], [20.5, 19]].map(([x, y]) => [x, y + nb])), PNT); line(16, 22 + nb, 21, 22 + nb, P.trim);
+      // ближняя рука и серп
+      if(wind){ arm(19, 21 + nb, 17, 17 + nb, 18, 13 + nb, 3, MET); fist(18, 13 + nb); sickle(18, 12 + nb, -.25, -1, -1, true); }
+      else if(hit){ arm(19, 21 + nb, 24, 23 + nb, 29, 23 + nb, 3, MET); fist(29, 23 + nb); sickle(29, 23 + nb, 1, .2, 1, true);
+        for(let i = 0; i < 7; i++) gp(30 + i*2, 13 + nb + i*1.3 + (i > 4 ? (i - 4)*1.5 : 0), i % 2 ? P.glowHi : P.glow); }
+      else { arm(19, 21 + nb, 21 + swing/2, 24 + nb, 24 + swing, 26 + nb + wave, 3, MET); fist(24 + swing, 26 + nb + wave); sickle(24 + swing, 26 + nb + wave, .5, .9, 1, true); }
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    if(back) tail(CX + sq, 28 + Y, 0, 1);
+    // ноги коленями назад: лицом видны бёдра наружу и голени внутрь
+    for(const [x, l, d, near] of [[CX - 4 + sq, lL, -1, !sq || back], [CX + 3, lR, 1, true]]){
+      const ramp = near ? MET : FAR;
+      fill(SG(x, 29 + Y, x + d*2, 34 + Y - l, 4), ramp); fill(SG(x + d*2, 34 + Y - l, x, 39 - l, 3), near ? DRK : FAR);
+      fill(R(x - 2, 40 - l, 5, 2), DRK); if(!back){ fill(EL(x + d*2 + .5, 34 + Y - l, 1.7, 1.7), PNT); gp(x, 38 - l, P.glow); }
+    }
+    fill(R(CX - 4 + sq, 27 + Y, 9 - sq, 3), DRK);
+    // V-корпус
+    fill(PG([[CX - 8 + sq, 18 + Y], [CX + 8 + sq, 18 + Y], [CX + 5, 25 + Y], [CX + 3, 29 + Y], [CX - 3 + sq, 29 + Y], [CX - 5 + sq, 25 + Y]]), MET);
+    if(!back){ fill(PG([[CX - 6 + 2*sq, 19 + Y], [CX + 6 + sq, 19 + Y], [CX + sq, 26 + Y]]), PNT); core(CX + sq, 21 + Y, false); line(CX - 3 + sq, 27 + Y, CX + 3, 27 + Y, P.trim); }
+    else { fill(PG([[CX - 6 + sq, 19 + Y], [CX + 6 + sq, 19 + Y], [CX + 3, 26 + Y], [CX - 3 + sq, 26 + Y]]), DRK); for(let y = 19; y <= 27; y++) put(CX + sq, y + Y, y % 2 ? P.glow : P.glowHi, y % 2 === 0); line(CX - 5 + sq, 21 + Y, CX - 2 + sq, 25 + Y, P.dd); line(CX + 5, 21 + Y, CX + 2 + sq, 25 + Y, P.dd); line(CX - 3 + sq, 27 + Y, CX + 3, 27 + Y, P.trimD); }
+    // голова: клин к подбородку, короткие толстые рога, V-визор
+    for(const [d, near] of [[-1, true], [1, !sq || back]]){ fill(SG(hx + d*3, 12 + Y, hx + d*5, 9 + Y, 2), near ? PNT : PNF); fill(SG(hx + d*5, 9 + Y, hx + d*5.5, 5.5 + Y, 1.6), near ? PNT : PNF); }
+    fill(PG([[hx - 4, 10 + Y], [hx + 4, 10 + Y], [hx + 4, 15 + Y], [hx + 1, 18 + Y], [hx - 1, 18 + Y], [hx - 4, 15 + Y]]), MET, false, true);
+    fill(R(hx - 2, 9 + Y, 4, 2), PNT);
+    if(!back){ fill(PG([[hx - 3.5 + sq, 12.5 + Y], [hx + 3.5 + sq, 12.5 + Y], [hx + sq, 16.5 + Y]]), VIS, true);
+      for(const [dx, dy] of [[-3, 0], [-2, 1], [-1, 2], [3, 0], [2, 1], [1, 2]]) gp(hx + sq + dx, 13 + Y + dy, P.eye); gp(hx + sq + 3, 13 + Y, "#FFFFFF"); }
+    else { fill(R(hx - 1, 9 + Y, 3, 8), PNT); line(hx - 3, 15 + Y, hx + 3, 15 + Y, P.dk); }
     // шипастые наплечники
-    line(12, 20 + B, 15, 16 + B, P.md); line(13, 21 + B, 16, 17 + B, P.lt); line(11, 19 + B, 13, 14 + B, P.hi);
-    line(26, 19 + B, 29, 14 + B, P.lt); line(27, 20 + B, 30, 15 + B, P.md); line(28, 20 + B, 31, 17 + B, P.dk);
-    // угловатая голова с рогами
-    for(let j = 0; j < 7; j++) rect(18 + (j < 2 ? 1 : 0), 11 + B + j, 8 - (j > 4 ? 2 : 0), 1, j === 0 ? P.hi : j > 4 ? P.dk : P.md);
-    // стреловидный гребень назад, как у хищного шлема
-    for(let i = 0; i < 7; i++){ rect(19 - i, 10 + B + Math.floor(i/2), 3 + Math.floor(i/3), 1, i < 2 ? P.hi : P.lt); }
-    for(let i = 0; i < 6; i++) put(18 - i, 12 + B + Math.floor(i/2), P.dk);
-    put(12, 13 + B, P.dd); put(13, 13 + B, P.glow, true);
-    // челюсть-забрало
-    rect(22, 16 + B, 4, 1, P.dk); put(25, 15 + B, P.dk);
-    put(23, 14 + B, P.eye, true); put(24, 14 + B, P.eye, true); put(21, 14 + B, P.eye, true);
-    // клинки
-    const blade = (x0, y0, x1, y1, bright) => { line(x0, y0, x1, y1, bright ? P.wpn : shade(P.wpn, .6), bright); line(x0, y0 + 1, x1 - 1, y1 + 1, bright ? mix(P.wpn, "#FFFFFF", .6) : shade(P.wpn, .45), bright); };
-    line(15, 22 + B, 12, 27 + B, P.dk); blade(12, 27 + B, 8, 36 + B, false);                 // задняя рука
-    if(anim === "attack" && f === 0){ line(26, 21 + B, 28, 17 + B, P.md); blade(28, 17 + B, 34, 5 + B, true); }
-    else if(anim === "attack"){ line(26, 22 + B, 31, 25 + B, P.md); blade(31, 25 + B, 45, 30 + B, true); for(let i = 0; i < 5; i++) put(33 + i*2, 19 + B + i*2, P.glowHi, true); }
-    else { line(26, 22 + B, 29, 26 + B, P.md); line(27, 22 + B, 30, 26 + B, P.lt); blade(30, 26 + B, 40, 21 + B, true); }
-  }
-
-  else if(kind === "sniper"){
-    legPair(3, 16, 21);
-    // рюкзак с антенной
-    block(10, 18 + B, 6, 11, P.dk, P.md, P.dd, P.lt); put(12, 21 + B, P.mod, true);
-    line(12, 17 + B, 9, 7 + B, P.dd); put(9, 6 + B, anim === "idle" && f ? P.glowHi : P.glow, true);
-    rect(16, 30 + B, 9, 2, P.dd);
-    block(15, 19 + B, 10, 12, P.md, P.lt, P.dk, P.hi);                         // корпус
-    rect(16, 26 + B, 8, 1, P.arm); put(20, 23 + B, P.core, true); put(19, 23 + B, P.core, true);
-    // голова с прицелом-моноклем
-    block(16, 10 + B, 9, 9, P.md, P.lt, P.dk, P.hi);
-    disc(23, 14 + B, 2, "#0B0F13"); put(23, 14 + B, P.eye, true); put(24, 14 + B, P.eye, true); put(23, 13 + B, "#fff", true);
-    rect(17, 9 + B, 5, 1, P.trim);
-    // длинная винтовка
-    const kick = anim === "attack" && f === 0 ? -2 : 0;
-    rect(13 + kick, 23 + B, 7, 4, P.gun); rect(13 + kick, 23 + B, 7, 1, P.gunHi);          // приклад
-    rect(19 + kick, 22 + B, 24, 3, P.gun); rect(19 + kick, 22 + B, 24, 1, P.gunHi);        // ствол
-    rect(22 + kick, 19 + B, 7, 3, P.gun); put(28 + kick, 20 + B, P.wpn, true);             // прицел
-    rect(42 + kick, 22 + B, 2, 3, P.wpn, true);
-    block(25 + kick, 24 + B, 3, 4, P.md, P.lt, P.dk);                                      // руки на оружии
-    block(19 + kick, 25 + B, 3, 3, P.dk, P.md, P.dd);
-    if(anim === "attack" && f === 0){ for(const [x, y] of [[44, 23], [45, 22], [46, 23], [45, 24], [47, 23], [45, 21], [45, 25]]) put(x, y + B, "#FFE08A", true); }
-    if(anim === "attack" && f === 1){ put(44, 21 + B, "#8C98A5"); put(45, 20 + B, "#6B7580"); }
-  }
-
-  else if(kind === "ghost"){
-    // ---- Призрак: силуэт в капюшоне-плаще из оптоволокна, один большой глаз-линза, клинки-крылья за спиной ----
-    const wave = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
-    // клинки-крылья за спиной (парящие фазовые лезвия)
-    for(const [x0, y0, x1, y1] of [[17, 18, 6, 8], [17, 21, 4, 16], [17, 24, 7, 26]]){ line(x0, y0 + B, x1, y1 + B + wave, P.glow, true); put(x1, y1 + B + wave, P.glowHi, true); }
-    // плащ: трапеция с рваным подолом
-    for(let y = 16; y <= 36; y++){ const half = 4 + Math.floor((y - 16)*0.45), cx = 21;
-      for(let x = cx - half; x <= cx + half; x++){ if(y > 32 && (x + y + wave) % 3 === 0) continue; put(x, y + B, y < 20 ? P.md : (x === cx - half || x === cx + half) ? P.dd : P.dk); } }
-    for(let y = 20; y <= 34; y += 2) put(21, y + B, P.glow, true);                       // светящийся шов плаща
-    // тонкие ноги из-под плаща
-    rect(18 + Math.round(legB/2), 37 - liftB, 2, 4, P.dd); rect(23 + Math.round(legF/2), 37 - liftF, 2, 4, M[1]);
-    rect(17 + Math.round(legB/2), 41 - liftB, 4, 1, P.dd); rect(22 + Math.round(legF/2), 41 - liftF, 4, 1, M[2]);
-    // капюшон и глаз-линза
-    for(let y = 7; y <= 16; y++){ const half = Math.min(5, 2 + Math.floor((y - 7)*0.6)); for(let x = 21 - half; x <= 21 + half; x++) put(x, y + B, y < 9 ? P.lt : P.md); }
-    rect(18, 11 + B, 7, 4, "#07090C"); disc(22, 13 + B, 2, P.eye, true); put(22, 12 + B, "#FFFFFF", true);
-    put(21, 6 + B, P.glow, true);
-    // клинок в руке
-    if(anim === "attack" && f === 0){ line(25, 19 + B, 29, 14 + B, P.md); line(29, 14 + B, 37, 3 + B, P.glow, true); put(38, 2 + B, P.glowHi, true); }
-    else if(anim === "attack"){ line(25, 21 + B, 31, 22 + B, P.md); line(31, 22 + B, 45, 24 + B, P.glow, true); for(const [x, yy] of [[40, 20], [43, 27], [37, 26], [46, 24]]) put(x, yy + B, P.glowHi, true); }
-    else { line(25, 21 + B, 27, 25 + B, P.md); line(27, 25 + B, 34, 33 + B, P.glow, true); put(35, 34 + B, P.glowHi, true); }
-  }
-  else if(kind === "glyph"){
-    // ---- Глифоносец: массивный корпус-монолит, нимб из глифов над головой, парящие руны-пилоны у плеч, глефа ----
-    legPair(6, 14, 22);
-    rect(14, 30 + B, 14, 2, P.dd);
-    // нимб из глифов
-    for(let a = 0; a < 16; a++){ const x = 21 + Math.round(Math.cos(a/16*Math.PI*2)*7), y = 4 + B + Math.round(Math.sin(a/16*Math.PI*2)*2); put(x, y, a % 4 === (f % 4) ? P.glowHi : P.glow, true); }
-    // парящие руны-пилоны по бокам
-    for(const [px, py] of [[8, 18], [34, 18]]){ const fl = (f % 2) && anim !== "walk" ? 1 : 0;
-      rect(px, py + B - fl, 3, 7, P.dk); put(px + 1, py + 2 + B - fl, P.glow, true); put(px + 1, py + 4 + B - fl, P.glow, true); put(px + 1, py - 1 + B - fl, P.glowHi, true); }
-    // корпус-монолит с ромбовидным глифом
-    block(12, 17 + B, 18, 14, P.md, P.lt, P.dk, P.hi);
-    for(const [dx, dy] of [[0, -4], [1, -3], [2, -2], [3, -1], [4, 0], [3, 1], [2, 2], [1, 3], [0, 4], [-1, 3], [-2, 2], [-3, 1], [-4, 0], [-3, -1], [-2, -2], [-1, -3]]) put(21 + dx, 24 + dy + B, P.glow, true);
-    put(21, 24 + B, P.core, true); put(21, 23 + B, "#FFFFFF", true);
-    line(13, 29 + B, 29, 29 + B, P.arm);
-    // голова-шлем с узкой прорезью и гребнем
-    block(17, 9 + B, 9, 8, P.md, P.lt, P.dk, P.hi);
-    rect(18, 12 + B, 7, 2, "#0B0F13"); rect(19, 12 + B, 5, 1, P.eye, true);
-    // глефа
-    const cres = (cx, cy) => { for(const [dx, dy] of [[0, -3], [1, -4], [2, -3], [3, -2], [4, -1], [4, 0], [4, 1], [3, 2], [2, 3], [1, 4], [0, 3]]) put(cx + dx, cy + dy, P.wpn, true); put(cx + 3, cy, P.glowHi, true); };
-    if(anim === "attack" && f === 0){ line(29, 26 + B, 39, 7 + B, P.gunHi); cres(39, 6 + B); }
-    else if(anim === "attack"){ line(28, 23 + B, 40, 25 + B, P.gunHi); cres(40, 25 + B); for(const [x, yy] of [[36, 19], [38, 31], [45, 25]]) put(x, yy + B, P.glowHi, true); }
-    else { line(32, 36 + B, 32, 9 + B, P.gunHi); cres(32, 8 + B); }
-  }
-  else if(kind === "techno"){
-    // ---- кибер-колдун: острый капюшон, тёмный плащ со светящимися схемами, рваная накидка, посох с кристаллом ----
-    const sway = anim === "walk" ? (f % 2 ? 1 : -1) : (f ? 1 : 0);
-    // рваная накидка за спиной
-    for(let j = 0; j < 22; j++){
-      const y = 17 + B + j, x1 = 16 - Math.floor(j*0.35), w = 4 + Math.floor(j*0.35) - (j > 18 ? (j % 2) : 0);
-      const xs = x1 - Math.floor(j/7)*sway*(j > 10 ? 1 : 0);
-      rect(xs, y, w, 1, j % 5 === 0 ? P.dk : P.dd); put(xs, y, shade(P.dd, .8));
+    for(const [x, d, near] of [[CX - 8 + sq, -1, true], [CX + 8, 1, !sq || back]]){
+      fill(PG([[x - d*1, 18 + Y], [x + d*4, 19 + Y], [x + d*3, 23 + Y], [x - d*1, 22 + Y]]), near ? PNT : PNF, false, true);
+      fill(PG([[x, 18.5 + Y], [x + d*4.5, 12 + Y], [x + d*3, 18.5 + Y]]), near ? PNT : PNF);
     }
-    for(const [x, y] of [[9, 39], [11, 38], [13, 39]]) put(x - sway, y + B, P.dd);
-    // тонкие ноги из-под плаща
-    const slimLeg = (x, dx, lift, front) => {
-      const c = front ? M : [P.dk, P.md, P.dd, P.lt];
-      rect(x + dx, 36 - lift, 3, 5, c[2]); put(x + dx, 36 - lift, c[0]); put(x + dx + 1, 38 - lift, P.legs);
-      rect(x + dx - 1, 41 - lift, 5, 1, P.dd); put(x + dx + 3, 40 - lift, P.dd);
+    // руки с серпами
+    const lx = CX - 10 + sq, rx = CX + 10;
+    if(wind){
+      arm(CX - 7 + sq, 20 + Y, lx - 1, 16 + Y, lx, 12 + Y, 3, MET); sickle(lx, 12 + Y, 0, -1, 1, true);
+      arm(CX + 7, 20 + Y, rx + 1, 16 + Y, rx, 12 + Y, 3, MET); sickle(rx, 12 + Y, 0, -1, -1, true);
+    } else if(hit){
+      arm(CX - 7 + sq, 20 + Y, lx, 24 + Y, lx + 3, 27 + Y, 3, MET); sickle(lx + 3, 27 + Y, .35, 1, -1, true);
+      arm(CX + 7, 20 + Y, rx, 24 + Y, rx - 3, 27 + Y, 3, MET); sickle(rx - 3, 27 + Y, -.35, 1, 1, true);
+      for(let i = 0; i < 9; i++) gp(CX - 8 + i*2 + sq, 33 + Y + Math.round(Math.abs(i - 4)*.6), i % 2 ? P.glowHi : P.glow);
+    } else {
+      arm(CX - 7 + sq, 20 + Y, lx, 24 + Y, lx, 27 + Y + aL, 3, MET); sickle(lx, 27 + Y + aL, -.2, 1, 1, true);
+      arm(CX + 7, 20 + Y, rx, 24 + Y, rx, 27 + Y + aR, 3, MET); sickle(rx, 27 + Y + aR, .2, 1, -1, true);
+    }
+  };
+
+  // ======================= СНАЙПЕР: стрелок — длинная винтовка, линза-прицел, ранец с антенной =======================
+  const sniper = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    const lens = (x, y) => { fill(EL(x + .5, y + .5, 2.2, 2.2), VIS, true); gp(x, y, P.eye); gp(x + 1, y, P.eye); gp(x, y + 1, P.eye); gp(x + 1, y + 1, P.eye); gp(x, y, "#FFFFFF"); };
+    if(side){
+      const nb = B, kick = hit ? -2 : 0, low = !wind && !hit ? 2 : 0;
+      // ранец с антенной
+      fill(R(11, 18 + nb, 5, 11), DRK); line(12, 21 + nb, 14, 21 + nb, P.dd); gp(13, 24 + nb, P.mod); gp(13, 26 + nb, P.mod);
+      line(12, 17 + nb, 10, 6 + nb, P.dd); gp(10, 5 + nb, idle1 ? P.glowHi : P.glow);
+      legSide(18, 31 + nb, WS[2], WS[3], false, {th:3, L:5.5, foot:5, heel:2, taper:0});
+      legSide(21, 31 + nb, WS[0], WS[1], true, {th:3, L:5.5, foot:5, heel:2, taper:0, stripe:true, pad:true});
+      // дальняя рука под цевьём
+      fill(SG(21, 21 + nb, 27 + kick, 24 + nb + low/2, 3), FAR);
+      fill(R(16, 28 + nb, 8, 3), DRK);
+      fill(PG([[15, 19], [23, 18], [25, 20], [24, 29], [16, 29]].map(([x, y]) => [x, y + nb])), MET);
+      fill(PG([[20, 19], [24, 19], [25, 21], [24, 24], [20, 24]].map(([x, y]) => [x, y + nb])), PNT); line(16, 27 + nb, 23, 27 + nb, P.trim);
+      // голова-шлем с капюшоном и линзой-прицелом
+      fill(PG([[16, 10], [22, 9], [25, 11], [25, 17], [17, 17], [16, 14]].map(([x, y]) => [x, y + nb])), MET, false, true);
+      fill(PG([[15, 9], [21, 8], [23, 10], [16, 12]].map(([x, y]) => [x, y + nb])), PNT);
+      lens(24, 13 + nb); put(18, 14 + nb, P.dk); put(19, 14 + nb, P.dk);
+      // наплечник
+      fill(EL(18.5, 20 + nb, 3.6, 2.8), PNT, false, true); line(16, 22 + nb, 21, 22 + nb, P.trim);
+      // винтовка: приклад у плеча, длинный ствол, прицел сверху
+      const ry = 22 + nb, k = kick, ang = low;
+      fill(PG([[13 + k, ry + 1], [19 + k, ry], [19 + k, ry + 3], [14 + k, ry + 4]]), GUN, false, true);
+      fill(R(19 + k, ry, 12, 3), GUN, false, true); line(19 + k, ry, 30 + k, ry, P.gunHi);
+      for(let i = 0; i < 14; i++){ const x = 31 + i + k, y = ry + 1 + Math.round(ang*i/14); put(x, y, P.gun); put(x, y - 1, P.gunHi); }
+      fill(R(21 + k, ry - 3, 7, 2), GUN, false, true); gp(27 + k, ry - 3, P.wpn); gp(27 + k, ry - 2, P.wpnHi);
+      gp(44 + k, ry + Math.round(ang) , P.wpn);
+      // ближняя рука на рукояти
+      arm(19, 21 + nb, 20, 25 + nb, 23 + k, 25 + nb, 3, MET); fist(23 + k, 25 + nb);
+      if(wind){ for(const [x, y] of [[46, 0], [47, -1], [47, 1]]) gp(x + k, ry + 1 + y, P.wpnHi); }
+      if(hit){ for(const [x, y] of [[44, -2], [45, -1], [46, 0], [45, 1], [44, 2], [47, 0], [46, -2], [46, 2]]) spark(x, ry + 1 + y); put(42, ry - 3, "#8C98A5"); put(41, ry - 5, "#6B7580"); }
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    // винтовка по диагонали: приклад внизу слева, ствол вверх вправо (2 px толщиной, прицел посередине)
+    const rifleDiag = (x0, y0, len) => {
+      for(let i = 0; i < len; i++){ const x = x0 + i*.82, y = y0 - i*.9; put(x, y, P.gun); put(x + 1, y, i < 15 ? P.gun : P.gunHi); put(x - 1, y, i < 15 ? P.gunHi : null); }
+      fill(R(Math.round(x0 - 2), Math.round(y0 - 1), 3, 4), GUN);                                       // приклад
+      const sx = Math.round(x0 + 9*.82), sy = Math.round(y0 - 9*.9);
+      fill(R(sx - 1, sy - 3, 4, 2), GUN); gp(sx + 2, sy - 3, P.wpn); gp(sx + 2, sy - 2, P.wpnHi);       // прицел
+      gp(Math.round(x0 + (len - 1)*.82) + 1, Math.round(y0 - (len - 1)*.9), P.wpn);                         // дульный огонёк
     };
-    slimLeg(17, legB, liftB, false); slimLeg(21, legF, liftF, true);
-    // полы плаща: тёмные пластины, расходятся книзу
-    for(let j = 0; j < 15; j++){
-      const y = 22 + B + j, x0 = 17 - Math.floor(j/4), w = 9 + Math.floor(j/2);
-      rect(x0, y, w, 1, j > 12 ? P.dd : P.dk);
-      put(x0, y, P.md); put(x0 + w - 1, y, P.dd);
-      if(j > 7) put(x0 + (w >> 1), y, "#07090C");
+    if(back){ fill(R(CX - 5 + sq, 18 + Y, 11, 11), DRK); }
+    line(CX - 4 + sq, 18 + Y, CX - 6 + sq, 6 + Y, P.dd); gp(CX - 6 + sq, 5 + Y, idle1 ? P.glowHi : P.glow);
+    legFront(CX - 5 + sq, 31 + Y, lL, 3, !sq || back, {stripe:true, pad:true}); legFront(CX + 2, 31 + Y, lR, 3, true, {stripe:true, pad:true});
+    fill(R(CX - 5 + sq, 28 + Y, 10 - sq, 3), DRK);
+    fill(PG([[CX - 6 + sq, 18 + Y], [CX + 6 + sq, 18 + Y], [CX + 5, 29 + Y], [CX - 5 + sq, 29 + Y]]), MET);
+    if(!back){
+      fill(R(CX - 4 + 2*sq, 19 + Y, 8 - sq, 4), PNT); core(CX + sq, 25 + Y, false);
+      // патронташ через грудь — цвет фракции
+      for(let i = 0; i < 9; i++){ put(CX - 5 + sq + i, 19 + Y + i, P.trim); if(i % 2) put(CX - 5 + sq + i, 20 + Y + i, P.trimD); }
+      line(CX - 4 + sq, 27 + Y, CX + 4, 27 + Y, P.trimD);
+    } else {
+      fill(R(CX - 5 + sq, 18 + Y, 11, 11), DRK); line(CX - 3 + sq, 20 + Y, CX + 3 + sq, 20 + Y, P.dd); gp(CX - 2 + sq, 23 + Y, P.mod); gp(CX + sq, 23 + Y, P.mod); gp(CX + 2 + sq, 23 + Y, P.mod);
     }
-    rect(13, 37 + B, 17, 1, P.arm);
-    // схемы на плаще
-    line(19, 23 + B, 19, 30 + B, P.glow, true); put(18, 31 + B, P.glow, true); put(17, 32 + B, P.glow, true); put(17, 33 + B, P.glowHi, true);
-    line(23, 24 + B, 23, 29 + B, P.glow, true); put(24, 30 + B, P.glow, true); put(25, 31 + B, P.glowHi, true);
-    put(21, 26 + B, P.glow, true); put(21, 27 + B, P.glow, true);
-    for(let i = 0; i < 5; i++) put(15 + i*3, 37 + B, P.glow, true);
-    // пояс с ядром
-    rect(16, 22 + B, 10, 1, P.dd); put(21, 22 + B, P.core, true); put(20, 22 + B, P.core, true);
-    // узкая грудь и воротник
-    block(17, 16 + B, 8, 6, P.dk, P.md, P.dd, P.lt);
-    line(18, 17 + B, 21, 20 + B, P.trim); line(24, 17 + B, 21, 20 + B, P.trim);
-    // острый капюшон: пустота вместо лица и три глаза
-    const hood = [[19, 2], [18, 4], [17, 6], [16, 8], [15, 10], [15, 11], [15, 11], [15, 11], [15, 11], [16, 10], [17, 8]];
-    hood.forEach(([x0, w], j) => { rect(x0, 4 + B + j, w, 1, j < 2 ? P.hi : j < 5 ? P.lt : j > 8 ? P.dk : P.md); put(x0, 4 + B + j, P.lt); put(x0 + w - 1, 4 + B + j, P.dk); });
-    for(let i = 0; i < 4; i++) put(14 - i, 11 + B + i, i % 2 ? P.dd : P.dk);             // складка назад
-    const face = [[21, 4], [20, 5], [20, 6], [20, 6], [21, 5]];
-    face.forEach(([x0, w], j) => rect(x0, 9 + B + j, w, 1, "#05070A"));
-    line(25, 8 + B, 26, 13 + B, P.trim);                                                 // кромка капюшона
-    put(21, 10 + B, P.eye, true); put(24, 10 + B, P.eye, true); put(22, 12 + B, P.eye, true); put(23, 12 + B, shade(P.eye, .8), true);
-    // широкие рукава; задняя рука со светящимися пальцами
-    for(let i = 0; i < 6; i++) rect(15 - Math.floor(i/2), 18 + B + i, 3 + Math.floor(i/2), 1, i === 5 ? P.dd : P.dk);
-    put(12, 24 + B, P.glowHi, true); put(11, 25 + B, P.glow, true); put(13, 25 + B, P.glow, true);
-    // посох и передняя рука
-    const up = anim === "attack" && f === 0, fw = anim === "attack" && f === 1;
-    const sx = 29, top = up ? 0 : 5;
-    if(fw){ line(26, 22 + B, 39, 13 + B, P.gunHi); line(26, 23 + B, 39, 14 + B, P.gun); }
-    else { line(sx, top + 7 + B, sx, 41 + B, P.gun); line(sx + 1, top + 7 + B, sx + 1, 40 + B, P.gunHi); rect(sx - 1, 41 + B, 3, 1, P.dd); }
-    for(let i = 0; i < 4; i++) rect(25 + Math.floor(i/2), 18 + B + i, 3, 1, i === 3 ? P.dd : P.dk);   // рукав
-    rect(27, 21 + B, 3, 3, P.md); put(27, 21 + B, P.lt);
-    // навершие: кольцо-держатель и крупный кристалл
-    const cx = fw ? 41 : sx + 1, cy = fw ? 11 : top + 3;
-    put(cx - 3, cy + 1 + B, P.gunHi); put(cx + 3, cy + 1 + B, P.gunHi); put(cx - 3, cy + 2 + B, P.gun); put(cx + 3, cy + 2 + B, P.gun);
-    put(cx - 2, cy + 3 + B, P.gunHi); put(cx + 2, cy + 3 + B, P.gunHi);
-    for(let j = -3; j <= 3; j++){ const w = 3 - Math.abs(j); for(let i = -w + 1; i < w; i++) put(cx + i, cy + j + B, j < 0 && i <= 0 ? mix(P.wpn, "#FFFFFF", .5) : P.wpn, true); }
-    put(cx, cy + B, "#fff", true); put(cx - 1, cy - 1 + B, "#fff", true);
-    const sh = [[-5, -3], [5, -4], [4, 3], [-4, 4]];
-    sh.forEach(([dx, dy], i) => { if((i + f) % 2 === 0 || anim === "attack") put(cx + dx, cy + dy + B, P.glowHi, true); });
-    // атака: рунический круг, разряд
-    if(up){
-      const rx = cx + 9, ry = cy + 4 + B;
-      for(let i = 0; i < 24; i++){ const a = i/24*Math.PI*2; put(rx + Math.round(Math.cos(a)*5), ry + Math.round(Math.sin(a)*5), i % 4 ? P.glow : P.glowHi, true); }
-      for(let i = -2; i <= 2; i++){ put(rx + i, ry + i, P.glow, true); put(rx + i, ry - i, P.glow, true); }
-      put(rx, ry, "#fff", true);
+    const aimAway = back && (wind || hit);
+    if(aimAway){
+      // целится от нас: ствол уходит вдаль — на экране вверх над правым плечом, приклад закрыт плечом
+      const gx = hx + 5;
+      fill(R(gx - 1, 12 + Y, 3, 9), GUN); fill(R(gx - 4, 13 + Y, 2, 4), GUN); gp(gx - 4, 13 + Y, P.wpn); gp(gx - 3, 13 + Y, P.wpnHi);
+      for(let y = 5; y < 12; y++){ put(gx, y + Y, P.gun); put(gx - 1, y + Y, P.gunHi); }
+      gp(gx, 4 + Y, P.wpn);
+      if(wind) for(const [x, y] of [[-1, 2], [1, 2], [0, 1]]) gp(gx + x, y + Y, P.wpnHi);
+      else for(const [x, y, c] of [[0, 3, 2], [0, 2, 2], [-1, 3, 0], [1, 3, 0], [0, 1, 0], [-1, 2, 0], [1, 2, 0], [-2, 4, 1], [2, 4, 1], [-2, 1, 1], [2, 1, 1], [0, 0, 1]])
+        gp(gx + x, y + Y, c === 2 ? "#FFF6D8" : c === 1 ? "#FFB347" : "#FFE08A");
     }
-    if(fw){ for(const [x, y] of [[44, 9], [46, 11], [45, 13], [47, 8], [43, 7]]) put(x, y + B, P.glowHi, true); }
-  }
+    // голова с капюшоном-козырьком и линзой
+    fill(R(hx - 4, 9 + Y, 9, 9), MET, false, true); fill(PG([[hx - 5, 9 + Y], [hx + 5, 9 + Y], [hx + 4, 12 + Y], [hx - 4, 12 + Y]]), PNT);
+    if(!back){ lens(hx + 1 + sq, 13 + Y); gp(hx - 2 + sq, 14 + Y, P.eye); } else line(hx - 3, 14 + Y, hx + 3, 14 + Y, P.dk);
+    fill(EL(CX - 7 + sq, 19 + Y, 3.4, 2.6), PNT, false, true); fill(EL(CX + 7, 19 + Y, 3.4 - sq*.6, 2.6), sq && !back ? PNF : PNT, false, true);
+    const lx = CX - 8 + sq, rx = CX + 8;
+    if(aimAway){
+      // локти разведены, предплечья уходят вперёд к винтовке
+      arm(CX - 7 + sq, 20 + Y, lx - 2, 23 + Y, lx, 21 + Y, 3, MET); arm(CX + 7, 20 + Y, rx + 2, 23 + Y, rx, 21 + Y, 3, MET);
+    } else if(back){
+      // винтовка за спиной по диагонали
+      rifleDiag(CX - 8 + sq, 30 + Y, 24);
+      arm(CX - 7 + sq, 20 + Y, lx - 1, 24 + Y, lx - 1, 27 + Y + aL, 3, MET); fist(lx - 1, 27 + Y + aL); arm(CX + 7, 20 + Y, rx + 1, 24 + Y, rx + 1, 27 + Y + aR, 3, MET); fist(rx + 1, 27 + Y + aR);
+    } else if(wind || hit){
+      // прицеливание: приклад у плеча, линза прицела у глаза, ствол смотрит на нас
+      arm(CX - 7 + sq, 20 + Y, lx + 1, 24 + Y, CX - 2 + sq, 24 + Y, 3, MET); arm(CX + 7, 20 + Y, rx - 1, 23 + Y, CX + 3, 22 + Y, 3, MET);
+      fill(R(CX - 3 + sq, 20 + Y, 7, 5), GUN, false, true); fill(R(CX - 2 + sq, 15 + Y, 4, 3), GUN, false, true); gp(CX + sq, 16 + Y, P.wpn); gp(CX + 1 + sq, 16 + Y, P.wpnHi);
+      fill(EL(CX + .5 + sq, 24.5 + Y, 2.6, 2.6), GUN, false, true); fill(R(CX + sq, 24 + Y, 2, 2), ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"], true);
+      if(wind){ gp(CX + sq, 24 + Y, P.wpn); gp(CX + 1 + sq, 25 + Y, P.wpnHi); }
+      else { for(const [x, y, c] of [[0, -4, 0], [0, 4, 0], [-4, 0, 0], [5, 0, 0], [-3, -3, 1], [4, 4, 1], [-3, 4, 1], [4, -3, 1], [0, -2, 2], [0, 3, 2], [-2, 0, 2], [3, 0, 2], [0, 0, 2], [1, 1, 2], [1, 0, 2], [0, 1, 2]])
+          gp(CX + sq + x, 24 + Y + y, c === 2 ? "#FFF6D8" : c === 1 ? "#FFB347" : "#FFE08A"); }
+    } else {
+      rifleDiag(CX - 9 + sq, 33 + Y, 26);
+      arm(CX - 7 + sq, 20 + Y, lx, 24 + Y, lx + 2, 29 + Y + aL, 3, MET); fist(lx + 2, 29 + Y + aL);
+      arm(CX + 7, 20 + Y, rx, 23 + Y, rx - 2, 22 + Y + aR, 3, MET); fist(rx - 2, 22 + Y + aR);
+    }
+  };
 
-  else if(kind === "medic"){
-    // ---- Ремонтник: округлый корпус, ранец-бак с нанитами, крест на груди, излучатель с кольцом ----
-    legPair(4, 15, 21);
-    block(9, 17 + B, 7, 12, P.dk, P.md, P.dd, P.lt);                                   // ранец
-    for(let j = 0; j < 8; j++) put(12, 19 + B + j, j % 2 ? P.glow : P.glowHi, true);   // шкала бака
-    line(11, 16 + B, 11, 9 + B, P.dd); put(11, 8 + B, idleGlow ? P.glowHi : P.glow, true);
-    rect(15, 30 + B, 11, 2, P.dd);
-    block(14, 18 + B, 13, 13, P.md, P.lt, P.dk, P.hi);                                 // корпус
-    rect(19, 21 + B, 3, 7, P.glow, true); rect(17, 23 + B, 7, 3, P.glow, true); put(20, 24 + B, "#FFFFFF", true);
-    line(15, 29 + B, 25, 29 + B, P.arm);
-    disc(20, 13 + B, 4, P.md); for(let x = 17; x <= 23; x++) put(x, 9 + B, P.hi);       // круглая голова
-    rect(18, 13 + B, 6, 2, "#0B0F13"); rect(19, 13 + B, 5, 1, P.eye, true); put(16, 13 + B, P.trim);
-    block(25, 21 + B, 4, 4, P.md, P.lt, P.dk);
-    if(anim === "attack"){
-      rect(28, 22 + B, 9, 2, P.gun); rect(28, 22 + B, 9, 1, P.gunHi);
-      for(let a = 0; a < 12; a++) put(39 + Math.round(Math.cos(a/12*Math.PI*2)*3), 23 + B + Math.round(Math.sin(a/12*Math.PI*2)*3), a % 3 ? P.wpn : P.glowHi, true);
-      if(f === 0) for(const [x, y] of [[43, 23], [44, 22], [44, 24], [45, 23]]) put(x, y + B, P.glowHi, true);
-    } else { rect(28, 23 + B, 6, 2, P.gun); put(34, 23 + B, P.wpn, true); put(34, 24 + B, P.wpn, true); put(35, 23 + B, P.glowHi, true); }
-  }
-  else {
-    legPair(4, 15, 21);
-    rect(15, 30 + B, 11, 2, P.dd);
-    block(14, 19 + B, 12, 12, P.md, P.lt, P.dk, P.hi);
-    put(20, 24 + B, P.core, true); put(19, 24 + B, P.core, true);
-    block(16, 11 + B, 9, 8, P.md, P.lt, P.dk, P.hi); rect(19, 14 + B, 6, 2, "#0B0F13"); rect(20, 14 + B, 4, 1, P.eye, true);
-    line(15, 21 + B, 13, 28 + B, P.dk);
-    const kick = anim === "attack" && f === 0 ? -1 : 0;
-    block(25 + kick, 21 + B, 4, 4, P.md, P.lt, P.dk); rect(28 + kick, 22 + B, 8, 3, P.gun); rect(35 + kick, 22 + B, 2, 3, P.wpn, true);
-    if(anim === "attack" && f === 0) for(const [x, y] of [[38, 22], [39, 23], [38, 24]]) put(x, y + B, "#FFE08A", true);
-  }
-  if(idleGlow) for(const g of glowPx) g.push(1);
+  // ======================= ТЕХНОМАНТ: маг — капюшон, тёмная мантия со светящимися схемами, посох с кристаллом =======================
+  const techno = () => {
+    const sway = walk ? [1, 0, -1, 0][f] : (idle1 ? 1 : 0);
+    const ROBE = [mix(P.dk, P.pM, .25), shade(P.dk, .9), shade(P.dd, 1.15), shade(P.dd, .85), shade(P.dd, .6)];
+    const VOID = ["#05070A", "#05070A", "#05070A", "#05070A", "#05070A"];
+    const crystal = (cx, cy, big) => {
+      for(let j = -3; j <= 3; j++){ const w = 3 - Math.abs(j); for(let i = -w + 1; i < w; i++) gp(cx + i, cy + j, j < 0 && i <= 0 ? P.wpnHi : P.wpn); }
+      gp(cx, cy, "#FFFFFF"); if(big) for(let i = 0; i < 16; i++){ const a = i/16*Math.PI*2; gp(cx + Math.round(Math.cos(a)*5), cy + Math.round(Math.sin(a)*5), i % 4 ? P.glow : P.glowHi); }
+    };
+    const staff = (x0, y0, x1, y1) => { line(x0, y0, x1, y1, P.gun); line(x0 + 1, y0, x1 + 1, y1, P.gunHi); };
+    if(side){
+      const nb = B;
+      // накидка за спиной колышется
+      for(let j = 0; j < 20; j++){ const y = 18 + nb + j, x0 = 15 - Math.floor(j*.38) - (j > 9 ? Math.round(sway*(j - 9)/10) : 0), w = 4 + Math.floor(j*.3); fill(R(x0, y, w, 1), ROBE, true); put(x0, y, ROBE[4]); }
+      for(const [x, l, dx, near] of [[17, WS[3], WS[2], false], [21, WS[1], WS[0], true]]){ const sx = x + Math.round(dx/3); fill(R(sx, 37 - l, 3, 3), near ? DRK : FAR); fill(R(sx - 1, 40 - l, 5, 2), DRK); }
+      // мантия расходится книзу: тёмная ткань, кайма краской, схемы светятся
+      fill(PG([[16, 21], [24, 21], [27, 38], [14, 38]].map(([x, y]) => [x, y + nb])), ROBE);
+      line(24, 21 + nb, 27, 38 + nb, P.pM); line(14, 38 + nb, 27, 38 + nb, P.pM); for(let x = 15; x <= 26; x += 3) put(x, 39 + nb, P.pD);
+      line(22, 24 + nb, 22, 31 + nb, P.glow, true); line(22, 31 + nb, 24, 34 + nb, P.glow, true); gp(24, 35 + nb, P.glowHi); line(25, 25 + nb, 25, 29 + nb, P.glow, true); gp(18, 30 + nb, P.glow); gp(18, 33 + nb, P.glowHi);
+      fill(R(16, 21 + nb, 9, 2), DRK); gp(21, 21 + nb, P.core); gp(22, 21 + nb, P.core);
+      fill(PG([[17, 15], [23, 15], [25, 21], [16, 21]].map(([x, y]) => [x, y + nb])), MET);
+      line(18, 16 + nb, 21, 19 + nb, P.trim); line(24, 16 + nb, 21, 19 + nb, P.trim);
+      // капюшон: острый, лицо — пустота с тремя глазами
+      fill(PG([[17, 4], [22, 6], [26, 10], [26, 16], [17, 17], [14, 11]].map(([x, y]) => [x, y + nb])), PNT, false, true);
+      line(17, 5 + nb, 13, 9 + nb, P.pD); put(12, 10 + nb, P.pX);
+      fill(PG([[21, 9], [26, 10], [26, 15], [21, 15]].map(([x, y]) => [x, y + nb])), VOID, true);
+      gp(22, 11 + nb, P.eye); gp(25, 11 + nb, P.eye); gp(23, 13 + nb, P.eye); gp(25, 11 + nb, "#FFFFFF");
+      // рукав и посох
+      const sx = 28, top = wind ? 1 : 5;
+      if(hit){ fill(SG(23, 19 + nb, 30, 17 + nb, 3), PNT, false, true); staff(26, 19 + nb, 40, 12 + nb); crystal(42, 11 + nb, false);
+        for(const [x, y] of [[45, 8], [47, 11], [46, 14], [44, 6]]) gp(x, y + nb, P.glowHi); }
+      else { fill(SG(22, 18 + nb, 26, 22 + nb, 3), PNT, false, true); fill(R(26, 21 + nb, 3, 3), MET, false, true); staff(sx, top + 6 + nb, sx, 41); crystal(sx + 1, top + 2 + nb, wind); }
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    fill(R(CX - 4 + sq, 37 - lL, 3, 3), DRK); fill(R(CX + 2, 37 - lR, 3, 3), DRK); fill(R(CX - 5 + sq, 40 - lL, 5, 2), DRK); fill(R(CX + 1, 40 - lR, 5, 2), DRK);
+    // мантия: тёмная ткань, кайма краской класса
+    fill(PG([[CX - 5 + sq, 20 + Y], [CX + 5 + sq, 20 + Y], [CX + 8, 38 + Y], [CX - 8 + sq, 38 + Y]]), ROBE);
+    if(!back){
+      fill(PG([[CX - 2 + sq, 21 + Y], [CX + 2 + sq, 21 + Y], [CX + 4 + sq, 38 + Y], [CX - 4 + sq, 38 + Y]]), VOID, true);
+      line(CX - 2 + sq, 21 + Y, CX - 4 + sq, 38 + Y, P.pM); line(CX + 2 + sq, 21 + Y, CX + 4 + sq, 38 + Y, sq ? P.pD : P.pM);
+      line(CX - 1 + sq, 23 + Y, CX - 1 + sq, 33 + Y, P.glow, true); line(CX + 1 + sq, 23 + Y, CX + 1 + sq, 31 + Y, P.glow, true); gp(CX + 1 + sq, 32 + Y, P.glowHi); gp(CX - 1 + sq, 34 + Y, P.glowHi);
+      for(const [x, y] of [[-5, 27], [-6, 31], [5, 28], [6, 33]]) gp(CX + sq + x - (x > 0 ? sq : 0), y + Y, P.glow);
+    } else {
+      line(CX + sq, 22 + Y, CX + sq, 35 + Y, P.glow, true); for(let i = -1; i <= 1; i++) gp(CX + sq + i*3, 28 + Y, P.glow);
+      line(CX - 5 + sq, 20 + Y, CX - 8 + sq, 38 + Y, P.pD); line(CX + 5 + sq, 20 + Y, CX + 8, 38 + Y, P.pD);
+    }
+    line(CX - 8 + sq, 38 + Y, CX + 8, 38 + Y, P.pM);
+    for(let x = CX - 7 + sq; x <= CX + 7; x += 3) put(x, 39 + Y - (x + sway + 40) % 2, P.pD);
+    // грудь
+    fill(R(CX - 4 + sq, 15 + Y, 9 - sq, 6), MET); if(!back){ line(CX - 3 + sq, 16 + Y, CX + sq, 19 + Y, P.trim); line(CX + 3 + sq, 16 + Y, CX + sq, 19 + Y, P.trim); gp(CX + sq, 20 + Y, P.core); }
+    // капюшон
+    fill(PG([[hx, 3 + Y], [hx + 5, 9 + Y], [hx + 5, 16 + Y], [hx - 5, 16 + Y], [hx - 5, 9 + Y]]), PNT, false, true);
+    if(!back){ fill(PG([[hx - 3 + sq, 10 + Y], [hx + 3 + sq, 10 + Y], [hx + 3 + sq, 16 + Y], [hx - 3 + sq, 16 + Y]]), VOID, true);
+      gp(hx - 2 + sq, 12 + Y, P.eye); gp(hx + 2 + sq, 12 + Y, P.eye); gp(hx + sq, 14 + Y, P.eye); gp(hx + 2 + sq, 12 + Y, "#FFFFFF"); }
+    else line(hx, 5 + Y, hx, 14 + Y, P.pD);
+    // рукава; посох в правой руке персонажа (слева на экране лицом, справа спиной)
+    const sxs = back ? CX + 9 : CX - 9 + sq, sd = back ? 1 : -1, aS = back ? aR : aL, aO = back ? aL : aR;
+    fill(SG(CX - 5*sd + (back ? 0 : sq), 19 + Y, CX - 8*sd + (back ? 0 : sq), 25 + Y + aO, 4), PNT, false, true); gp(CX - 8*sd + (back ? 0 : sq), 26 + Y + aO, P.glowHi);
+    const top = wind ? 0 : 5;
+    if(hit){
+      // удар: посох наклонён наружу, кристалл вспыхивает в стороне от головы
+      staff(sxs + 1*sd, 30 + Y, sxs + 6*sd, 13 + Y); crystal(sxs + 7*sd, 10 + Y, false);
+      for(const [x, y] of [[-3, -4], [3, -3], [0, -6], [4, 1], [-4, 2], [6, -2]]) gp(sxs + 7*sd + x*sd, 10 + Y + y, P.glowHi);
+      fill(SG(CX + 5*sd + (back ? sq : 0), 19 + Y, sxs + 3*sd, 21 + Y, 4), PNT, false, true); fill(R(sxs + 2*sd - 1, 20 + Y, 3, 3), MET, false, true);
+    } else {
+      staff(sxs, top + 6 + Y, sxs, 41); crystal(sxs + (sd < 0 ? 1 : 0), top + 2 + Y, wind);
+      fill(SG(CX + 5*sd + (back ? sq : 0), 19 + Y, sxs + 1*sd, 24 + Y + aS, 4), PNT, false, true); fill(R(sxs - 1, 23 + Y + aS, 3, 3), MET, false, true);
+    }
+  };
+
+  // ======================= ПРИЗРАК: убийца — глубокий капюшон с короткой пелериной, одна прорезь-глаз, длинный шарф, клинки на запястьях =======================
+  const ghost = () => {
+    const VOID = ["#05070A", "#05070A", "#05070A", "#05070A", "#05070A"];
+    const HOOD = [mix(P.dk, P.pM, .18), shade(P.dk, .95), shade(P.dd, 1.2), shade(P.dd, .9), shade(P.dd, .65)];
+    const wave = walk ? [1, 0, -1, 0][f] : (idle1 ? 1 : 0);
+    // клинок от запястья по (ux, uy): узкий, длинный, светлая кромка
+    const katar = (x, y, ux, uy, bright) => { const c1 = bright ? P.wpn : shade(P.wpn, .6), c2 = bright ? P.wpnHi : shade(P.wpn, .45), c3 = bright ? shade(P.wpn, .58) : shade(P.wpn, .35);
+      fill(R(Math.round(x) - 1, Math.round(y) - 1, 3, 2), GUN, false, true);
+      for(let i = 1; i <= 9; i++){ put(x + ux*i, y + uy*i, i === 9 ? c2 : c1, bright); if(i < 7){ put(x + ux*i - uy, y + uy*i + ux, c2, bright); } if(i < 4) put(x + ux*i + uy, y + uy*i - ux, c3, bright); } };
+    const scarf = (pts) => pts.forEach(([x, y], i) => { put(x, y, i % 4 === 3 ? P.pX : P.pM); put(x, y + 1, P.pD); if(i > 8) put(x, y + 2, P.pX); });
+    // кромка вокруг проёма капюшона — подкладка цвета класса
+    const rim = (pts) => { for(const [x, y] of pts) put(x, y, P.pL); };
+    if(side){
+      const nb = B;
+      scarf(Array.from({length:14}, (_, i) => [17 - i, 17 + nb + i*.45 + Math.sin(i*.6 + f*1.3)*(i/13)*2.2]));
+      legSide(17, 31 + nb, WS[2] + (walk ? 0 : -2), WS[3], false, {th:4, L:5.8, foot:5, heel:2, taper:1});
+      legSide(21, 31 + nb, WS[0] + (walk ? 0 : 2), WS[1], true, {th:4, L:5.8, foot:5, heel:2, taper:1, stripe:true, kneeGlow:true});
+      if(wind) katar(17, 22 + nb, -1, .2, false); else if(hit) katar(28, 22 + nb, 1, -.2, false); else katar(24, 26 + nb + wave, .9, .45, false);
+      fill(R(16, 28 + nb, 7, 3), DRK);
+      fill(PG([[15, 19], [22, 17], [25, 19], [23, 28], [17, 29]].map(([x, y]) => [x, y + nb])), DRK);
+      fill(PG([[19, 18], [23, 18], [25, 20], [23, 24], [19, 24]].map(([x, y]) => [x, y + nb])), MET);
+      for(let y = 20; y <= 27; y += 2) gp(18, y + nb, P.glow);
+      // капюшон: козырёк вперёд над лицом, сзади спадает на плечи пелериной
+      fill(PG([[14, 21], [15, 13], [18, 9], [22, 8], [26, 10], [28, 13], [25.5, 13], [25, 18], [23, 21]].map(([x, y]) => [x, y + nb])), HOOD, false, true);
+      fill(PG([[22, 11.5], [25.5, 13], [25.5, 17], [22, 17]].map(([x, y]) => [x, y + nb])), VOID, true);
+      rim([[22, 11], [23, 11], [24, 12], [25, 12], [21, 12], [21, 13], [21, 14], [21, 15], [21, 16]].map(([x, y]) => [x, y + nb]));
+      for(let x = 23; x <= 25; x++) gp(x, 14 + nb, P.eye); gp(25, 14 + nb, "#FFFFFF");
+      line(15, 20 + nb, 22, 20 + nb, P.pD);
+      // шарф на шее
+      fill(PG([[19, 17], [24, 17], [24, 19], [19, 19]].map(([x, y]) => [x, y + nb])), PNT, false, true);
+      // ближняя рука: наруч краской, клинок от запястья
+      const hand = (ex, ey, hx2, hy2) => { fill(SG(19, 21 + nb, ex, ey, 3), MET, false, true); fill(SG(ex, ey, hx2, hy2, 3), PNT, false, true); };
+      if(wind){ hand(16, 23 + nb, 14, 22 + nb); katar(13, 22 + nb, -1, -.3, true); }
+      else if(hit){ hand(24, 22 + nb, 28, 21 + nb); katar(29, 21 + nb, 1, -.15, true);
+        for(let i = 0; i < 7; i++) gp(26 + i*2.4, 14 + nb + Math.round(Math.sin(i/6*Math.PI)*-3) + i, i % 2 ? P.glowHi : P.glow); }
+      else { hand(20 + swing/2, 25 + nb, 23 + swing, 27 + nb + wave); katar(24 + swing, 27 + nb + wave, .85, .5, true); }
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    if(back) for(const [x0, ph] of [[CX - 2 + sq, 0], [CX + 2 + sq, 1.6]]) scarf(Array.from({length:12}, (_, i) => [x0 + Math.round(Math.sin(i*.55 + f*1.3 + ph)*1.4*(i/11)), 19 + Y + i]));
+    legFront(CX - 5 + sq, 31 + Y, lL, 4, !sq || back, {stripe:true, kneeGlow:true}); legFront(CX + 2, 31 + Y, lR, 4, true, {stripe:true, kneeGlow:true});
+    fill(R(CX - 4 + sq, 28 + Y, 9 - sq, 3), DRK);
+    fill(PG([[CX - 6 + sq, 18 + Y], [CX + 6 + sq, 18 + Y], [CX + 4, 29 + Y], [CX - 4 + sq, 29 + Y]]), DRK);
+    if(!back){ fill(PG([[CX - 4 + 2*sq, 21 + Y], [CX + 4 + sq, 21 + Y], [CX + 3 + sq, 25 + Y], [CX - 3 + 2*sq, 25 + Y]]), MET); for(let y = 22; y <= 28; y += 2) gp(CX + sq, y + Y, P.glow); }
+    else { for(let y = 22; y <= 28; y += 2) gp(CX + sq, y + Y, P.glow); }
+    // капюшон с пелериной: спадает на плечи, лицо в тени, кромка проёма цвета класса
+    fill(PG([[hx - 8, 21 + Y], [hx - 6, 13 + Y], [hx - 3, 8.5 + Y], [hx + .5, 7 + Y], [hx + 4, 8.5 + Y], [hx + 7 - sq, 13 + Y], [hx + 9 - 2*sq, 21 + Y]]), HOOD, false, true);
+    line(hx - 7, 20 + Y, hx + 8 - 2*sq, 20 + Y, P.pD);
+    if(!back){
+      fill(PG([[hx - 3 + sq, 18 + Y], [hx - 3 + sq, 12 + Y], [hx + .5 + sq, 10 + Y], [hx + 4, 12 + Y], [hx + 4, 18 + Y]]), VOID, true);
+      rim([[hx - 4 + sq, 13], [hx - 4 + sq, 14], [hx - 4 + sq, 15], [hx - 4 + sq, 16], [hx - 3 + sq, 12], [hx - 2 + sq, 11], [hx - 1 + sq, 10], [hx + sq, 10], [hx + 1 + sq, 10], [hx + 2 + sq, 11], [hx + 3, 11], [hx + 4, 12], [hx + 5 - sq, 13], [hx + 5 - sq, 14], [hx + 5 - sq, 15], [hx + 5 - sq, 16]].map(([x, y]) => [x, y + Y]));
+      for(let x = hx - 2 + sq; x <= hx + 3; x++) gp(x, 14 + Y, P.eye); gp(hx + 2 + sq*0, 14 + Y, "#FFFFFF");
+    } else { line(hx + .5, 9 + Y, hx + .5, 19 + Y, P.pD); }
+    // шарф на шее; лицом один конец свисает сбоку
+    fill(R(CX - 4 + sq, 18 + Y, 9 - sq, 2), PNT, false, true);
+    if(!back) scarf(Array.from({length:8}, (_, i) => [CX + 5 + Math.round(Math.sin(i*.6 + f*1.3)*(i/7)), 20 + Y + i]));
+    // руки: плечо металл, наруч краской, клинок
+    const lx = CX - 8 + sq, rx = CX + 8;
+    const hand = (sx, ex, ey, hx2, hy2) => { fill(SG(sx, 21 + Y, ex, ey, 3), MET, false, true); fill(SG(ex, ey, hx2, hy2, 3), PNT, false, true); };
+    if(wind){
+      hand(CX - 6 + sq, lx - 1, 24 + Y, lx - 2, 27 + Y); katar(lx - 2, 27 + Y, -.6, .8, true);
+      hand(CX + 6, rx + 1, 24 + Y, rx + 2, 27 + Y); katar(rx + 2, 27 + Y, .6, .8, true);
+    } else if(hit){
+      hand(CX - 6 + sq, lx + 1, 25 + Y, CX - 2 + sq, 27 + Y); katar(CX - 2 + sq, 27 + Y, .7, .7, true);
+      hand(CX + 6, rx - 1, 25 + Y, CX + 2, 27 + Y); katar(CX + 2, 27 + Y, -.7, .7, true);
+      for(let i = 0; i < 9; i++) gp(CX - 8 + i*2 + sq, 34 + Y - Math.round(Math.sin(i/8*Math.PI)*3), i % 2 ? P.glowHi : P.glow);
+    } else {
+      hand(CX - 6 + sq, lx, 25 + Y, lx, 28 + Y + aL); katar(lx, 28 + Y + aL, -.12, 1, true);
+      hand(CX + 6, rx, 25 + Y, rx, 28 + Y + aR); katar(rx, 28 + Y + aR, .12, 1, true);
+    }
+  };
+
+  // ======================= ГЛИФОНОСЕЦ: контроль — венец, руны на броне, глефа-полумесяц, парящие руны-камни =======================
+  const glyph = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    // руна-камень: ромб с ярким центром, парит и чуть меняет место по кадрам
+    const rune = (x, y, hi) => { fill(PG([[x + .5, y - 2.5], [x + 3, y + .5], [x + .5, y + 3.5], [x - 2, y + .5]]), DRK); gp(x, y, hi ? "#FFFFFF" : P.glowHi); gp(x, y - 1, P.glow); gp(x, y + 1, P.glow); gp(x - 1, y, P.glow); gp(x + 1, y, P.glow); };
+    const orbit = [[0, 0], [1, -1], [0, -1], [-1, 0]][f % 4];
+    // глефа: древко от (x0, y0) к (x1, y1), полумесяц у (x1, y1) выпуклостью в сторону d
+    const glaive = (x0, y0, x1, y1, d) => { line(x0, y0, x1, y1, P.gun); line(x0 + 1, y0, x1 + 1, y1, P.gunHi); fill(R(Math.round(x1) - 1, Math.round(y1) - 1, 3, 2), STL); crescent(x1 + d*2.5, y1 - 1.5, d, 3.4, 4.6, true); };
+    if(side){
+      const nb = B;
+      rune(9 + orbit[0], 15 + nb + orbit[1], f % 2 === 0);
+      legSide(18, 31 + nb, WS[2], WS[3], false, {th:5, L:5.5, foot:7, heel:3});
+      legSide(22, 31 + nb, WS[0], WS[1], true, {th:5, L:5.5, foot:7, heel:3, pad:true, stripe:true, toe:P.pM});
+      fill(R(14, 28 + nb, 12, 4), DRK);
+      // корпус-монолит: рунные линии
+      fill(PG([[13, 17], [25, 16], [28, 19], [28, 28], [25, 31], [14, 31]].map(([x, y]) => [x, y + nb])), MET);
+      fill(PG([[21, 17], [25, 17], [28, 20], [28, 27], [21, 27]].map(([x, y]) => [x, y + nb])), PNT);
+      for(const [x, y] of [[24, 19], [25, 20], [26, 21], [25, 22], [24, 23], [23, 22], [22, 21], [23, 20]]) gp(x, y + nb, P.glow); gp(24, 21 + nb, P.core); gp(24, 21 + nb, "#FFFFFF");
+      line(15, 22 + nb, 15, 28 + nb, P.glow, true); line(14, 29 + nb, 25, 29 + nb, P.trim);
+      // шлем с венцом
+      fill(R(18, 9 + nb, 8, 8), MET, false, true);
+      fill(R(18, 8 + nb, 8, 2), PNT); for(const [x, h] of [[18.5, 3], [21.5, 5], [24.5, 3]]) fill(PG([[x - 1.5, 8 + nb], [x + 1.5, 8 + nb], [x, 8 - h + nb]]), PNT); gp(22, 8 + nb, P.glow);
+      fill(R(21, 12 + nb, 5, 2), VIS, true); for(let x = 22; x <= 25; x++) gp(x, 12 + nb, P.eye); gp(25, 12 + nb, "#FFFFFF");
+      // наплечник с руной
+      fill(R(14, 17 + nb, 9, 5), PNT, false, true); line(14, 21 + nb, 22, 21 + nb, P.trim); gp(18, 19 + nb, P.glow);
+      // глефа в ближней руке: древко перед корпусом, не поперёк него
+      if(wind){ arm(18, 20 + nb, 20, 16 + nb, 22, 12 + nb, 4, MET); fist(22, 12 + nb); glaive(25, 19 + nb, 17, 3 + nb, -1); }
+      else if(hit){ arm(18, 20 + nb, 23, 22 + nb, 28, 22 + nb, 4, MET); fist(28, 22 + nb); glaive(22, 19 + nb, 38, 27 + nb, 1);
+        for(let i = 0; i < 16; i++){ const a = i/16*Math.PI*2; gp(42 + Math.round(Math.cos(a)*5), 27 + nb + Math.round(Math.sin(a)*3), i % 4 ? P.glow : P.glowHi); } }
+      else { arm(18, 20 + nb, 21 + swing/2, 24 + nb, 26 + swing, 25 + nb, 4, MET); fist(26 + swing, 25 + nb); glaive(27 + swing, 41, 27 + swing, 8 + nb, 1); }
+      rune(32 - orbit[0], 12 + nb - orbit[1], f % 2 === 1);
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    rune(CX - 15 + sq + orbit[0], 15 + Y + orbit[1], f % 2 === 0);
+    legFront(CX - 7 + sq, 31 + Y, lL, 5, !sq || back, {pad:true, stripe:true}); legFront(CX + 2, 31 + Y, lR, 5, true, {pad:true, stripe:true});
+    fill(R(CX - 7 + sq, 28 + Y, 15 - sq, 4), DRK);
+    fill(PG([[CX - 8 + sq, 17 + Y], [CX + 8 + sq, 17 + Y], [CX + 8, 28 + Y], [CX + 6, 31 + Y], [CX - 6 + sq, 31 + Y], [CX - 8 + sq, 28 + Y]]), MET);
+    if(!back){
+      fill(PG([[CX - 5 + 2*sq, 18 + Y], [CX + 5 + sq, 18 + Y], [CX + 5 + sq, 27 + Y], [CX - 5 + 2*sq, 27 + Y]]), PNT);
+      for(const [dx, dy] of [[0, -4], [1, -3], [2, -2], [3, -1], [4, 0], [3, 1], [2, 2], [1, 3], [0, 4], [-1, 3], [-2, 2], [-3, 1], [-4, 0], [-3, -1], [-2, -2], [-1, -3]]) gp(CX + sq + dx, 22 + Y + dy, P.glow);
+      core(CX + sq, 22 + Y, false); gp(CX + sq, 22 + Y, "#FFFFFF"); line(CX - 6 + sq, 29 + Y, CX + 6, 29 + Y, P.trim);
+    } else {
+      fill(R(CX - 5 + sq, 18 + Y, 10, 10), DRK);
+      for(const [dx, dy] of [[0, -3], [0, -2], [0, -1], [0, 0], [0, 1], [0, 2], [0, 3], [-2, -1], [2, -1], [-3, 1], [3, 1]]) gp(CX + sq + dx, 23 + Y + dy, P.glow);
+      line(CX - 6 + sq, 29 + Y, CX + 6, 29 + Y, P.trimD);
+    }
+    // шлем с венцом
+    fill(R(hx - 4, 9 + Y, 9, 8), MET, false, true);
+    fill(R(hx - 4, 8 + Y, 9, 2), PNT); for(const [dx, h] of [[-3, 3], [.5, 5.5], [4, 3]]) fill(PG([[hx + dx - 1.6, 8 + Y], [hx + dx + 1.6, 8 + Y], [hx + dx, 8 - h + Y]]), PNT); if(!back) gp(hx, 8 + Y, P.glow);
+    if(!back){ fill(R(hx - 3 + sq, 12 + Y, 7 - sq, 2), VIS, true); for(let x = hx - 2 + sq; x <= hx + 2; x++) gp(x, 12 + Y, P.eye); gp(hx + 2, 12 + Y, "#FFFFFF"); }
+    else line(hx - 3, 13 + Y, hx + 3, 13 + Y, P.dk);
+    // наплечники
+    fill(R(CX - 13 + sq, 16 + Y, 7, 6), PNT, false, true); gp(CX - 10 + sq, 18 + Y, P.glow); line(CX - 13 + sq, 21 + Y, CX - 7 + sq, 21 + Y, P.trim);
+    fill(R(CX + 7, 16 + Y, 7 - sq, 6), sq && !back ? PNF : PNT, false, true); gp(CX + 10, 18 + Y, P.glow); line(CX + 7, 21 + Y, CX + 13 - sq, 21 + Y, P.trim);
+    // глефа в правой руке персонажа: слева на экране лицом, справа спиной
+    const gx = back ? CX + 12 - sq : CX - 12 + sq, gd = back ? 1 : -1, ox = back ? CX - 12 + sq : CX + 12 - sq;
+    if(wind){ glaive(gx, 30 + Y, gx, 5 + Y, gd); for(let i = 0; i < 12; i++){ const a = i/12*Math.PI*2; gp(gx + gd*2 + Math.round(Math.cos(a)*5), 3 + Y + Math.round(Math.sin(a)*5), i % 3 ? P.glow : P.glowHi); } }
+    else if(hit){ glaive(gx, 22 + Y, gx + gd*7, 34 + Y, gd); for(let i = 0; i < 16; i++){ const a = i/16*Math.PI*2; gp(gx + gd*9 + Math.round(Math.cos(a)*6), 38 + Y + Math.round(Math.sin(a)*2), i % 4 ? P.glow : P.glowHi); } }
+    else glaive(gx, 41, gx, 9 + Y + (back ? aR : aL), gd);
+    arm(CX - 9 + sq, 21 + Y, CX - 11 + sq, 25 + Y, back ? ox : gx, 27 + Y + aL, 4, MET); fist(back ? ox : gx, 27 + Y + aL);
+    arm(CX + 9, 21 + Y, CX + 11, 25 + Y, back ? gx : ox, 27 + Y + aR, 4, MET); fist(back ? gx : ox, 27 + Y + aR);
+    rune(CX + 15 - sq - orbit[0], 12 + Y - orbit[1], f % 2 === 1);
+  };
+
+  // ======================= РЕМОНТНИК: поддержка — округлый корпус, большой крест, стеклянный бак с нанитами, излучатель с кольцом =======================
+  const medic = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    const GLASS = ["#1D2B27", "#14201C", "#0E1714", "#0A110F", "#070C0A"];
+    // крест: белый на краске класса с тёмной каймой, светится только ядро в центре (грейд)
+    const cross = (x, y, big) => { const r = big ? 2 : 1;
+      for(let i = -r - 1; i <= r + 1; i++) for(let k = -1; k <= 1; k++){ put(x + i, y + k, P.pX); put(x + k, y + i, P.pX); }
+      for(let i = -r; i <= r; i++){ put(x + i, y, "#F2FFF8"); put(x, y + i, "#F2FFF8"); }
+      gp(x, y, P.core); };
+    // бак: стекло, жидкость цвета класса (светятся только пузырьки), уровень и пузырьки по кадрам
+    const tank = (x, y, w, h) => { fill(R(x, y, w, h), DRK); fill(R(x + 1, y + 2, w - 2, h - 4), GLASS, true);
+      const lvl = y + 3 + (idle1 ? 0 : 1);
+      for(let j = lvl; j < y + h - 2; j++) for(let i = x + 1; i < x + w - 1; i++) put(i, j, (i + j) % 2 ? shade(P.glow, .62) : shade(P.glow, .5));
+      for(const [i, j] of [[1, 0], [w - 3, 3], [2, 6], [1, 9]]) if(lvl + j - (f % 3) < y + h - 2 && x + 1 + i < x + w - 1) gp(x + 1 + i, lvl + j - (f % 3), P.glowHi);
+      put(x + 1, y + 2, "#9FB8B0"); fill(R(x, y, w, 1), MET); fill(R(x, y + h - 1, w, 1), MET); };
+    // излучатель: корпус, кольцо-сопло; заряд и выстрел
+    const emitter = (x, y, d, mode) => {
+      fill(PG([[x, y - 1], [x + 6*d, y - 1], [x + 6*d, y + 2], [x, y + 2]]), GUN, false, true); put(x + 3*d, y - 1, P.gunHi);
+      const rx = x + 8*d;
+      for(let a = 0; a < 12; a++) gp(rx + Math.round(Math.cos(a/12*Math.PI*2)*2.4), y + .5 + Math.round(Math.sin(a/12*Math.PI*2)*2.4), a % 3 ? P.wpn : P.wpnHi);
+      if(mode === 1) gp(rx, y + 1, "#FFFFFF");
+      if(mode === 2) for(let i = 1; i <= 7; i++){ gp(rx + d*(2 + i), y + 1, i % 2 ? P.glowHi : P.glow); if(i % 2){ gp(rx + d*(2 + i), y, P.glow); gp(rx + d*(2 + i), y + 2, P.glow); } }
+    };
+    if(side){
+      const nb = B;
+      tank(9, 17 + nb, 6, 13); line(12, 16 + nb, 12, 8 + nb, P.dd); gp(12, 7 + nb, idle1 ? P.glowHi : P.glow);
+      line(15, 19 + nb, 17, 20 + nb, P.dk);
+      legSide(18, 31 + nb, WS[2], WS[3], false, {th:4, L:5.4, foot:6, heel:2});
+      legSide(21, 31 + nb, WS[0], WS[1], true, {th:4, L:5.4, foot:6, heel:2, pad:true, stripe:true});
+      fill(R(15, 28 + nb, 10, 3), DRK);
+      // округлый корпус: светлая краска спереди, крест на плече
+      fill(EL(20.5, 23.5 + nb, 6.4, 6.2), MET);
+      fill(PG([[20, 18], [24, 18.5], [27, 22], [26.5, 27], [22, 29], [20, 28]].map(([x, y]) => [x, y + nb])), PNT);
+      line(15, 27 + nb, 20, 28 + nb, P.trim); gp(24, 24 + nb, P.core);
+      // голова-купол с широким визором
+      fill(EL(20.5, 13 + nb, 5.2, 4.8), MET, false, true); fill(PG([[16, 12], [19, 8.6], [22, 8.4], [17, 13]].map(([x, y]) => [x, y + nb])), PNT);
+      fill(R(20, 12 + nb, 6, 3), VIS, true); for(let x = 21; x <= 25; x++) gp(x, 13 + nb, P.eye); gp(25, 13 + nb, "#FFFFFF");
+      // наплечник с крестом
+      fill(EL(18.5, 20.5 + nb, 3.8, 3.2), PNT, false, true); cross(18, 20 + nb, false);
+      if(wind || hit){ arm(19, 22 + nb, 22, 24 + nb, 26, 24 + nb, 3, MET); fist(26, 24 + nb); emitter(27, 23 + nb, 1, wind ? 1 : 2); }
+      else { arm(19, 22 + nb, 20 + swing/2, 25 + nb, 24 + swing, 26 + nb, 3, MET); fist(24 + swing, 26 + nb); emitter(25 + swing, 25 + nb, 1, 0); }
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq;
+    const [lL, lR, , aL, aR] = WF;
+    // бак: лицом видны две колбы над плечами
+    if(!back){ for(const x of [CX - 7 + sq, CX + 5]){ fill(R(x, 14 + Y, 3, 6), DRK); for(let j = 15; j < 19; j++) put(x + 1, j + Y, shade(P.glow, j % 2 ? .62 : .5)); gp(x + 1, 16 + Y + (f % 2), P.glowHi); } }
+    line(CX - 4 + sq, 15 + Y, CX - 4 + sq, 7 + Y, P.dd); gp(CX - 4 + sq, 6 + Y, idle1 ? P.glowHi : P.glow);
+    legFront(CX - 5 + sq, 31 + Y, lL, 4, !sq || back, {pad:true, stripe:true}); legFront(CX + 2, 31 + Y, lR, 4, true, {pad:true, stripe:true});
+    fill(R(CX - 5 + sq, 28 + Y, 11 - sq, 3), DRK);
+    fill(EL(CX + .5 + sq*.5, 23.5 + Y, 6.6 - sq*.4, 6.2), MET);
+    if(!back){ fill(EL(CX + .5 + sq, 23 + Y, 4.6 - sq*.4, 4.6), PNT); cross(CX + sq, 23 + Y, true); line(CX - 4 + sq, 28 + Y, CX + 4, 28 + Y, P.trim); }
+    else { tank(CX - 4 + sq, 17 + Y, 9, 12); cross(CX + sq, 23 + Y, false); }
+    // голова-купол с широким визором
+    fill(EL(hx + .5, 13 + Y, 5.2, 4.8), MET, false, true); fill(PG([[hx - 4, 11 + Y], [hx - 2, 8.5 + Y], [hx + 3, 8.5 + Y], [hx + 5, 11 + Y]]), PNT);
+    if(!back){ fill(R(hx - 3 + sq, 12 + Y, 7 - sq, 3), VIS, true); for(let x = hx - 2 + sq; x <= hx + 2; x++) gp(x, 13 + Y, P.eye); gp(hx + 2, 13 + Y, "#FFFFFF"); }
+    else line(hx - 3, 13 + Y, hx + 3, 13 + Y, P.trimD);
+    // круглые наплечники
+    fill(EL(CX - 7 + sq, 20 + Y, 3.4, 2.8), PNT, false, true); fill(EL(CX + 8, 20 + Y, 3.4 - sq*.6, 2.8), sq && !back ? PNF : PNT, false, true);
+    // руки: излучатель в правой руке персонажа держит перед собой, сопло вниз-наружу
+    const ex = back ? CX + 10 : CX - 10 + sq, ed = back ? 1 : -1, aE = back ? aR : aL, aO = back ? aL : aR, ox = back ? CX - 10 + sq : CX + 10;
+    arm(CX + 7*ed + (back ? 0 : sq) - 0, 21 + Y, ex, 24 + Y, ex, 26 + Y + aE, 3, MET); fist(ex, 26 + Y + aE);
+    arm(CX - 7*ed + (back ? sq : 0), 21 + Y, ox, 24 + Y, ox, 27 + Y + aO, 3, MET); fist(ox, 27 + Y + aO);
+    const mode = wind ? 1 : hit ? 2 : 0, ey = 27 + Y + aE;
+    fill(PG([[ex, ey - 1], [ex + 5*ed, ey - 1], [ex + 5*ed, ey + 2], [ex, ey + 2]]), GUN, false, true); put(ex + 2*ed, ey - 1, P.gunHi); fill(R(ex - (ed < 0 ? 0 : 1), ey + 2, 2, 2), GUN);
+    const rx2 = ex + 7*ed;
+    for(let a = 0; a < 12; a++) gp(rx2 + Math.round(Math.cos(a/12*Math.PI*2)*2.3), ey + .5 + Math.round(Math.sin(a/12*Math.PI*2)*2.3), a % 3 ? P.wpn : P.wpnHi);
+    if(mode === 1) gp(rx2, ey + 1, "#FFFFFF");
+    if(mode === 2) for(let i = 1; i <= 6; i++){ gp(rx2 + ed*(2 + i), ey + 1 + Math.round(i*.5), i % 2 ? P.glowHi : P.glow); if(i % 2){ gp(rx2 + ed*(2 + i), ey + Math.round(i*.5), P.glow); gp(rx2 + ed*(2 + i), ey + 2 + Math.round(i*.5), P.glow); } }
+  };
+
+  // ======================= БАЗОВЫЙ РОБОТ (класс не выбран): шлем с гребнем, наплечники цвета фракции, бластер =======================
+  const base = () => {
+    const VIS = ["#07090C", "#07090C", "#07090C", "#07090C", "#07090C"];
+    const blaster = (x, y, d, fire) => { fill(PG([[x, y - 1], [x + 7*d, y - 1], [x + 7*d, y + 2], [x, y + 2]]), GUN, false, true); put(x + 2*d, y - 1, P.gunHi); fill(R(Math.min(x + 1*d, x + 3*d), y + 2, 2, 2), GUN);
+      gp(x + 7*d, y, P.wpn); if(fire) for(const [dx, dy] of [[2, 0], [3, -1], [3, 1], [4, 0]]) spark(x + (7 + dx)*d, y + dy); };
+    if(side){
+      const nb = B;
+      legSide(18, 31 + nb, WS[2], WS[3], false, {th:4, L:5.4}); legSide(21, 31 + nb, WS[0], WS[1], true, {th:4, L:5.4, stripe:true, pad:true});
+      fill(R(15, 28 + nb, 10, 4), DRK);
+      fill(PG([[15, 19], [23, 18], [26, 20], [25, 29], [16, 29]].map(([x, y]) => [x, y + nb])), MET);
+      fill(R(21, 20 + nb, 4, 5), PNT); core(22, 22 + nb, false); line(16, 27 + nb, 23, 27 + nb, P.trim);
+      fill(R(16, 10 + nb, 9, 9), MET, false, true); fill(R(17, 9 + nb, 5, 2), PNT);
+      fill(R(20, 13 + nb, 5, 2), VIS, true); for(let x = 21; x <= 24; x++) gp(x, 13 + nb, P.eye); gp(24, 13 + nb, "#FFFFFF");
+      fill(EL(18.5, 20 + nb, 3.6, 2.8), PNT, false, true);
+      const k = hit ? -1 : 0;
+      arm(18, 21 + nb, 20, 24 + nb, 23 + k, 24 + nb, 3, MET); fist(23 + k, 24 + nb); blaster(24 + k, 23 + nb, 1, hit);
+      if(wind) gp(31, 23 + nb, P.wpnHi);
+      return;
+    }
+    const CX = 20, Y = B, sq = tq, hx = CX + 2*sq, [lL, lR, , aL, aR] = WF;
+    legFront(CX - 6 + sq, 31 + Y, lL, 4, !sq || back, {stripe:true, pad:true}); legFront(CX + 2, 31 + Y, lR, 4, true, {stripe:true, pad:true});
+    fill(R(CX - 6 + sq, 28 + Y, 12 - sq, 4), DRK);
+    fill(PG([[CX - 7 + sq, 18 + Y], [CX + 7 + sq, 18 + Y], [CX + 6, 29 + Y], [CX - 6 + sq, 29 + Y]]), MET);
+    if(!back){ fill(R(CX - 3 + 2*sq, 20 + Y, 7 - sq, 5), PNT); core(CX + sq, 22 + Y, false); line(CX - 5 + sq, 27 + Y, CX + 5, 27 + Y, P.trim); }
+    else { fill(R(CX - 4 + sq, 19 + Y, 9, 8), DRK); gp(CX + sq, 23 + Y, P.mod); }
+    fill(R(hx - 4, 10 + Y, 9, 9), MET, false, true); fill(R(hx - 2, 9 + Y, 5, 2), PNT);
+    if(!back){ fill(R(hx - 3 + sq, 13 + Y, 7 - sq, 2), VIS, true); for(let x = hx - 2 + sq; x <= hx + 2; x++) gp(x, 13 + Y, P.eye); gp(hx + 2, 13 + Y, "#FFFFFF"); }
+    else line(hx - 3, 13 + Y, hx + 3, 13 + Y, P.trimD);
+    fill(EL(CX - 8 + sq, 19 + Y, 3.4, 2.6), PNT, false, true); fill(EL(CX + 8, 19 + Y, 3.4 - sq*.6, 2.6), sq && !back ? PNF : PNT, false, true);
+    const gx = back ? CX + 9 : CX - 9 + sq, ox = back ? CX - 9 + sq : CX + 9, aG = back ? aR : aL, aO = back ? aL : aR;
+    arm(back ? CX + 7 : CX - 7 + sq, 20 + Y, gx, 24 + Y, gx, 26 + Y + aG, 3, MET); fist(gx, 26 + Y + aG);
+    arm(back ? CX - 7 + sq : CX + 7, 20 + Y, ox, 24 + Y, ox, 26 + Y + aO, 3, MET); fist(ox, 26 + Y + aO);
+    fill(R(gx - 1, 27 + Y + aG, 3, 6), GUN, false, true); if(!back) gp(gx, 32 + Y + aG, P.wpn);
+    if(hit && !back) for(const [dx, dy] of [[0, 2], [-1, 3], [1, 3], [0, 4]]) spark(gx + dx, 32 + Y + dy);
+  };
+
+  const DRAW = {guard, reaper, sniper, techno, ghost, glyph, medic, base};
+  (DRAW[kind] || DRAW.base)();
+  // светятся только видимые пиксели: то, что закрыто деталью поверх, не просвечивает (по одному на точку)
+  const glowAt = new Map();
+  for(const g of glowPx){ const i = g[1]*W + g[0]; if(buf[i] === g[2]) glowAt.set(i, g); }
+  const glow = [...glowAt.values()];
+  if(idle1) for(const g of glow) g.push(1);
 
   // автоматическая обводка тёмным контуром
   const out = buf.slice();
-  for(let y = 0; y < SPR_H; y++) for(let x = 0; x < SPR_W; x++){
-    if(buf[y*SPR_W + x]) continue;
-    const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const X = x + dx, Y = y + dy; return X >= 0 && Y >= 0 && X < SPR_W && Y < SPR_H && buf[Y*SPR_W + X]; });
-    if(n) out[y*SPR_W + x] = "#0B0E12";
+  for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+    if(buf[y*W + x]) continue;
+    const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const X = x + dx, Y = y + dy; return X >= 0 && Y >= 0 && X < W && Y < H && buf[Y*W + X]; });
+    if(n) out[y*W + x] = "#0B0E12";
   }
-  return {px:out, glow:glowPx};
+  return {px:out, glow};
 }
 
 // ключ снаряжения для кэша спрайтов: считается один раз на объект, а не JSON.stringify каждый кадр
@@ -7152,14 +7451,22 @@ function drawMech(g, x, y, o){
   if(o.flash > 0){ g.save(); g.globalAlpha = .5; g.globalCompositeOperation = "lighter"; g.translate(X, Y); g.scale(dir, 1); g.drawImage(spr.base, -SPR_AX*ps, -SPR_AY*ps, DW, DH); g.restore(); }
 }
 
-// портрет для интерфейса
+// портрет для интерфейса: модель в профиль, по ширине выровнена по своим настоящим границам —
+// длинная винтовка снайпера или молот стража не обрезаются краем картинки
 function mechImg(cls, fac, eq, size){
   const key = [cls, fac, JSON.stringify(eq || {}), size || 120].join("|");
   if(mechCache.has(key)) return mechCache.get(key);
-  const W = size || 120, ps = Math.max(1, Math.floor(W/34)), c = document.createElement("canvas");
+  const W = size || 120, c = document.createElement("canvas");
   c.width = W*2; c.height = Math.round(W*1.2)*2;
   const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-  drawMech(g, c.width*0.44, c.height*0.94, {cls, fac, eq, aim:0.1, t:0.1, ps:ps*2, view8:false});
+  const o = {cls, fac, eq, aim:0.1, t:0.1, view8:false};
+  const spr = buildSprite(cls && CLASSES[cls] ? cls : "base", sprPalette(o), "idle", 0, "e");
+  let x0 = SPR_W, x1 = 0;
+  for(let i = 0; i < spr.px.length; i++) if(spr.px[i]){ const x = i % SPR_W; if(x < x0) x0 = x; if(x > x1) x1 = x; }
+  let ps = Math.max(1, Math.floor(W/34))*2;
+  while(ps > 1 && (x1 - x0 + 3)*ps > c.width) ps--;
+  o.ps = ps;
+  drawMech(g, c.width/2 - ((x0 + x1 + 1)/2 - SPR_AX)*ps, c.height*0.94, o);
   const html = `<img src="${c.toDataURL()}" alt="" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated">`;
   mechCache.set(key, html); if(mechCache.size > 60) mechCache.delete(mechCache.keys().next().value);
   return html;
