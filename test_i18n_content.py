@@ -287,7 +287,7 @@ class ScreensBuildTranslatableText(unittest.TestCase):
     def test_canvas_labels_go_through_T(self):
         self.has('ctx.fillText(T(open ? "проход открыт" : "барьер: "')
         self.has('const txt = T("Телепорт " + Math.max(0, TP_CAST - (nowS - TP.t0)).toFixed(1) + "с");')   # каст камня телепортации
-        self.has('ctx.fillText(T(Math.ceil(r.until - now) + " с"), r.x, r.y - 14);')                       # таймер руны возврата
+        self.has('ctx.fillText(T(Math.ceil(left) + " с"), x, y - 14);')                                    # таймер руны возврата (drawRuneMark)
 
     def test_chip_war_rules_have_no_numbers_inside_sentences(self):
         w = block("function openChipWar(){", "\n}\n")

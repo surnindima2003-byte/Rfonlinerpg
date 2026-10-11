@@ -3413,6 +3413,9 @@ function drawMinimap(){
 }
 
 let drawDt = 0.016;
+// цвет своего луча: плазма — фиолетовая, иначе цвет класса (у Стража — голубой)
+const beamColor = plasma => plasma ? "#C77DFF" : (classParams().color && S.cls !== "guard" ? classParams().color : "#5FD4E8");
+const beamPlasma = b => !!(b.plasma || (S.eq.weapon && ITEMS[S.eq.weapon.id] && ITEMS[S.eq.weapon.id].tier >= 4));
 function draw(t){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   // мягкая камера: догоняет робота с небольшой задержкой и чуть смотрит вперёд по ходу движения
@@ -3443,7 +3446,8 @@ function draw(t){
   if(locKey === "lobby") drawLobbyOverlay(t, drawDt);
   for(const b of bolts){ ctx.fillStyle = "#E0694A"; ctx.shadowColor = "#E0694A"; ctx.shadowBlur = 10; circle(b.x, b.y, 5); ctx.fill(); ctx.shadowBlur = 0; }
   for(const b of beams){
-    const plasma = b.plasma || (S.eq.weapon && ITEMS[S.eq.weapon.id] && ITEMS[S.eq.weapon.id].tier >= 4), c = plasma ? "#C77DFF" : (classParams().color && S.cls !== "guard" ? classParams().color : "#5FD4E8");
+    // b.c — луч чужого умения: цвет и плазму прислал сам заклинатель (иначе он был бы цвета моего класса)
+    const plasma = b.c ? !!b.plasma : beamPlasma(b), c = b.c || beamColor(plasma);
     ctx.globalAlpha = b.life/0.12; ctx.strokeStyle = c; ctx.lineWidth = plasma ? 6 : 4; ctx.shadowColor = c; ctx.shadowBlur = 12;
     ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   }
@@ -5389,9 +5393,11 @@ function drawOthers(t, dt){
     if(o.rx < cx0 - 90 || o.rx > cx0 + vw + 90 || o.ry < cy0 - 40 || o.ry > cy0 + vh + 160) continue;
     const F = FACTIONS[o.fac] || FACTIONS.aegis;
     if(o.flashT > 0) o.flashT -= dt || 0.016;
+    if(o.atkT > 0) o.atkT -= dt || 0.016;                                   // замах при чужом умении (sfx)
+    if(!o.sth && typeof sfxAuraKeys === "function"){ const ak = sfxAuraKeys(o.id); if(ak.length) drawAuraRings(o.rx, o.ry - 16, t, ak); }
     if(o.sth){ ctx.save(); ctx.globalAlpha = 0.3; }
     shown++;
-    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, wing:o.sth ? "" : o.wg, cloak:o.sth ? "" : o.ck, aim:o.aim || 0, moving:o.ws > MOVE.walkMin, wp:o.wp, t:t + (o.id % 7), ps:MECH_PS, flash:o.flashT > 0 ? o.flashT : 0});
+    drawMech(ctx, o.rx, o.ry, {cls:o.cls, fac:o.fac, eq:o.eq || {}, wing:o.sth ? "" : o.wg, cloak:o.sth ? "" : o.ck, aim:o.aim || 0, moving:o.ws > MOVE.walkMin, wp:o.wp, t:t + (o.id % 7), ps:MECH_PS, flash:o.flashT > 0 ? o.flashT : 0, atk:o.atkT > 0 ? o.atkT/0.25 : 0});
     if(o.sth) ctx.restore();
     if(o.dr && DRONES[o.dr] && !o.sth) drawOtherDrone(o, t, dt || 0.016);
     const name = String(o.nick || "Пилот").slice(0, 16);
@@ -5524,11 +5530,13 @@ function drawClassFx(dt){
   CB.fx = CB.fx.filter(f => f.life > 0);
 }
 const BUFF_COLOR = {def:"#5FD4E8", atk:"#E0694A", rate:"#7BC98A", steal:"#9B7BFF"};
-function drawBuffAura(x, y, t){
-  let i = 0;
-  for(const k in CB.buffs){ if(CB.buffs[k].t <= 0) continue;
-    ctx.save(); ctx.strokeStyle = BUFF_COLOR[k]; ctx.globalAlpha = .55 + Math.sin(t*6 + i)*.2; ctx.lineWidth = 3;
-    ctx.setLineDash([10, 6]); ctx.lineDashOffset = -t*30*(i % 2 ? -1 : 1); circle(x, y, 30 + i*6); ctx.stroke(); ctx.restore(); i++; }
+function drawBuffAura(x, y, t){ drawAuraRings(x, y, t, Object.keys(CB.buffs).filter(k => CB.buffs[k].t > 0)); }
+// кольца аур по видам баффов — и у своего робота, и у чужого (эффекты умений других игроков)
+function drawAuraRings(x, y, t, keys){
+  keys.forEach((k, i) => {
+    ctx.save(); ctx.strokeStyle = BUFF_COLOR[k] || "#5FD4E8"; ctx.globalAlpha = .55 + Math.sin(t*6 + i)*.2; ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]); ctx.lineDashOffset = -t*30*(i % 2 ? -1 : 1); circle(x, y, 30 + i*6); ctx.stroke(); ctx.restore();
+  });
 }
 
 // оружие на башне зависит от класса: щит, клинки, длинный ствол или излучатель
@@ -10570,19 +10578,28 @@ function ncSkill(i, s){
     if(p.stealthT > now){ ctx.save(); ctx.globalAlpha = 0.35; _botNC(x, y, ang, aim, t, moving, flash); ctx.restore(); return; }
     return _botNC(x, y, ang, aim, t, moving, flash);
   };
-  // эхо-двойник, руна и глиф притяжения на земле
+  // эхо-двойник, руна и глиф притяжения на земле (те же функции рисуют их и у чужого Призрака/Глифоносца)
   const _layerNC = drawPvpLayer;
   drawPvpLayer = function(t, dt){
     _layerNC(t, dt);
-    if(NC.echo && NC.echo.until > now){ ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t*10)*0.08; ctx.globalCompositeOperation = "lighter";
-      drawMech(ctx, NC.echo.x, NC.echo.y, {cls:S.cls, fac:S.faction, eq:{}, aim:p.aim, moving:false, t, ps:MECH_PS, atk:p.atkT > 0 ? p.atkT*4 : 0}); ctx.restore(); }
-    if(NC.rune && NC.rune.until > now){ const r = NC.rune; ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 2; ctx.globalAlpha = .8;
-      ctx.beginPath(); ctx.ellipse(r.x, r.y, 22, 9, 0, 0, Math.PI*2); ctx.stroke();
-      for(let k = 0; k < 4; k++){ const a = t*2 + k*Math.PI/2; ctx.fillStyle = "#FFE0A0"; ctx.fillRect(r.x + Math.cos(a)*22 - 2, r.y + Math.sin(a)*9 - 2, 4, 4); }
-      ctx.font = "11px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#FFB347"; ctx.fillText(T(Math.ceil(r.until - now) + " с"), r.x, r.y - 14); ctx.restore(); }
-    if(NC.grav){ const g = NC.grav, k = 1 - Math.max(0, g.at - now)/0.6; ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t*60;
-      ctx.beginPath(); ctx.arc(g.x, g.y, g.r*(1 - k*0.6), 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+    if(NC.echo && NC.echo.until > now) drawEchoGhost(NC.echo.x, NC.echo.y, S.cls, S.faction, p.aim, t, p.atkT > 0 ? p.atkT*4 : 0);
+    if(NC.rune && NC.rune.until > now) drawRuneMark(NC.rune.x, NC.rune.y, NC.rune.until - now, t);
+    if(NC.grav) drawGravGlyph(NC.grav.x, NC.grav.y, NC.grav.r, 1 - Math.max(0, NC.grav.at - now)/0.6, t);
   };
+}
+function drawEchoGhost(x, y, cls, fac, aim, t, atk){
+  ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t*10)*0.08; ctx.globalCompositeOperation = "lighter";
+  drawMech(ctx, x, y, {cls, fac, eq:{}, aim, moving:false, t, ps:MECH_PS, atk}); ctx.restore();
+}
+function drawRuneMark(x, y, left, t){
+  ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 2; ctx.globalAlpha = .8;
+  ctx.beginPath(); ctx.ellipse(x, y, 22, 9, 0, 0, Math.PI*2); ctx.stroke();
+  for(let k = 0; k < 4; k++){ const a = t*2 + k*Math.PI/2; ctx.fillStyle = "#FFE0A0"; ctx.fillRect(x + Math.cos(a)*22 - 2, y + Math.sin(a)*9 - 2, 4, 4); }
+  ctx.font = "11px 'Russo One', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#FFB347"; ctx.fillText(T(Math.ceil(left) + " с"), x, y - 14); ctx.restore();
+}
+function drawGravGlyph(x, y, r, k, t){            // k — доля пути до схлопывания (0 → 1)
+  ctx.save(); ctx.strokeStyle = "#FFB347"; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t*60;
+  ctx.beginPath(); ctx.arc(x, y, r*(1 - k*0.6), 0, Math.PI*2); ctx.stroke(); ctx.restore();
 }
 // ===================== НОВЫЙ ВИД ЛОКАЦИЙ: АТМОСФЕРА =====================
 // У каждой локации своё настроение: цветной свет поверх мира и живые частицы.
@@ -14624,7 +14641,8 @@ function medSkill(i, s){
     const v = Math.min(MED_SHIELD_MAX, s.v), dur = s.dur, [x, y] = medTx(t);
     if(t === "self"){ CB.buffs.shield = {v, t:dur, max:dur}; addText(p.x, p.y - 50, "Щит-контур", C.color); netSend({t:"cbuff", to:(typeof NET !== "undefined" ? NET.id : 0), k:"shield", v, dur}); }
     else { if(!netSend({t:"cbuff", to:t.id, k:"shield", v, dur})){ toast("Нет связи с сервером"); return; }
-      CB.fx.push({type:"trail", x1:p.x, y1:p.y - 20, x2:x, y2:y - 20, life:.4, max:.4, c:C.color}); addText(x, y - 50, "Щит-контур", C.color); }
+      CB.fx.push({type:"trail", x1:p.x, y1:p.y - 20, x2:x, y2:y - 20, life:.4, max:.4, c:C.color}); addText(x, y - 50, "Щит-контур", C.color);
+      sfxBuff(t.id, "shield", dur); }                                      // соседи видят ауру щита на союзнике
     for(let k = 0; k < 2; k++) CB.fx.push({type:"ring", x, y, r:30 + k*10, life:.4 + k*.15, max:.4 + k*.15, c:C.color});
     done(); return;
   }
@@ -14689,15 +14707,18 @@ setInterval(() => {
   drawPvpLayer = function(t, dt){
     _layerMed(t, dt);
     const F = MED.field; if(!F || now >= F.until) return;
-    const k = Math.max(0, (F.until - now)/6);
-    ctx.save();
-    ctx.globalAlpha = .10 + .05*Math.sin(t*4); ctx.fillStyle = "#6EE7A8"; circle(F.x, F.y, F.r); ctx.fill();
-    ctx.globalAlpha = .7; ctx.strokeStyle = "#6EE7A8"; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.lineDashOffset = -t*25; circle(F.x, F.y, F.r); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "#C8FFE0";
-    for(let n = 0; n < 22; n++){ const a = n*2.4 + t*(n % 2 ? .8 : -.6), rr2 = F.r*((n*37 % 100)/100)*.95;
-      ctx.globalAlpha = .35 + .3*Math.sin(t*5 + n); ctx.fillRect(F.x + Math.cos(a)*rr2 - 1.5, F.y + Math.sin(a)*rr2*.6 - 1.5 - (t*20 + n*7) % 18, 3, 3); }
-    ctx.restore();
+    drawNanoField(F.x, F.y, F.r, t);
   };
+}
+// облако нанитов — и своё, и чужого Ремонтника (эффекты умений других игроков)
+function drawNanoField(x, y, r, t){
+  ctx.save();
+  ctx.globalAlpha = .10 + .05*Math.sin(t*4); ctx.fillStyle = "#6EE7A8"; circle(x, y, r); ctx.fill();
+  ctx.globalAlpha = .7; ctx.strokeStyle = "#6EE7A8"; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.lineDashOffset = -t*25; circle(x, y, r); ctx.stroke(); ctx.setLineDash([]);
+  ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "#C8FFE0";
+  for(let n = 0; n < 22; n++){ const a = n*2.4 + t*(n % 2 ? .8 : -.6), rr2 = r*((n*37 % 100)/100)*.95;
+    ctx.globalAlpha = .35 + .3*Math.sin(t*5 + n); ctx.fillRect(x + Math.cos(a)*rr2 - 1.5, y + Math.sin(a)*rr2*.6 - 1.5 - (t*20 + n*7) % 18, 3, 3); }
+  ctx.restore();
 }
 // описание умений Ремонтника в окне навыков — теперь в общем skillText (там же все остальные классы)
 // АВТО для Ремонтника: лечит раненых, ставит щит, бросает рой в бою и бьёт Разрядником
@@ -14724,6 +14745,154 @@ setInterval(() => autoTurn(() => {      // и под открытым окном
   };
   const _dashStun = dash;
   dash = function(){ if(p && p.stunT > now) return; return _dashStun(); };
+}
+
+// ===================== ЭФФЕКТЫ УМЕНИЙ ДРУГИХ ИГРОКОВ (sfx) =====================
+// Раньше другие пилоты видели только удары в PvP (pfx), а всё остальное, что рисует умение, было лишь на экране
+// того, кто его применил. Теперь при каждом умении снимаем, что оно нарисовало: кольца, разрезы, следы рывков, лучи
+// (очередь, цепь, откачка), цифры урона и лечения, ауры баффов, поле нанитов, руну, глиф, эхо-двойника, — и шлём
+// одним пакетом. Сервер проверяет его и рассылает игрокам рядом (skillfx.py). У соседей эффект рисуется теми же
+// функциями и с той же задержкой, что и сам робот-заклинатель (ITP.delay): кольцо встаёт вокруг робота, а не там,
+// где он окажется через 0,2 с. Над роботом — название умения и замах. Эффект — только картинка, на бой не влияет.
+const SFX = {cap:null, out:null, sent:0, tm:0, inbox:[], ground:[], aura:new Map(), names:null, loc:""};
+const SFX_WORDS = new Set(["ИЗ ТЕНИ", "Щит-контур", "оглушён", "−20% защиты"]);    // как skillfx.WORDS на сервере
+const SFX_NUM = /^(КРИТ )?[-+]?\d{1,7}$/, SFX_COL = /^#[0-9A-Fa-f]{6}$/;
+const sfxOn = () => typeof NET !== "undefined" && !!NET.ws && NET.ws.readyState === 1 && !!NET.id;
+const sfxR = v => Math.round(+v || 0), sfxL = v => Math.round(Math.min(2, Math.max(0.05, +v || 0))*100)/100, sfxD = v => Math.round(Math.max(0, +v || 0)*10)/10;
+
+// fn — умение или выстрелы его очереди; всё, что fn нарисовал, уходит соседям. fired() — id умения, если оно сработало
+function sfxCapture(fn, fired){
+  if(SFX.cap || !sfxOn() || !p) return fn();
+  const fxA = CB.fx, f0 = fxA.length, bA = beams, b0 = bA.length, tA = texts, t0 = tA.length;
+  const g0 = {echo:NC.echo, rune:NC.rune, grav:NC.grav, field:MED.field}, bf0 = {...CB.buffs};
+  const cap = SFX.cap = {g:[]};
+  try{ return fn(); }
+  finally{
+    SFX.cap = null;
+    try{
+      const pk = {f:[], b:[], x:[], g:cap.g};
+      if(CB.fx === fxA) for(const f of fxA.slice(f0)){
+        if(f.type === "ring") pk.f.push(["r", sfxR(f.x), sfxR(f.y), sfxR(f.r), sfxL(f.max), f.c]);
+        else if(f.type === "slash") pk.f.push(["s", sfxR(f.x), sfxR(f.y), Math.round((+f.a || 0)*100)/100, sfxL(f.max), f.c]);
+        else if(f.type === "trail") pk.f.push(["t", sfxR(f.x1), sfxR(f.y1), sfxR(f.x2), sfxR(f.y2), sfxL(f.max), f.c]);
+      }
+      if(beams === bA) for(const b of bA.slice(b0)){ const pl = beamPlasma(b); pk.b.push([sfxR(b.x1), sfxR(b.y1), sfxR(b.x2), sfxR(b.y2), sfxL(b.life), pl ? 1 : 0, beamColor(pl)]); }
+      if(texts === tA) for(const t of tA.slice(t0)){ const s = String(t.t); if(SFX_NUM.test(s) || SFX_WORDS.has(s)) pk.x.push([sfxR(t.x), sfxR(t.y), s, t.c]); }
+      // долгие эффекты на земле: новый объект — значит, умение его только что поставило
+      const E = NC.echo, R = NC.rune, G = NC.grav, F = MED.field;
+      if(E && E !== g0.echo) pk.g.push(["echo", sfxR(E.x), sfxR(E.y), sfxD(E.until - now), Math.round((+E.aim || 0)*100)/100]);
+      if(R && R !== g0.rune) pk.g.push(["rune", sfxR(R.x), sfxR(R.y), sfxD(R.until - now)]);
+      if(!R && g0.rune) pk.g.push(["rune", sfxR(g0.rune.x), sfxR(g0.rune.y), 0.1]);       // перенёсся к руне — у соседей она тоже гаснет
+      if(G && G !== g0.grav) pk.g.push(["grav", sfxR(G.x), sfxR(G.y), sfxR(G.r), sfxD(G.at - now)]);
+      if(F && F !== g0.field) pk.g.push(["field", sfxR(F.x), sfxR(F.y), sfxR(F.r), sfxD(F.until - now)]);
+      for(const k in CB.buffs) if(CB.buffs[k] !== bf0[k] && CB.buffs[k].t > 0) pk.g.push(["buff", NET.id, k, sfxD(CB.buffs[k].t)]);
+      const sid = fired ? fired() : "";
+      if(sid) pk.s = sid;
+      sfxQueue(pk);
+    }catch(e){}
+  }
+}
+// аура баффа на другом пилоте (щит Ремонтника на союзнике): её ставит сервер, а не CB.buffs заклинателя
+function sfxBuff(id, k, dur){ if(SFX.cap && id) SFX.cap.g.push(["buff", id, k, sfxD(dur)]); }
+// пакеты копятся и уходят не чаще 10 раз в секунду (очередь из трёх выстрелов — 2–3 пакета)
+function sfxQueue(pk){
+  if(!pk.f.length && !pk.b.length && !pk.x.length && !pk.g.length && !pk.s) return;
+  const o = SFX.out || (SFX.out = {f:[], b:[], x:[], g:[], s:""});
+  o.f.push(...pk.f); o.b.push(...pk.b); o.x.push(...pk.x); o.g.push(...pk.g); if(pk.s) o.s = pk.s;
+  sfxFlush();
+}
+function sfxFlush(){
+  const o = SFX.out; if(!o) return;
+  const wait = 100 - (performance.now() - SFX.sent);
+  if(wait > 0){ if(!SFX.tm) SFX.tm = setTimeout(() => { SFX.tm = 0; sfxFlush(); }, wait); return; }
+  SFX.out = null; SFX.sent = performance.now();
+  const msg = {t:"sfx"};
+  if(o.f.length) msg.f = o.f.slice(-16); if(o.b.length) msg.b = o.b.slice(-16);          // лимиты — как в skillfx.py
+  if(o.x.length) msg.x = o.x.slice(-10); if(o.g.length) msg.g = o.g.slice(-4); if(o.s) msg.s = o.s;
+  netSend(msg);
+}
+// снимаем каждое умение (самая внешняя обёртка — после всех остальных) и выстрелы, отложенные в очередь
+{
+  const _useSfx = useSkill;
+  useSkill = function(i){
+    const C = clsOf(S.cls), sk = C && C.skills[i], cd0 = CB.cd[i] || 0;
+    return sfxCapture(() => _useSfx(i), () => sk && CB.cd[i] > cd0 ? sk.id : "");
+  };
+  const _cuSfx = classUpdate;
+  classUpdate = function(dt){ return CB.queue.length ? sfxCapture(() => _cuSfx(dt)) : _cuSfx(dt); };
+}
+
+// ---- приём: эффекты чужих умений ----
+{
+  const prevSfx = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "sfx"){ if(d.loc === locKey && d.from !== NET.id){ SFX.inbox.push({at:performance.now() + ITP.delay, d}); if(SFX.inbox.length > 80) SFX.inbox.shift(); } return; }
+    prevSfx(d);
+  };
+}
+function sfxSkillName(cls, id){
+  const C = clsOf(cls), sk = C && C.skills.find(k => k.id === id);
+  if(sk) return sk.name;
+  if(!SFX.names){ SFX.names = {}; for(const c in CLASSES) for(const k of CLASSES[c].skills || []) SFX.names[k.id] = k.name; }
+  return SFX.names[id] || "";
+}
+function sfxAuraKeys(id){
+  const a = SFX.aura.get(id); if(!a) return [];
+  const ks = []; for(const k in a){ if(a[k] > now) ks.push(k); else delete a[k]; }
+  if(!ks.length) SFX.aura.delete(id);
+  return ks;
+}
+// late — на сколько секунд пакет опоздал (экран боя был скрыт): вспышки уже не показываем, долгие эффекты — остаток
+function sfxApply(d, late){
+  const L = a => Array.isArray(a) ? a : [], n = v => +v || 0, col = c => typeof c === "string" && SFX_COL.test(c) ? c : "#5FD4E8";
+  const o = NET.others.get(d.from);
+  if(late < 1.5){
+    for(const f of L(d.f)){
+      if(f[0] === "r") CB.fx.push({type:"ring", x:n(f[1]), y:n(f[2]), r:n(f[3]), life:n(f[4]), max:n(f[4]), c:col(f[5])});
+      else if(f[0] === "s") CB.fx.push({type:"slash", x:n(f[1]), y:n(f[2]), a:n(f[3]), life:n(f[4]), max:n(f[4]), c:col(f[5])});
+      else if(f[0] === "t") CB.fx.push({type:"trail", x1:n(f[1]), y1:n(f[2]), x2:n(f[3]), y2:n(f[4]), life:n(f[5]), max:n(f[5]), c:col(f[6])});
+    }
+    for(const b of L(d.b)) beams.push({x1:n(b[0]), y1:n(b[1]), x2:n(b[2]), y2:n(b[3]), life:n(b[4]), plasma:!!b[5], c:col(b[6])});
+    for(const x of L(d.x)) addText(n(x[0]), n(x[1]), String(x[2]).slice(0, 16), col(x[3]));
+    if(d.s && o && !o.dead){
+      const nm = sfxSkillName(o.cls, String(d.s)), C = clsOf(o.cls);
+      if(nm && !o.sth && !L(d.x).some(x => x[2] === nm)) addText(o.rx, o.ry - 70, nm, C && C.color || "#F2A93B");   // «Щит-контур» умение пишет само
+      o.atkT = 0.25;                                                       // замах, как у своего робота
+    }
+  }
+  for(const g of L(d.g)){
+    const kind = g[0];
+    if(kind === "buff"){ if(g[1] === NET.id) continue;                    // щит на мне — уже в моих CB.buffs
+      const a = SFX.aura.get(g[1]) || {}; a[String(g[2])] = now + n(g[3]) - late; SFX.aura.set(g[1], a); continue; }
+    const big = kind === "grav" || kind === "field", dur = n(big ? g[4] : g[3]) - late;
+    if(!["echo", "rune", "grav", "field"].includes(kind)) continue;
+    SFX.ground = SFX.ground.filter(e => !(e.from === d.from && e.k === kind));    // новый объект того же вида заменяет старый
+    if(dur <= 0) continue;
+    SFX.ground.push({k:kind, from:d.from, x:n(g[1]), y:n(g[2]), r:big ? n(g[3]) : 0, aim:kind === "echo" ? n(g[4]) : 0,
+      until:now + dur, cls:o ? o.cls : "", fac:o ? o.fac : ""});
+  }
+  if(SFX.ground.length > 40) SFX.ground.splice(0, SFX.ground.length - 40);
+}
+{
+  const _layerSfx = drawPvpLayer;
+  drawPvpLayer = function(t, dt){
+    _layerSfx(t, dt);
+    if(SFX.loc !== locKey){ SFX.loc = locKey; SFX.inbox.length = 0; SFX.ground = []; SFX.aura.clear(); }
+    const ms = performance.now();
+    while(SFX.inbox.length && SFX.inbox[0].at <= ms){ const it = SFX.inbox.shift(); try{ sfxApply(it.d, (ms - it.at)/1000); }catch(e){} }
+    for(const g of SFX.ground){
+      if(now >= g.until){
+        if(g.k === "grav" && !g.boom){ g.boom = true;                     // глиф схлопнулся — как у самого Глифоносца
+          for(let k = 0; k < 3; k++) CB.fx.push({type:"ring", x:g.x, y:g.y, r:g.r*(0.4 + k*0.3), life:.4, max:.4, c:"#FFB347"}); }
+        continue;
+      }
+      if(g.k === "field") drawNanoField(g.x, g.y, g.r, t);
+      else if(g.k === "rune") drawRuneMark(g.x, g.y, g.until - now, t);
+      else if(g.k === "grav") drawGravGlyph(g.x, g.y, g.r, 1 - Math.max(0, g.until - now)/0.6, t);
+      else if(g.k === "echo") drawEchoGhost(g.x, g.y, g.cls, g.fac, g.aim, t, 0);
+    }
+    SFX.ground = SFX.ground.filter(g => now < g.until);
+  };
 }
 
 // ===================== ТАБЛИЧКА ЦЕЛИ И ОКНО «ИНФО» (по эталону) =====================

@@ -36,6 +36,7 @@ import special_quests
 import saveguard
 import mobworld
 import seasonpts
+import skillfx
 import worldboss
 import tower
 import vip
@@ -2199,6 +2200,18 @@ def broadcast_pvp_fx(att, vic, dmg, crit, skill):
             c.push(fx)
 
 
+def broadcast_skill_fx(info, payload):
+    """Эффекты умения (skillfx) видят игроки рядом с заклинателем — как удары PvP; самому себе не шлём."""
+    text = realtime.encode(payload)
+    ax, ay = info.get("x", 0), info.get("y", 0)
+    for c in list(hub.by_loc.get(info["loc"], ())):
+        if c.uid == info["id"]:
+            continue
+        i = c.info
+        if (i.get("x", 0) - ax) ** 2 + (i.get("y", 0) - ay) ** 2 <= skillfx.RADIUS2:
+            c.push(text)
+
+
 async def server_kill(victim, killer):
     """По расчёту сервера прочность жертвы кончилась, а её телефон о смерти не сообщил."""
     if not pvp.claim_death(victim["id"], killer["id"]):
@@ -2325,7 +2338,7 @@ async def api_chipwar(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "card", "card_get", "pvp", "pvp_dead", "emote", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
+WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "card", "card_get", "pvp", "pvp_dead", "emote", "sfx", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
 async def ws_handler(request):
@@ -2502,6 +2515,12 @@ async def handle_ws_message(d, t, info, conn):
         if re.fullmatch(r"[a-z]{2,10}", eid) and time.time() - info.get("emo_t", 0) > 2:
             info["emo_t"] = time.time()
             hub.to_loc(info["loc"], {"t": "emote", "from": info["id"], "id": eid}, skip_uid=info["id"])
+    elif t == "sfx":
+        fx = skillfx.clean(d, info, time.time())
+        if fx:
+            broadcast_skill_fx(info, fx)
+        else:
+            metrics.inc("sfx.drop")
     elif t == "mhit":
         mobworld.on_hits(info, d, hub)
     elif t == "wbhit":
