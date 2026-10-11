@@ -169,5 +169,22 @@ class Toasts(unittest.TestCase):
         self.assertIn("pointer-events:auto", _line(".toast.show{"))
 
 
+class CompactHud(unittest.TestCase):
+    """Узкий экран (до 400 px): HUD компактнее, миникарта меньше, цифры опыта на месте."""
+    def block(self):
+        a = GAME.index("@media (max-width:400px){\n.hud{right:92px}")
+        return GAME[a:GAME.index("</style>", a)]
+
+    def test_compact_rules(self):
+        b = self.block()
+        self.assertIn(".h2-top{display:contents}", b)
+        self.assertIn(".h2-bars{grid-column:2;grid-row:2", b)
+        self.assertNotIn(".bar.xp span{display:none}", b)          # цифры опыта остаются (так решили)
+        self.assertIn("max(var(--hb, 120px), 104px)", b)           # «Меню» не наезжает на название локации
+
+    def test_minimap_smaller_only_on_narrow(self):
+        self.assertIn("const size = vw <= 400 ? 72 : 92", GAME)
+
+
 if __name__ == "__main__":
     unittest.main()

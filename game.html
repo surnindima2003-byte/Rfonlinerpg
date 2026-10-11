@@ -1461,6 +1461,32 @@ textarea.field{min-height:70px;resize:vertical}
 .ie-ph{border:1.5px dashed var(--line);border-radius:7px;box-sizing:border-box}
 .ie-t .enc{position:absolute;right:3px;top:2px;font:700 10px Rubik,sans-serif;color:#F2C14B;font-style:normal}
 .ic-dm{margin-top:12px}
+/* ---- компактный HUD на узком экране (до 400 px): мир начинается на ~50 px выше ----
+   Аватар слева на две строки, имя, класс и БМ одной строкой, CP и прочность — справа от аватара, ресурсы ниже.
+   Раньше HUD занимал 146 px из 576 px игрового поля на экране 360×640. Миникарта — 72 px (drawMinimap). */
+@media (max-width:400px){
+.hud{right:92px}
+.hud2{display:grid;grid-template-columns:38px minmax(0,1fr);column-gap:8px;padding:5px 7px;border-radius:12px}
+.h2-top{display:contents}
+.h2-av{grid-column:1;grid-row:1 / span 2;width:38px;height:38px;align-self:center}
+.h2-img{width:38px;height:38px}
+.h2-lv{min-width:17px;height:17px;font-size:9.5px;line-height:13px;left:-4px;bottom:-4px}
+.h2-cls{width:15px;height:15px;font-size:8px;line-height:11px;right:-4px;bottom:-4px}
+.h2-id{grid-column:2;grid-row:1;display:flex;align-items:baseline;gap:6px;min-width:0}
+.h2-id .nm{font-size:13.5px;flex:0 1 auto;min-width:0}
+.h2-sub{font-size:10.5px;gap:5px;flex:none}
+.h2-bars{grid-column:2;grid-row:2;min-width:0}
+.h2-bars .bar{height:10px;margin-top:3px}
+.h2-bars .bar span{font-size:8px}
+.h2-bars .bar.xp{height:9px}
+.h2-bars .bar.xp span{font-size:7.5px}
+.h2-res{grid-column:1 / -1;grid-row:3;margin-top:5px;gap:4px}
+.h2-res span{padding:0 5px;font-size:11px;height:18px;border-radius:7px}
+.loc-name{top:81px !important;width:80px !important;font-size:9.5px !important;line-height:1.15 !important}
+.gmenu{width:84px;top:calc(max(var(--hb, 120px), 104px) + 4px)}
+.gm-toggle{padding:6px 8px !important}
+.talk{font-size:12px !important;padding:7px 12px !important}
+}
 </style>
 </head>
 <body>
@@ -3250,7 +3276,7 @@ function miniDungeon(size, s){
   return miniDgCache.c;
 }
 function drawMinimap(){
-  const size = 92, x = vw - size - 8, y = 8, s = size / Math.max(W, H);
+  const size = vw <= 400 ? 72 : 92, x = vw - size - 8, y = 8, s = size / Math.max(W, H);   // узкий экран — меньше (см. компактный HUD)
   ctx.fillStyle = "rgba(20,27,34,.85)"; rr(x-3, y-3, size+6, size+6, 10); ctx.fill();
   ctx.save(); rr(x, y, size, size, 7); ctx.clip();
   ctx.fillStyle = locKey === "lobby" ? "#1C252E" : LOCS[locKey].ground; ctx.fillRect(x, y, size, size);
