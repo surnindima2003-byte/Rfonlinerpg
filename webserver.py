@@ -1292,50 +1292,84 @@ async def icon_png(request):
 
 
 # ---------- рейтинг по боевой мощи ----------
+# Рейтинг одинаков для всех: список строится раз в TOP_TTL секунд, а не на каждое открытие. Раньше одно открытие
+# читало 100 сохранений целиком (колонка data, до ~30 МБ) ради ника, уровня и боевой мощи.
+TOP_TTL = 15
+_top_cache = {}                       # kind -> (время, данные)
+_top_locks = {"players": asyncio.Lock(), "guilds": asyncio.Lock()}
+
+
+async def _top_players(s):
+    guild_rows = (await s.execute(select(Doc.path, Doc.data).where(Doc.col == "guilds"))).all()
+    guilds = {path.split("/")[1]: json.loads(data) for path, data in guild_rows}
+    rows = (await s.execute(select(GameSave.tg_id, GameSave.nick, GameSave.name, GameSave.lvl, GameSave.cls, GameSave.bm)
+                            .where(GameSave.bm > 0).order_by(GameSave.bm.desc()).limit(100))).all()
+    # гильдия — по записям участников на сервере (guild_id в сохранении присылает телефон, его можно подделать)
+    gid_of = {}
+    ids = {str(r.tg_id) for r in rows}
+    for (path,) in (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members")))).all():
+        parts = path.split("/")
+        if len(parts) == 4 and parts[3] in ids and parts[1] in guilds:
+            gid_of.setdefault(parts[3], parts[1])
+    return [{"id": str(r.tg_id), "nick": public_name(r.nick, r.name), "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
+             "tag": (guilds.get(gid_of.get(str(r.tg_id))) or {}).get("tag", "")} for r in rows]
+
+
+async def _top_guilds(s):
+    guild_rows = (await s.execute(select(Doc.path, Doc.data).where(Doc.col == "guilds"))).all()
+    guilds = {path.split("/")[1]: json.loads(data) for path, data in guild_rows}
+    uids = {}
+    for (path,) in (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members")))).all():
+        gid = path.split("/")[1]
+        uid = path.rsplit("/", 1)[1]
+        if uid.isdigit():
+            uids.setdefault(gid, []).append(int(uid))
+    all_ids = [i for lst in uids.values() for i in lst]
+    bms = {}
+    if all_ids:
+        for tg_id, bm in (await s.execute(select(GameSave.tg_id, GameSave.bm).where(GameSave.tg_id.in_(all_ids)))).all():
+            bms[tg_id] = bm or 0
+    items = []
+    for gid, g in guilds.items():
+        members = uids.get(gid, [])
+        items.append({"id": gid, "name": g.get("name", ""), "tag": g.get("tag", ""), "emblem": g.get("emblem"),
+                      "level": g.get("level", 1), "count": len(members), "bm": sum(bms.get(m, 0) for m in members)})
+    items.sort(key=lambda x: x["bm"], reverse=True)
+    member_of = {m: gid for gid, lst in uids.items() for m in lst}
+    return items, member_of
+
+
+async def _top_cached(kind, build):
+    hit = _top_cache.get(kind)
+    if hit and time.time() - hit[0] < TOP_TTL:
+        return hit[1]
+    async with _top_locks[kind]:                     # одновременные открытия ждут один запрос, а не делают свой
+        hit = _top_cache.get(kind)
+        if hit and time.time() - hit[0] < TOP_TTL:
+            return hit[1]
+        async with SessionLocal() as s:
+            data = await build(s)
+        _top_cache[kind] = (time.time(), data)
+        metrics.inc(f"top.build.{kind}")
+        return data
+
+
 async def api_top(request):
     body, user = await read_auth(request)
     kind = body.get("kind")
-    async with SessionLocal() as s:
-        guild_rows = (await s.execute(select(Doc).where(Doc.col == "guilds"))).scalars().all()
-        guilds = {r.path.split("/")[1]: json.loads(r.data) for r in guild_rows}
-        if kind == "players":
-            rows = (await s.execute(select(GameSave).where(GameSave.bm > 0).order_by(GameSave.bm.desc()).limit(100))).scalars().all()
-            me = (await s.execute(select(GameSave).where(GameSave.tg_id == user["id"]))).scalar_one_or_none()
+    if kind == "players":
+        items = await _top_cached("players", _top_players)
+        async with SessionLocal() as s:
+            my_bm = (await s.execute(select(GameSave.bm).where(GameSave.tg_id == user["id"]))).scalar() or 0
             my_rank = None
-            if me and me.bm > 0:
-                my_rank = (await s.execute(select(func.count()).select_from(GameSave).where(GameSave.bm > me.bm))).scalar() + 1
-            # гильдия — по записям участников на сервере (guild_id в сохранении присылает телефон, его можно подделать)
-            gid_of = {}
-            ids = {str(r.tg_id) for r in rows}
-            for (path,) in (await s.execute(select(Doc.path).where(Doc.col.like("guilds/%/members")))).all():
-                parts = path.split("/")
-                if len(parts) == 4 and parts[3] in ids and parts[1] in guilds:
-                    gid_of.setdefault(parts[3], parts[1])
-            items = [{"id": str(r.tg_id), "nick": public_name(r.nick, r.name), "lvl": r.lvl, "cls": r.cls, "bm": r.bm,
-                      "tag": (guilds.get(gid_of.get(str(r.tg_id))) or {}).get("tag", "")} for r in rows]
-            return web.json_response({"ok": True, "items": items, "me": {"rank": my_rank, "bm": me.bm if me else 0}})
-        if kind == "guilds":
-            member_rows = (await s.execute(select(Doc).where(Doc.col.like("guilds/%/members")))).scalars().all()
-            uids = {}
-            for r in member_rows:
-                gid = r.path.split("/")[1]
-                uid = r.path.rsplit("/", 1)[1]
-                if uid.isdigit():
-                    uids.setdefault(gid, []).append(int(uid))
-            all_ids = [i for lst in uids.values() for i in lst]
-            bms = {}
-            if all_ids:
-                for tg_id, bm in (await s.execute(select(GameSave.tg_id, GameSave.bm).where(GameSave.tg_id.in_(all_ids)))).all():
-                    bms[tg_id] = bm or 0
-            items = []
-            for gid, g in guilds.items():
-                members = uids.get(gid, [])
-                items.append({"id": gid, "name": g.get("name", ""), "tag": g.get("tag", ""), "emblem": g.get("emblem"),
-                              "level": g.get("level", 1), "count": len(members), "bm": sum(bms.get(m, 0) for m in members)})
-            items.sort(key=lambda x: x["bm"], reverse=True)
-            my_gid = next((gid for gid, lst in uids.items() if user["id"] in lst), None)
-            my_rank = next((i + 1 for i, it in enumerate(items) if it["id"] == my_gid), None)
-            return web.json_response({"ok": True, "items": items[:50], "me": {"rank": my_rank, "id": my_gid}})
+            if my_bm > 0:
+                my_rank = (await s.execute(select(func.count()).select_from(GameSave).where(GameSave.bm > my_bm))).scalar() + 1
+        return web.json_response({"ok": True, "items": items, "me": {"rank": my_rank, "bm": my_bm}})
+    if kind == "guilds":
+        items, member_of = await _top_cached("guilds", _top_guilds)
+        my_gid = member_of.get(user["id"])
+        my_rank = next((i + 1 for i, it in enumerate(items) if it["id"] == my_gid), None)
+        return web.json_response({"ok": True, "items": items[:50], "me": {"rank": my_rank, "id": my_gid}})
     raise web.HTTPBadRequest(text="bad kind")
 
 
