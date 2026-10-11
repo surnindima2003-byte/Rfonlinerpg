@@ -1,4 +1,5 @@
-"""Ежедневные резервные копии: полный файл SQLite и отдельная выгрузка денежных таблиц (для любой базы)."""
+"""Ежедневные резервные копии: полный файл SQLite (на PostgreSQL — полная выгрузка всех таблиц) и отдельная
+выгрузка денежных таблиц (для любой базы). Перед вайпом webserver.ensure_epoch делает полную выгрузку (dump_all)."""
 import asyncio
 import datetime
 import gzip
@@ -7,7 +8,7 @@ import logging
 import os
 import sqlite3
 
-from sqlalchemy import select
+from sqlalchemy import select, inspect as sa_inspect
 
 from config import BACKUP_DIR
 from db import engine, IS_PG, SQLITE_URL
@@ -18,6 +19,30 @@ log = logging.getLogger("backup")
 MONEY_TABLES = ("gram_wallets", "gram_tx", "gram_withdrawals", "star_payments", "item_inst", "sphere_bal", "market_lots", "referrals", "ref_earn",
                 "season_prizes")
 KEEP_DAYS = 14
+KEEP_FULL_DAYS = 3           # полные выгрузки большие (все сохранения) — храним меньше
+
+
+def dump_all(prefix="full", tables=None):
+    """Полная выгрузка таблиц (по умолчанию — всех) в BACKUP_DIR/<prefix>-<время>.jsonl.gz, построчно.
+
+    Раньше на PostgreSQL в копию попадали только денежные таблицы: после ошибочного вайпа сохранения,
+    гильдии и вещи было не восстановить. Формат: первая строка {"table": имя}, дальше строки таблицы.
+    Пишется потоково, чтобы не держать все сохранения в памяти. Возвращает путь к файлу."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    path = os.path.join(BACKUP_DIR, f"{prefix}-{stamp}.jsonl.gz")
+    tmp = path + ".part"
+    names = set(tables) if tables else None
+    with engine.connect() as conn, gzip.open(tmp, "wt", encoding="utf-8") as f:
+        have = set(sa_inspect(conn).get_table_names())
+        for t in Base.metadata.sorted_tables:
+            if t.name not in have or (names is not None and t.name not in names):
+                continue
+            f.write(json.dumps({"table": t.name}, ensure_ascii=False) + "\n")
+            for r in conn.execution_options(stream_results=True).execute(select(t)):
+                f.write(json.dumps(dict(r._mapping), ensure_ascii=False, default=str) + "\n")
+    os.replace(tmp, path)                            # недописанный файл не выглядит готовой копией
+    return path
 
 
 def make_backup():
@@ -42,11 +67,15 @@ def make_backup():
     with gzip.open(money_path, "wt", encoding="utf-8") as f:
         json.dump(dump, f, ensure_ascii=False, default=str)
     made.append(money_path)
-    # старые копии удаляем
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=KEEP_DAYS)
+    if IS_PG:
+        # у SQLite выше уже есть полная копия файла; на PostgreSQL — выгрузка всех таблиц (сохранения, гильдии, вещи)
+        made.append(dump_all("full"))
+    # старые копии удаляем (копии перед вайпом — тоже по сроку, как полные)
+    now = datetime.datetime.utcnow()
     for name in os.listdir(BACKUP_DIR):
         p = os.path.join(BACKUP_DIR, name)
-        if os.path.isfile(p) and datetime.datetime.utcfromtimestamp(os.path.getmtime(p)) < cutoff:
+        days = KEEP_FULL_DAYS if name.startswith("full-") else KEEP_DAYS
+        if os.path.isfile(p) and datetime.datetime.utcfromtimestamp(os.path.getmtime(p)) < now - datetime.timedelta(days=days):
             os.remove(p)
     return made
 

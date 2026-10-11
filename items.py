@@ -403,15 +403,21 @@ async def set_item_status(s, item_uid, owner, from_status, to_status, new_owner=
 LOOT_FULL = env_int("LOOT_FULL_KILLS", 2500)     # до стольких убийств в сутки — полный шанс
 LOOT_LOW = env_int("LOOT_LOW_KILLS", 6000)       # к этому числу шанс опускается до LOOT_FLOOR
 LOOT_FLOOR = env_float("LOOT_FLOOR", 0.2)
+# Жёсткий потолок: от LOOT_LOW до этого числа шанс плавно уходит с LOOT_FLOOR в ноль. Раньше после 6000 убийств
+# шанс оставался 20% навсегда, и бот на пределе скорости (2,5 убийства/с, ~200 000 в сутки по весу) набирал
+# ~46 000 «полных» убийств против ~4 600 у живого игрока. Теперь за сутки не больше ~4 900 полных убийств у любого.
+LOOT_ZERO = env_int("LOOT_ZERO_KILLS", 9000)
 
 
 def loot_factor(kills_today):
     """Множитель шанса ценного лута. Опыт, лом и обычные материалы не режутся — только то, что продаётся за GRAM."""
     if kills_today <= LOOT_FULL:
         return 1.0
-    if kills_today >= LOOT_LOW:
-        return LOOT_FLOOR
-    return 1.0 - (1.0 - LOOT_FLOOR) * (kills_today - LOOT_FULL) / (LOOT_LOW - LOOT_FULL)
+    if kills_today < LOOT_LOW:
+        return 1.0 - (1.0 - LOOT_FLOOR) * (kills_today - LOOT_FULL) / (LOOT_LOW - LOOT_FULL)
+    if LOOT_ZERO <= LOOT_LOW or kills_today >= LOOT_ZERO:
+        return 0.0
+    return LOOT_FLOOR * (LOOT_ZERO - kills_today) / (LOOT_ZERO - LOOT_LOW)
 
 
 async def count_loot_kill(s, uid, weight):

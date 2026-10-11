@@ -10,7 +10,8 @@
 
 Расход (зелья, ремонт, улучшения) не нужен: он только уменьшает ресурсы. Приход копится до принятого
 сохранения и обнуляется. Режим RES_LEDGER: off | shadow (только наблюдение — пишет в «Статистику», что срезал бы)
-| on (шаг 3: заменит потолок по времени). Модуль без базы и сети — его проверяют тесты (test_ledger.py).
+| on (лишние лом и ядра срезаются, скачок материалов — отказ сохранения; см. enforce). Работает и при SAVE_GUARD=off.
+Модуль без базы и сети — его проверяют тесты (test_ledger.py).
 """
 import os
 import time
@@ -185,6 +186,28 @@ def check(uid, nick, oldS, newS, granted):
                        "notes": [f"{k} +{g} при приходе {al}" for k, g, al in out],
                        "secs": int(time.time() - a.get("t", time.time()))})
     return out
+
+
+def enforce(oldS, newS, notes, fix_out):
+    """Режим on: применить замечания check() к сохранению. Раньше RES_LEDGER=on ничего не включал —
+    замечания только писались в лог.
+
+    Лом и ядра срезаются до «было + допустимый приход» (значение уходит телефону в fix_out, он применит его у себя),
+    остальное сохранение принимается. Материалы так не срезать (они лежат стопками в сумке и на складе), поэтому
+    скачок материалов — отказ: возвращается список материалов, сервер оставляет прошлое сохранение."""
+    if MODE != "on" or not notes or not isinstance(oldS, dict) or not isinstance(newS, dict):
+        return []
+    bad = []
+    for k, _gain, allowed in notes:
+        if k in MATS:
+            bad.append(k)
+            continue
+        cap = max(0, int(oldS.get(k, 0) or 0) + int(allowed))
+        newS[k] = max(0, min(int(newS.get(k, 0) or 0), cap))
+        if fix_out is not None:
+            fix_out[k] = newS[k]
+    metrics.inc("ledger.rejected" if bad else "ledger.clamped")
+    return bad
 
 
 def cleanup(online_ids):

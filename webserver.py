@@ -67,15 +67,46 @@ KEEP_ON_WIPE = {"meta", "gram_wallets", "gram_tx", "gram_withdrawals", "referral
                 "client_errors", "funnel_events", "first_seen"}
 
 
+def wipe_allowed(current, wanted, wipe_token, confirm):
+    """Можно ли обнулить прогресс при смене эпохи current → wanted.
+
+    Раньше вайп запускался одной переменной: стоило сменить или удалить WIPE_TOKEN (тогда он становится «wipe-1»),
+    и сервер молча сносил весь прогресс, включая купленные за GRAM вещи и лоты маркета. Теперь нужно и
+    подтверждение: WIPE_CONFIRM в Railway должен совпасть с новым WIPE_TOKEN. Новая база (эпохи ещё нет) — без вайпа."""
+    if current is None or current == wanted:
+        return False
+    return bool(confirm) and confirm == wipe_token
+
+
 def ensure_epoch():
-    """Если метка сброса изменилась, один раз обнуляем игровой прогресс. Деньги и статистика сохраняются."""
+    """Если метка сброса изменилась И вайп подтверждён (WIPE_CONFIRM), один раз обнуляем игровой прогресс.
+    Перед этим — полная выгрузка всех таблиц. Деньги и статистика сохраняются.
+    Без подтверждения сервер продолжает работать на прежней эпохе и пишет в лог, что вайп не выполнен."""
+    global DATA_EPOCH
+    import os
+    from config import WIPE_TOKEN
     Meta.__table__.create(engine, checkfirst=True)
     with engine.begin() as conn:
         row = conn.execute(Meta.__table__.select().where(Meta.key == "epoch")).first()
         current = row.value if row else None
     if current == DATA_EPOCH:
         return
+    if current is not None and not wipe_allowed(current, DATA_EPOCH, WIPE_TOKEN, os.getenv("WIPE_CONFIRM", "").strip()):
+        log.error("ВАЙП НЕ ВЫПОЛНЕН: эпоха в базе %s, по настройкам %s. Прогресс игроков сохранён, сервер работает на %s. "
+                  "Если вайп нужен, задай в Railway WIPE_CONFIRM=%s. Если нет — верни прежний WIPE_TOKEN.",
+                  current, DATA_EPOCH, current, WIPE_TOKEN)
+        DATA_EPOCH = current
+        return
     game_tables = [t for t in Base.metadata.sorted_tables if t.name not in KEEP_ON_WIPE]
+    if current is not None:
+        import backup
+        try:
+            path = backup.dump_all("wipe")
+        except Exception:
+            log.exception("ВАЙП ОТМЕНЁН: не удалось сделать полную копию перед вайпом. Сервер работает на эпохе %s", current)
+            DATA_EPOCH = current
+            return
+        log.warning("Копия перед вайпом: %s", path)
     log.warning("СБРОС ПРОГРЕССА: эпоха %s -> %s. Обнуляются: %s. Сохраняются: %s",
                 current, DATA_EPOCH, ", ".join(t.name for t in game_tables), ", ".join(sorted(KEEP_ON_WIPE)))
     Base.metadata.drop_all(engine, tables=game_tables)
@@ -92,6 +123,7 @@ def ensure_epoch():
 # сейчас этот username: если админ сменит ник в Telegram, занявший старый получил бы админку и бэкапы кошельков.
 ROLE_PINS_KEY = "role_pins"
 _role_pins = {}
+_pins_ready = {"ok": False}      # пока закрепления не загружены из базы, username новую роль не получает
 _role_warned = {}
 
 
@@ -101,6 +133,8 @@ def role_ok(username, uid, names, ids):
         return True
     if not username or username not in names:
         return False
+    if not _pins_ready["ok"]:
+        return False                       # закрепления ещё не прочитаны — не раздаём роль первому вошедшему
     pinned = _role_pins.get(username)
     if pinned is None:
         _role_pins[username] = uid
@@ -124,8 +158,9 @@ async def load_role_pins():
     try:
         pins = json.loads(row.value) if row and row.value else {}
         _role_pins.update({str(k): int(v) for k, v in pins.items()})
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         log.error("meta.%s испорчен — закрепления ролей начнутся заново", ROLE_PINS_KEY)
+    _pins_ready["ok"] = True
 
 
 async def save_role_pins():
@@ -324,7 +359,7 @@ async def api_save(request):
                         return web.json_response({"ok": False, "error": "stale save"}, status=409)
                 else:
                     s_["craftN"] = old_craft                 # старая версия страницы счётчик не знает — не теряем его
-            if not user["admin"] and saveguard.MODE != "off":
+            if not user["admin"] and (saveguard.MODE != "off" or ledger.MODE == "on"):
                 since = int(row.updated or 0) if old is not None else 0
                 if old is None:
                     # первое сохранение (или первое после вайпа) раньше не проверялось вовсе: сравниваем с пустым,
@@ -344,7 +379,8 @@ async def api_save(request):
                         granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
                     except (ValueError, TypeError, AttributeError):
                         pass
-                # учёт ресурсов по подтверждённым событиям (ledger.py): пока режим shadow — только наблюдение
+                # учёт ресурсов по подтверждённым событиям (ledger.py): shadow — только наблюдение,
+                # on — лишние лом и ядра срезаются, скачок материалов не принимается
                 if old is not None:
                     lg = dict(granted)
                     bought = saveguard._purchases.get(user["id"])
@@ -354,6 +390,11 @@ async def api_save(request):
                     lnotes = ledger.check(user["id"], user["username"] or user["name"], base.get("S"), s_, lg)
                     if lnotes:
                         log.info("Учёт ресурсов uid=%s (%s): %s", user["id"], ledger.MODE, "; ".join(f"{k} +{g} при приходе {a}" for k, g, a in lnotes))
+                        bad = ledger.enforce(base.get("S"), s_, lnotes, fix)
+                        if bad:
+                            names = {"chip": "микросхемы", "wire": "провода", "plate": "бронепластины"}
+                            return web.json_response({"ok": False, "error": "save rejected", "what": sorted(names[k] for k in bad)},
+                                                     status=409)
                 data, notes = saveguard.check(user["id"], user["username"] or user["name"], base, data, dt, granted, fix_out=fix)
                 if notes:
                     log.warning("Сохранение uid=%s (%s): %s", user["id"], saveguard.MODE, "; ".join(f"{a}: {b}" for a, b in notes)[:500])
@@ -2626,6 +2667,9 @@ async def start_web(port: int):
     app.router.add_post("/api/faction", api_faction)
     app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)
+    # закрепления ролей — ДО приёма запросов: раньше сервер сначала открывал порт, и в это окно ник админа
+    # мог закрепиться за чужим id (пустой словарь закреплений = «первый вошедший получает роль»)
+    await load_role_pins()
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
@@ -2635,7 +2679,6 @@ async def start_web(port: int):
     STATE["tasks"]["season"] = asyncio.create_task(seasonpts.flush_loop())
     STATE["tasks"]["lag"] = asyncio.create_task(metrics.loop_lag_monitor())
     await load_mutes()
-    await load_role_pins()
     await clean_guilds()
     await gram.migrate_market_to_gram()
     await items.migrate_gear_v2()                          # сначала номера поколений, потом самые старые вещи

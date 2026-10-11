@@ -12,12 +12,13 @@ ROOT = Path(__file__).resolve().parent
 WEB = (ROOT / "webserver.py").read_text(encoding="utf-8")
 
 
-def roles(admin_names=("boss",), admin_ids=()):
+def roles(admin_names=("boss",), admin_ids=(), ready=True):
     ns = {"time": time, "asyncio": asyncio, "log": logging.getLogger("t"), "json": __import__("json"),
           "ADMIN_USERNAMES": set(admin_names), "ADMIN_IDS": set(admin_ids)}
     a = WEB.index('ROLE_PINS_KEY = "role_pins"'); b = WEB.index("async def load_role_pins")
     c = WEB.index("def admin_ids():"); d = WEB.index("def _parse_init")
     exec(WEB[a:b] + WEB[c:d], ns)
+    ns["_pins_ready"]["ok"] = ready                 # в игре это делает load_role_pins
     saved = []
 
     async def save():
@@ -34,6 +35,20 @@ class RolePins(unittest.TestCase):
         self.assertTrue(ok("boss", 111, {"boss"}, set()))
         self.assertFalse(ok("boss", 999, {"boss"}, set()))         # тот же username у другого человека — нет прав
         self.assertEqual(ns["admin_ids"](), {111})
+
+    def test_no_pin_before_pins_loaded(self):
+        # пока закрепления не прочитаны из базы, ник админа не закрепляется за первым вошедшим
+        ns = roles(ready=False)
+        self.assertFalse(ns["role_ok"]("boss", 999, {"boss"}, set()))
+        self.assertEqual(ns["_role_pins"], {})
+        self.assertTrue(ns["role_ok"]("boss", 555, {"boss"}, {555}))   # роль по id работает всегда
+
+    def test_pins_loaded_before_port_opens(self):
+        fn = WEB[WEB.index("async def start_web"):WEB.index("async def stop_web")]
+        self.assertLess(fn.index("await load_role_pins()"), fn.index("TCPSite("))
+        self.assertEqual(fn.count("load_role_pins()"), 1)
+        load = WEB[WEB.index("async def load_role_pins"):WEB.index("async def save_role_pins")]
+        self.assertIn('_pins_ready["ok"] = True', load)
 
     def test_admin_ids_always_win(self):
         ns = roles(admin_ids=(555,))
