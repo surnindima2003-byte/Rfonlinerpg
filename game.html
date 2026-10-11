@@ -2582,11 +2582,41 @@ function autoPick(radius){
 }
 function autoDrop(e, sec){ if(e) autoS.bad.set(e, performance.now()/1000 + sec); if(tgt && tgt.kind === "enemy" && tgt.e === e) clearTarget(); autoS.tgt = null; autoS.stuckT = 0; autoS.losT = 0; }
 $("talkBtn").addEventListener("click", () => { if(nearNpc) UI[nearNpc.kind](); });
+// ---- порталы открываются касанием ----
+// Раньше выбор локации открывался кнопкой «Открыть портал» / «Вернуться в ангар» вверху экрана. Теперь окно
+// портала открывается, как только робот наезжает на кольцо портала. Чтобы окно не выскакивало сразу после
+// появления (робот появляется у портала) и снова после закрытия, портал «взводится», только когда робот отъехал
+// от него дальше PORTAL_ARM. В бою (атака, АВТО, PvP) окно само не открывается — не мешает драться у портала.
+const PORTAL_KINDS = ["portal", "back"], PORTAL_TOUCH = 60, PORTAL_ARM = 95;
+const PORTAL = {loc:null, armed:false};
+function nearestPortal(){
+  let best = null, dmin = Infinity;
+  for(const n of npcs) if(PORTAL_KINDS.includes(n.kind)){ const d = Math.hypot(n.x - p.x, n.y - p.y); if(d < dmin){ dmin = d; best = n; } }
+  return best ? {n:best, d:dmin} : null;
+}
+function openPortalNpc(n){ if(n.kind === "portal") UI.portal(); else openBackPortal(); }
+function portalTouch(){
+  if(PORTAL.loc !== locKey){ PORTAL.loc = locKey; PORTAL.armed = false; }       // новая локация — ждём, пока отъедет
+  const np = p && !p.dead ? nearestPortal() : null;
+  if(!np || np.d > PORTAL_ARM){ PORTAL.armed = true; return; }
+  if(np.d > PORTAL_TOUCH || !PORTAL.armed) return;
+  if($("sheet").classList.contains("open") || firing || auto || S.pvpT > now) return;
+  PORTAL.armed = false;
+  openPortalNpc(np.n);
+}
+// окно портала выхода: переход в ангар по кнопке (касание не переносит сразу — можно было бы вылететь из боя)
+function openBackPortal(){
+  const tower = locKey === "tower", named = LOCS[locKey] && LOCS[locKey].named;
+  openSheet(named ? "Город" : NPC_INFO.back.name, tower ? "Выход из башни" : "Переход в Центральный ангар", () => {
+    $("shBody").innerHTML = (tower ? `<p class="hint">Выход засчитается как сдача: забег в башне закончится.</p>` : "") +
+      `<button class="btn pri wide" type="button" data-go="lobby">${tower ? "Выйти из башни" : "Вернуться в ангар"}</button>`;
+  });
+}
 window.addEventListener("keydown", e => {
   if(paused || !running) return; keys[e.code] = true;
   if(e.code === "Space"){ firing = true; e.preventDefault(); }
   if(e.code === "ShiftLeft") dash();
-  if(e.code === "KeyE"){ if(nearNpc) UI[nearNpc.kind](); }
+  if(e.code === "KeyE"){ const np = nearestPortal(); if(nearNpc) UI[nearNpc.kind](); else if(np && np.d < PORTAL_ARM) openPortalNpc(np.n); }
   if(e.code === "KeyR") useKit();
   if(e.code === "KeyQ") $("skAuto").click();
 });
@@ -2706,9 +2736,10 @@ function update(dt){
   if(S.cp === undefined || S.cp > st.maxcp) S.cp = st.maxcp;
   if(!(S.pvpT > now)) S.cp = Math.min(st.maxcp, S.cp + st.maxcp*0.05*dt);   // CP восстанавливаются вне PvP
 
-  // ближайший NPC для кнопки «Поговорить»
+  // ближайший NPC для кнопки «Поговорить» (порталы открываются касанием — для них кнопки нет)
   nearNpc = null;
-  for(const n of npcs) if(Math.hypot(n.x-p.x, n.y-p.y) < 95){ nearNpc = n; break; }
+  for(const n of npcs) if(!PORTAL_KINDS.includes(n.kind) && Math.hypot(n.x-p.x, n.y-p.y) < 95){ nearNpc = n; break; }
+  portalTouch();
   const tb = $("talkBtn");
   if(nearNpc){ tb.hidden = false; tb.textContent = NPC_INFO[nearNpc.kind].talk; } else tb.hidden = true;
 
@@ -10474,8 +10505,8 @@ let tutSkillUses = 0;
 // условия, без которых шаг не выполнить: игрок получает подсказку, куда идти
 const TUT_NEED = {
   game: () => tutScr("scrGame") ? null : {text:"Вернись во вкладку «Игра», там продолжим", focus:"#navGame"},
-  lobby: () => locKey === "lobby" ? null : {text:"Этот шаг — в ангаре. Вернись через портал, у которого ты появился", world:() => tutNpc("back"), focus:() => tutNear("back") ? "#talkBtn" : null},
-  field: () => locKey !== "lobby" ? null : {text:"Пора в бой! Подъедь к Порталу и выбери «Ржавые поля»", world:() => tutNpc("portal"), focus:() => tutNear("portal") ? "#talkBtn" : null, sheetFocus:'[data-go="scrapfields"]'},
+  lobby: () => locKey === "lobby" ? null : {text:"Этот шаг — в ангаре. Вернись через портал, у которого ты появился", world:() => tutNpc("back"), focus:null, sheetFocus:'[data-go="lobby"]'},
+  field: () => locKey !== "lobby" ? null : {text:"Пора в бой! Подъедь к Порталу и выбери «Ржавые поля»", world:() => tutNpc("portal"), focus:null, sheetFocus:'[data-go="scrapfields"]'},
   char: () => tutScr("scrChar") ? null : {text:"Открой вкладку «Персонаж» внизу экрана", focus:"#navChar"}
 };
 const tutNearestEnemy = () => { let b = null, bd = 1e9; for(const e of enemies){ if(e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if(d < bd){ bd = d; b = e; } } return b ? {x:b.x, y:b.y} : null; };
@@ -10499,7 +10530,7 @@ const TUT = [
   // ---- глава 2: первый бой ----
   {id:"portal", ch:1, kind:"act", need:["game"], reward:{scrap:20}, sheetFocus:'[data-go="scrapfields"]',
     text:"Пора в бой! Подъедь к Порталу и выбери «Ржавые поля» — там враги как раз для новичка.",
-    world:() => tutNpc("portal"), focus:() => tutNear("portal") ? "#talkBtn" : null, done:() => locKey !== "lobby"},
+    world:() => tutNpc("portal"), focus:null, done:() => locKey !== "lobby"},
   {id:"target", ch:1, kind:"act", need:["game", "field"], focus:"#skFire", reward:{scrap:10},
     text:"Видишь врагов? Нажми на врага, чтобы взять его в цель. Или просто жми кнопку атаки — ближайший враг выберется сам.",
     world:tutNearestEnemy, done:() => !!lockedEnemy()},
@@ -10517,9 +10548,9 @@ const TUT = [
     start:() => ({n:tutEv.kit}), done:s => tutEv.kit > s.n},
   {id:"danger", ch:1, kind:"info", need:["game"], btn:"Понятно",
     text:"Не лезь к толпе врагов сильнее тебя: если робота уничтожат, он вернётся в ангар, а ремонт обойдётся в лом. Новые локации открываются с ростом уровня."},
-  {id:"back", ch:1, kind:"act", need:["game"], reward:{scrap:30},
-    text:"Отличный бой! Вернись в ангар через портал, у которого ты появился.",
-    world:() => tutNpc("back"), focus:() => tutNear("back") ? "#talkBtn" : null, done:() => locKey === "lobby"},
+  {id:"back", ch:1, kind:"act", need:["game"], reward:{scrap:30}, sheetFocus:'[data-go="lobby"]',
+    text:"Отличный бой! Вернись в ангар: подъедь к порталу, у которого ты появился.",
+    world:() => tutNpc("back"), focus:null, done:() => locKey === "lobby"},
   // ---- глава 3: развитие ----
   {id:"char", ch:2, kind:"act", focus:"#navChar", reward:{scrap:50},
     text:"Открой вкладку «Персонаж» внизу экрана.", done:() => tutScr("scrChar")},
@@ -13472,6 +13503,18 @@ function buildTrRe(){
     let list = trIdx.get(first); if(!list) trIdx.set(first, list = []);
     list.push(e);
   });
+// порталы открываются касанием; вкладка, вытесненная другим окном; сервер обновился
+Object.assign(I18N, {"Город": ["City", "Місто", "Ciudad", "Şehir", "Cidade"],
+  "Переход в Центральный ангар": ["Travel to the Central Hangar", "Перехід до Центрального ангара", "Viaje al Hangar Central", "Merkez Hangar'a geçiş", "Ir ao Hangar Central"],
+  "Выход из башни": ["Leave the tower", "Вихід із вежі", "Salir de la torre", "Kuleden çıkış", "Sair da torre"],
+  "Выйти из башни": ["Leave the tower", "Вийти з вежі", "Salir de la torre", "Kuleden çık", "Sair da torre"],
+  "Выход засчитается как сдача: забег в башне закончится.": ["Leaving counts as giving up: your tower run will end.", "Вихід зарахується як здача: забіг у вежі завершиться.", "Salir cuenta como rendirse: tu recorrido en la torre terminará.", "Çıkış teslim olma sayılır: kule koşun sona erer.", "Sair conta como desistência: sua corrida na torre terminará."],
+  "Игра открыта в другом окне": ["The game is open in another window", "Гра відкрита в іншому вікні", "El juego está abierto en otra ventana", "Oyun başka bir pencerede açık", "O jogo está aberto em outra janela"],
+  "Здесь связь с миром отключена": ["The world connection is off here", "Тут зв'язок зі світом вимкнено", "Aquí la conexión con el mundo está desactivada", "Burada dünya bağlantısı kapalı", "Aqui a conexão com o mundo está desligada"],
+  "Играть здесь": ["Play here", "Грати тут", "Jugar aquí", "Burada oyna", "Jogar aqui"],
+  "Сервер обновился": ["The server was updated", "Сервер оновився", "El servidor se actualizó", "Sunucu güncellendi", "O servidor foi atualizado"],
+  "Прогресс игроков сброшен": ["Player progress was reset", "Прогрес гравців скинуто", "El progreso de los jugadores se reinició", "Oyuncu ilerlemesi sıfırlandı", "O progresso dos jogadores foi redefinido"],
+  "Перезапустить сейчас": ["Restart now", "Перезапустити зараз", "Reiniciar ahora", "Şimdi yeniden başlat", "Reiniciar agora"]});
 }
 // первая (самая длинная) фраза из списка, которая стоит в s с позиции p целым словом и длиннее найденной best
 function trFirst(list, s, p, afterWord, best){

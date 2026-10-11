@@ -186,5 +186,59 @@ class CompactHud(unittest.TestCase):
         self.assertIn("const size = vw <= 400 ? 72 : 92", GAME)
 
 
+class PortalTouch(unittest.TestCase):
+    """Портал открывается касанием (без кнопки сверху), но не сразу после появления, не повторно и не в бою."""
+    def test_touch_logic(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("нет node")
+        a = GAME.index("const PORTAL_KINDS = ")
+        block = GAME[a:GAME.index("// окно портала выхода", a)]
+        js = "\n".join([
+            "let opened = [], sheetOpen = false, firing = false, auto = false, now = 10, locKey = 'scrapfields';",
+            "const S = {pvpT: 0}, npcs = [{kind:'back', x:1000, y:1060}];",
+            "let p = {x:1000, y:1000, dead:false};",
+            "const $ = id => ({classList:{contains: () => sheetOpen}});",
+            "const UI = {portal: () => opened.push('portal')}; function openBackPortal(){ opened.push('back'); }",
+            block,
+            "const at = (x, y) => { p.x = x; p.y = y; portalTouch(); return opened.length; };",
+            "const r = {};",
+            "r.spawn = at(1000, 1000);                 // появился у портала (60 px) — не открываем",
+            "r.stillThere = at(1000, 1040);",
+            "r.away = at(1000, 800);",
+            "r.touch = at(1000, 1050);                 // отъехал и наехал — открываем",
+            "r.standing = at(1000, 1055);              // стоит на портале после закрытия — не повторяем",
+            "at(1000, 800); firing = true; r.fight = at(1000, 1050); firing = false;",
+            "at(1000, 800); S.pvpT = 99; r.pvp = at(1000, 1050); S.pvpT = 0;",
+            "at(1000, 800); sheetOpen = true; r.sheet = at(1000, 1050); sheetOpen = false;",
+            "at(1000, 800); r.again = at(1000, 1050);",
+            "locKey = 'lobby'; npcs[0] = {kind:'portal', x:0, y:0}; r.newLoc = at(10, 10);",
+            "at(0, 300); r.lobby = at(0, 20);",
+            "console.log(JSON.stringify({r, opened}));",
+        ])
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        d = json.loads(out.stdout)
+        r = d["r"]
+        self.assertEqual((r["spawn"], r["stillThere"], r["away"]), (0, 0, 0))
+        self.assertEqual(r["touch"], 1)
+        self.assertEqual(r["standing"], 1)
+        self.assertEqual((r["fight"], r["pvp"], r["sheet"]), (1, 1, 1))     # в бою и поверх окна — не открываем
+        self.assertEqual(r["again"], 2)
+        self.assertEqual(r["newLoc"], 2)                                    # новая локация: сначала отъехать
+        self.assertEqual(r["lobby"], 3)
+        self.assertEqual(d["opened"], ["back", "back", "portal"])
+
+    def test_no_top_button_for_portals(self):
+        a = GAME.index("// ближайший NPC для кнопки «Поговорить»")
+        part = GAME[a:GAME.index("classUpdate(dt);", a)]
+        self.assertIn("!PORTAL_KINDS.includes(n.kind)", part)
+        self.assertIn("portalTouch();", part)
+        self.assertNotIn('tutNear("portal") ? "#talkBtn"', GAME)
+        self.assertNotIn('tutNear("back") ? "#talkBtn"', GAME)
+        back = GAME[GAME.index("function openBackPortal()"):GAME.index("function openBackPortal()") + 800]
+        self.assertIn('data-go="lobby"', back)                             # выход — по кнопке в окне, а не сразу
+
+
 if __name__ == "__main__":
     unittest.main()
