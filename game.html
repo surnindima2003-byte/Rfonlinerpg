@@ -4994,6 +4994,14 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
 
   // ---- живой мир ----
   let retry = 1000;
+  // Задержка переподключения со случайным разбросом. Раньше все телефоны ждали одинаково (1, 2, 4… с) и после
+  // деплоя заходили на сервер одной волной в одну и ту же секунду. Перезапуск сервера (код 1012) — разброс
+  // пошире: первые попытки распределяются по ~2–12 с, пока новый сервер поднимается.
+  function reconnectDelay(code){
+    const base = code === 1012 ? Math.max(retry, 2000) + 10000 * Math.random() : retry * (0.5 + Math.random());
+    retry = Math.min(retry * 2, 15000);
+    return Math.round(base);
+  }
   function connect(){
     const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
     NET.ws = ws;
@@ -5044,6 +5052,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         if(typeof GDB !== "undefined" && GDB && GDB.refresh) GDB.refresh();
       } else if(d.t === "grant" && d.grant){ applyGrant(d.grant); }
       else if(d.t === "pong"){ dbgPong(d); }
+      else if(d.t === "reconnect"){ if(d.text) toast(String(d.text).slice(0, 80)); }   // сервер обновляется — сейчас переподключимся
       else if(typeof onNetExtra === "function") onNetExtra(d);
     };
     ws.onclose = ev => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames();
@@ -5053,7 +5062,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         if(String(ev.reason || "").includes("too many")){ replacedByOther(); return; }   // игра открыта в другом окне
         sessionExpired(); return;                                                      // подпись Telegram устарела
       }
-      setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
+      setTimeout(connect, reconnectDelay(ev && ev.code)); };
   }
 
   // своё положение — 8 раз в секунду, пока что-то меняется
