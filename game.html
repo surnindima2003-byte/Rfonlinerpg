@@ -4840,6 +4840,27 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
       const b = $("expClose"); if(b) b.onclick = () => { try{ Telegram.WebApp.close(); }catch(_){ } };
     });
   }
+  // эту вкладку вытеснило другое окно с игрой (у игрока их открыто слишком много): мир здесь остановлен
+  let replacedShown = false;
+  function replacedByOther(){
+    if(replacedShown || expiredShown) return; replacedShown = true;
+    if(typeof save === "function") try{ save(); }catch(_){}
+    openSheet("Игра открыта в другом окне", "Здесь связь с миром отключена", () => {
+      $("shBody").innerHTML = `<div class="empty">Игра запущена ещё в одном окне или на другом устройстве, и сервер передал связь ему. Прогресс сохранён. Можно продолжить здесь — тогда отключится другое окно.</div><button class="btn wide" type="button" id="repHere">Играть здесь</button>`;
+      const b = $("repHere"); if(b) b.onclick = () => { sessionStorage.removeItem("mw-synced"); location.reload(); };
+    });
+  }
+  // сервер обнулил прогресс (вайп), а эта вкладка открыта со старой эпохой: раньше она молча повторяла
+  // сохранение каждые 10 с и всё время теряла прогресс. Теперь перезапускаемся — загрузка увидит новую эпоху.
+  let staleShown = false;
+  function staleEpoch(){
+    if(staleShown) return; staleShown = true; serverEpoch = null;      // больше ничего не отправляем
+    openSheet("Сервер обновился", "Прогресс игроков сброшен", () => {
+      $("shBody").innerHTML = `<div class="empty">На сервере начался новый этап игры, и прогресс всех игроков обнулён. Игра перезапустится через несколько секунд.</div><button class="btn wide" type="button" id="staleGo">Перезапустить сейчас</button>`;
+      const b = $("staleGo"); if(b) b.onclick = () => location.reload();
+    });
+    setTimeout(() => location.reload(), 5000);
+  }
   const api = NET.api = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData, ...(body || {})})})
     .then(r => r.ok ? r.json() : r.text().then(t => { if(r.status === 401 && t.includes("session expired")) sessionExpired(); return {ok:false, error:t}; }));
 
@@ -4871,6 +4892,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         }
         if(cut.length){ save(); lastPushed = ""; if(Date.now() - fixToastT > 60000){ fixToastT = Date.now(); toast("Сервер не засчитал лишнее: " + cut.join(", ")); } }
       }
+      if(r && !r.ok && String(r.error || "").includes("stale epoch")){ staleEpoch(); return; }
       if(r && !r.ok && String(r.error || "").includes("save rejected")){
         // не молча: игрок должен понимать, почему прогресс не уходит на сервер (он хранится на телефоне)
         let what = []; try{ what = JSON.parse(r.error).what || []; }catch(_){}
@@ -5018,7 +5040,12 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
       else if(typeof onNetExtra === "function") onNetExtra(d);
     };
     ws.onclose = ev => { NET.ws = null; NET.others.clear(); NET.party = null; if(typeof renderPartyFrames === "function") renderPartyFrames();
-      if(ev && ev.code === 4003){ sessionExpired(); return; }       // подпись Telegram устарела — переподключение не поможет
+      // код 4003 сервер шлёт в двух случаях — различаем по причине: раньше вкладка, которую вытеснила новая,
+      // показывала «Сессия устарела», хотя вход был в порядке
+      if(ev && ev.code === 4003){
+        if(String(ev.reason || "").includes("too many")){ replacedByOther(); return; }   // игра открыта в другом окне
+        sessionExpired(); return;                                                      // подпись Telegram устарела
+      }
       setTimeout(connect, retry); retry = Math.min(retry*2, 15000); };
   }
 
@@ -10296,7 +10323,10 @@ function regClampSph(){
     if(extra > 0){ REG.sph[id] -= extra; regApi("gone", {sph:{[id]:extra}}); }
   }
 }
-function regUseSph(id, n){ if(!REG.on) return; const use = Math.min(REG.sph[id] || 0, n); if(use > 0){ REG.sph[id] -= use; regApi("gone", {sph:{[id]:use}}); } }
+// Ушло n штук (продажа торговцу и т.п.). Вызывать ДО удаления из сумки. Сначала тратятся неучтённые (купленные за лом,
+// выбитые до реестра): раньше первыми списывались учтённые — те, что можно продать на маркете за GRAM.
+function regUseSph(id, n){ if(!REG.on) return; const reg = REG.sph[id] || 0, free = Math.max(0, count(S.inv, id) + count(S.store, id) - reg);
+  const use = Math.min(reg, Math.max(0, n - free)); if(use > 0){ REG.sph[id] -= use; regApi("gone", {sph:{[id]:use}}); } }
 function regGone(uids){ uids = uids.filter(Boolean); if(!REG.on || !uids.length) return; uids.forEach(u => REG.uids.delete(u)); regApi("gone", {uids}); }
 // сколько штук этого предмета можно продать за GRAM
 function regTradable(x){

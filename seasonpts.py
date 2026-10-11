@@ -297,7 +297,17 @@ async def _nicks(s, ids):
     if not ids:
         return {}
     rows = (await s.execute(select(GameSave.tg_id, GameSave.nick, GameSave.name).where(GameSave.tg_id.in_(ids)))).all()
-    return {a: (b or c or "Пилот") for a, b, c in rows}
+    return {a: _public(b, c) for a, b, c in rows}
+
+
+def _public(nick, tg_name=""):
+    """Имя для призового рейтинга — как везде в игре (webserver.public_name). Раньше без позывного здесь
+    показывалось имя из Telegram как есть: в рейтинге с призами мог стоять «Администратор»."""
+    try:
+        from webserver import public_name
+    except Exception:                                  # тесты без aiohttp: только проверенный позывной
+        return str(nick)[:16] if nick else "Пилот"
+    return public_name(nick, tg_name)
 
 
 async def top(s, key, limit=TOP_N):
@@ -381,7 +391,7 @@ def setup_rating(app, read_auth, push_to_player):
                                     .order_by(SeasonPrize.season.desc(), SeasonPrize.place).limit(9))).scalars().all()
         history = {}
         for h in hist:
-            history.setdefault(h.season, []).append({"place": h.place, "nick": h.nick, "pts": h.pts, "usdt": h.usdt})
+            history.setdefault(h.season, []).append({"place": h.place, "nick": _public("", h.nick), "pts": h.pts, "usdt": h.usdt})
         from config import GRAM_USD
         return web.json_response({"ok": True, "season": key, "top": rows, "me": mine, "rate": GRAM_USD,
                                   "history": [{"season": k, "top": v} for k, v in history.items()],
