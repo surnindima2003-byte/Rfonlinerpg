@@ -72,7 +72,7 @@ class Events(unittest.TestCase):
                 self.assertNotIn("when", e, eid)                              # без выдуманного расписания
             elif not e.get("play"):
                 self.assertIn(f'd.ev === "{eid}"', dispatch, eid)            # у настоящего события — своё окно
-        self.assertEqual({k for k, e in ev.items() if not e.get("soon")}, {"fear", "tower", "boss", "chipwar", "elite"})
+        self.assertEqual({k for k, e in ev.items() if not e.get("soon")}, {"fear", "tower", "boss", "chipwar", "elite", "coop"})
 
     def test_schedules_match_server(self):
         ev = self.events()

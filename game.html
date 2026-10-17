@@ -1299,6 +1299,40 @@ body.el-run .tframe{top:calc(var(--hb, 120px) + 24px)}
 .fear-wave{position:absolute;left:calc(50% - 27px);top:calc(var(--hb, 120px) + 2px);transform:translateX(-50%);max-width:calc(100% - 150px);overflow:hidden;text-overflow:ellipsis;z-index:4;pointer-events:none;background:linear-gradient(180deg,#231A30,#15101D);border:1.5px solid #8E5BFF;border-radius:11px;padding:5px 16px;font:700 15px Rubik,sans-serif;color:#F3EEFF;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 12px rgba(142,91,255,.28)}
 .fear-wave.won{border-color:#F2C14B;color:#FFE08A;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(242,193,75,.35)}
 body.fear-run .tframe{top:calc(var(--hb, 120px) + 24px)}
+/* ---- «Сотрудничество»: окно события (зелёный, как в эталоне), плашки в зале, итоги забега ---- */
+.fr.cp .fr-tries{background:linear-gradient(180deg,rgba(91,211,138,.1),rgba(16,22,29,.96));border-color:rgba(91,211,138,.45)}
+.fr.cp .fr-steps li::before{color:#8FF0B4;background:rgba(91,211,138,.14);border-color:rgba(91,211,138,.55)}
+.fr.cp .el-sec em{color:#5BD38A}
+.fr.cp .el-g{border-color:rgba(91,211,138,.42)}.fr.cp .el-gt b{color:#B8F5CF}.fr.cp .el-gn{color:#5BD38A}
+.fr.cp .el-none{color:#5FB9D8}
+.fr-go.cp-go{border-color:#2E8A55;background:linear-gradient(180deg,#1C4A30,#10291B);color:#9CF5C0}
+.cp-stages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 16px}
+.cp-st{display:flex;align-items:center;gap:9px;background:#10161D;border:1px solid #2A3440;border-radius:11px;padding:7px 10px;color:#E4DED1;min-width:0}
+.cp-st i{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 12px Rubik,sans-serif;font-style:normal;color:#8FF0B4;background:rgba(91,211,138,.14);border:1px solid rgba(91,211,138,.5)}
+.cp-st div{min-width:0}.cp-st b{display:block;font-size:13.5px}.cp-st small{display:block;font-size:11.5px;color:#93A0AC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-st.boss{grid-column:1/-1;border-color:rgba(224,70,58,.5);background:linear-gradient(90deg,rgba(224,70,58,.14),#10161D 70%)}
+.cp-st.boss i{color:#FF8A6B;background:rgba(224,70,58,.16);border-color:rgba(224,70,58,.55)}.cp-st.boss b{color:#FFB09A}
+.cp-prize .el-drop b{font-size:12.5px}
+.fear-wave.cp-pill[hidden]{display:none}
+.fear-wave.cp-pill{display:flex;flex-direction:column;align-items:center;line-height:1.2;padding:4px 14px 5px;border-color:#2E9A5E;color:#E8FFF0;background:linear-gradient(180deg,#12261B,#0B1711);box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 12px rgba(91,211,138,.28)}
+.cp-pill b{font:700 14px Rubik,sans-serif}.cp-pill i{font-style:normal;font-weight:700;color:#8FF0B4}.cp-pill small{font:600 11px Rubik,sans-serif;color:#9FB8AA}
+.fear-wave.cp-pill.boss{border-color:#E0463A;background:linear-gradient(180deg,#2A1412,#170B0A);box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(224,70,58,.4)}
+.fear-wave.cp-pill.won{border-color:#F2C14B;color:#FFE08A;background:linear-gradient(180deg,#2A2110,#17120A);box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(242,193,75,.35)}
+.fear-cd.cp-cd span{color:#7EE6A6}
+.cp-wait{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:5;pointer-events:none;text-align:center;background:rgba(10,18,14,.88);border:1.5px solid #2E9A5E;border-radius:14px;padding:12px 22px;box-shadow:0 4px 18px rgba(0,0,0,.55),0 0 18px rgba(91,211,138,.25);max-width:calc(100% - 40px)}
+.cp-wait[hidden]{display:none}
+.cp-wait b{display:block;font:18px 'Russo One',sans-serif;color:#9CF5C0;animation:cpw 1.4s ease-in-out infinite;white-space:nowrap}
+.cp-wait small{display:block;margin-top:4px;font-size:13px;color:#C9D1D8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes cpw{50%{opacity:.55}}
+.wb-bar.cp-bar{top:calc(var(--hb, 120px) + 58px)}.wb-bar.cp-bar b{color:#FFB09A}
+body.cp-run.cp-boss .tframe{top:calc(var(--hb, 120px) + 104px)}
+body.cp-run .tframe{top:calc(var(--hb, 120px) + 40px)}
+.cp-res .cp-res-st{color:#C9D1D8;font-size:14px}.cp-res .cp-res-st b{font:inherit;font-weight:700;color:var(--text)}
+.cp-res-pz{width:100%;box-sizing:border-box;background:#10161D;border:1px solid rgba(91,211,138,.45);border-radius:14px;padding:10px 12px 4px;text-align:left;color:#E4DED1}
+.cp-res-pz small{display:block;font:700 11px Rubik,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#93A0AC}
+.cp-res-pz > b{display:inline-block;font:18px 'Russo One',sans-serif;color:#FFE08A;margin:3px 0 4px}
+.cp-res-pz em{font-style:normal;margin-left:8px;color:#8FE07A;font-weight:700;font-size:13px}
+.cp-res .el-drop{font-size:13.5px}
 @media (prefers-reduced-motion: reduce){.fear-cd.tick b{animation:none}}
 .cx-bonus{background:rgba(155,123,255,.12);border:1px solid rgba(155,123,255,.4);border-radius:12px;padding:10px;margin-bottom:10px}
 .cx-bonus b{display:block;color:#C8B6FF;font-size:13px}.cx-bonus span{font-size:12px;color:var(--ok)}
@@ -5209,10 +5243,16 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     const gid = g && g.id != null ? String(g.id) : "";
     if(!Array.isArray(S.grantsDone)) S.grantsDone = [];
     if(gid && S.grantsDone.includes(gid)){ api("/api/grants/ack", {ids:[g.id]}); return; }
+    // награда «Сотрудничества» не помещается (сумка и склад полны): не подтверждаем — сервер пришлёт её снова при входе
+    if(g.by === "coop" && g.kind === "item" && ITEMS[g.payload.item]){
+      const id = g.payload.item, fits = l => l.some(x => x.id === id) || l.length < (l === S.store ? STORE_MAX : INV_MAX);
+      if(ITEMS[id].type === "gear" ? !(S.inv.length < INV_MAX || S.store.length < STORE_MAX) : !(fits(S.inv) || fits(S.store))){
+        toast("Сотрудничество: " + ITEMS[id].name + " не поместилась — освободи место в сумке или на складе, награда придёт при следующем входе"); return; }
+    }
     if(gid){ S.grantsDone.push(gid); if(S.grantsDone.length > 300) S.grantsDone.splice(0, S.grantsDone.length - 300); }
     const a = +g.payload.amount || 0;
     if(g.by === "market" && g.kind === "scrap"){ S.scrap += a; toast("Маркет: лот продан, получено " + a + " лома"); if(typeof mkRefresh === "function") mkRefresh(); }
-    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : String(g.by || "").startsWith("special:") ? "Задание выполнено: +" : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
+    else if(g.kind === "scrap" || g.kind === "cores"){ S[g.kind] += a; toast((g.by === "chipwar" ? "Chip War: получено " : g.by === "coop" ? "Сотрудничество: награда за босса +" : String(g.by || "").startsWith("special:") ? "Задание выполнено: +" : "Администратор выдал ") + a + " " + GRANT_NAME[g.kind]); }
     else if(g.kind === "exp"){ S.exp += a; levelUps(); toast("Администратор выдал " + a + " опыта"); }
     else if(g.kind === "level"){ for(let i = 0; i < a; i++){ S.level++; S.max_hp += 10; S.attack += 2; S.defense += 1; } S.hp = stat().maxhp; toast("Администратор поднял уровень до " + S.level); }
     else if(g.kind === "item" && ITEMS[g.payload.item]){
@@ -5224,7 +5264,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
       if(got && ARTS[id] && !artOn()) S.art = id;
       if(got && typeof WINGS !== "undefined" && WINGS[id] && !wingOn()) S.wing = id;
       if(got && typeof CLOAKS !== "undefined" && CLOAKS[id] && !cloakOn()) S.cloak = id;
-      toast("Администратор выдал: " + it.name + (it.type === "gear" ? " (" + GRADES[g.payload.grade].name.toLowerCase() + ")" : "") + (got > 1 ? " ×" + got : "") + (got < a ? ". Не хватило места" : ""));
+      toast((g.by === "coop" ? "Сотрудничество: награда за босса — " : "Администратор выдал: ") + it.name + (it.type === "gear" ? " (" + GRADES[g.payload.grade].name.toLowerCase() + ")" : "") + (got > 1 ? " ×" + got : "") + (got < a ? ". Не хватило места" : ""));
     }
     Sfx.play("level"); save(); push(true);
     api("/api/grants/ack", {ids:[g.id]});
@@ -9053,7 +9093,7 @@ const EVENTS = [
   {id:"chipwar", name:"Chip War", color:"#6E96F0", desc:"Битва фракций за чип в Железном каньоне", mechs:["sniper", "reaper"]},
   {id:"battle", soon:true, name:"Битва", color:"#E0694A", desc:"Схватка на выживание без союзников", mechs:["reaper", "guard"], rules:"Все против всех на закрывающейся арене. Побеждает последний выживший пилот."},
   {id:"3x3", soon:true, name:"3×3", color:"#4EA8F5", desc:"Командный бой 3 на 3", mechs:["sniper", "techno"], rules:"Две команды по три пилота. Команда, уничтожившая соперников, получает очки рейтинга."},
-  {id:"coop", soon:true, name:"Сотрудничество", color:"#5FD4E8", desc:"Совместное прохождение вдвоём", mechs:["sniper", "guard"], rules:"Пройди подземелье вдвоём с напарником из пати: общий лут и бонус к опыту."},
+  {id:"coop", name:"Сотрудничество", color:"#5BD38A", desc:"Совместное прохождение вдвоём", when:"Доступно всегда", mechs:["sniper", "medic"]},   // окно — renderCoop
   {id:"elite", name:"Элитная фарм-зона", color:"#F2C14B", desc:"Группа из 3", when:"Доступно всегда", mechs:["reaper", "medic"]},   // окно — renderElite
   {id:"tourney", soon:true, name:"Турнир", color:"#7BC98A", desc:"Турнир на 32 участника на вылет", mechs:["sniper"], rules:"Сетка на вылет из 32 пилотов, бои один на один."}
 ];
@@ -9063,7 +9103,7 @@ function openEvents(){
     body().innerHTML = EVENTS.map(ev => `<button type="button" class="evcard${ev.soon ? " soon" : ""}" data-ev="${ev.id}" style="--c:${ev.color}">
       <div class="ev-art">${ev.mechs.map((m, i) => `<span style="left:${10 + i*38}px">${mechImg(m, i % 2 ? "core" : "vex", {weapon:3}, 46)}</span>`).join("")}</div>
       <div class="ev-tx"><b>${ev.name}</b><small>${ev.desc}</small><em>${evWhen(ev)}</em></div><span class="chev">›</span>
-      ${ev.play ? fearPill() : ev.id === "elite" ? elitePill() : ""}</button>`).join("");
+      ${ev.play ? fearPill() : ev.id === "elite" ? elitePill() : ev.id === "coop" ? coopPill() : ""}</button>`).join("");
   });
 }
 function openEvent(id){
@@ -9687,6 +9727,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.ev === "tower" && typeof openTower === "function") openTower();
   else if(d.ev === "chipwar" && typeof openChipWar === "function") openChipWar();
   else if(d.ev === "elite" && typeof openElite === "function") openElite();
+  else if(d.ev === "coop" && typeof openCoop === "function") openCoop();
   else if(d.ev) openEvent(d.ev);
   else if(d.evback) openEvents();
   else if(d.evgo) fearEnter();
@@ -14875,6 +14916,9 @@ Object.assign(I18N, {"Логово Владыки": ["Overlord's Lair", "Ліг�
 // элитная фарм-зона: окно события, группы, зона, монстры, сообщения сервера
 Object.assign(I18N, {"Группа из {n}": ["Group of {n}", "Група з {n}", "Grupo de {n}", "{n} kişilik grup", "Grupo de {n}"], "Лимит на сегодня исчерпан": ["Today's limit is used up", "Ліміт на сьогодні вичерпано", "Límite de hoy agotado", "Bugünkü sınır doldu", "Limite de hoje esgotado"], "Лимит на сегодня": ["Daily limit reached", "Ліміт на сьогодні", "Límite diario", "Günlük sınır", "Limite diário"], "Ты в элитной зоне": ["You're in the elite zone", "Ти в елітній зоні", "Estás en la zona élite", "Elit bölgedesin", "Você está na zona de elite"], "Ты в зоне": ["You're in the zone", "Ти в зоні", "Estás en la zona", "Bölgedesin", "Você está na zona"], "Новые минуты — в 00:00 МСК": ["New minutes at 00:00 MSK", "Нові хвилини — о 00:00 МСК", "Nuevos minutos a las 00:00 MSK", "Yeni dakikalar 00:00 MSK'da", "Novos minutos às 00:00 MSK"], "Не все готовы: нужен {n} уровень и быть в сети": ["Not everyone is ready: level {n} and online are required", "Не всі готові: потрібен {n} рівень і бути в мережі", "No todos están listos: hace falta nivel {n} y estar en línea", "Herkes hazır değil: {n}. seviye ve çevrimiçi olmak gerekli", "Nem todos estão prontos: nível {n} e estar online"], "Группа в сборе — входите": ["The group is complete — go in", "Група в зборі — заходьте", "El grupo está completo: entrad", "Grup tamam — girin", "O grupo está completo — entrem"], "Группа в сборе — лидер заводит в зону": ["The group is complete — the leader takes it in", "Група в зборі — лідер заводить у зону", "El grupo está completo: el líder lo lleva a la zona", "Grup tamam — lider bölgeye götürür", "O grupo está completo — o líder leva à zona"], "Создать группу": ["Create a group", "Створити групу", "Crear grupo", "Grup kur", "Criar grupo"], "В группе {n} человек — нужно ровно {m}": ["The group has {n} people — exactly {m} needed", "У групі {n} осіб — потрібно рівно {m}", "El grupo tiene {n} personas: hacen falta {m} exactas", "Grupta {n} kişi var — tam {m} gerekli", "O grupo tem {n} pessoas — precisa de exatamente {m}"], "Ждём лидера · {n}/{m}": ["Waiting for the leader · {n}/{m}", "Чекаємо лідера · {n}/{m}", "Esperando al líder · {n}/{m}", "Lider bekleniyor · {n}/{m}", "Aguardando o líder · {n}/{m}"], "Ждём игроков · {n}/{m}": ["Waiting for players · {n}/{m}", "Чекаємо гравців · {n}/{m}", "Esperando jugadores · {n}/{m}", "Oyuncular bekleniyor · {n}/{m}", "Aguardando jogadores · {n}/{m}"], "Открыть набор в группу": ["Open the group to players", "Відкрити набір у групу", "Abrir el grupo a jugadores", "Gruba alım aç", "Abrir o grupo para jogadores"], "Моя группа": ["My group", "Моя група", "Mi grupo", "Grubum", "Meu grupo"], "набор открыт": ["open to join", "набір відкрито", "abierto", "alım açık", "aberto"], "нужен {n} уровень": ["needs level {n}", "потрібен {n} рівень", "necesita nivel {n}", "{n}. seviye gerekli", "precisa do nível {n}"], "нужен {n}": ["needs {n}", "потрібен {n}", "necesita {n}", "{n} gerekli", "precisa {n}"], "Свободное место": ["Free slot", "Вільне місце", "Plaza libre", "Boş yer", "Vaga livre"], "Покинуть группу": ["Leave the group", "Покинути групу", "Salir del grupo", "Gruptan ayrıl", "Sair do grupo"], "Открытые группы": ["Open groups", "Відкриті групи", "Grupos abiertos", "Açık gruplar", "Grupos abertos"], "Открытых групп пока нет": ["No open groups yet", "Відкритих груп поки немає", "Aún no hay grupos abiertos", "Henüz açık grup yok", "Ainda não há grupos abertos"], "Список групп появится, когда будет связь с сервером": ["The group list will appear once connected to the server", "Список груп з'явиться, коли буде зв'язок із сервером", "La lista de grupos aparecerá al conectar con el servidor", "Grup listesi sunucuya bağlanınca görünür", "A lista de grupos aparece quando houver conexão com o servidor"], "Осталось минут сегодня": ["Minutes left today", "Залишилося хвилин сьогодні", "Minutos restantes hoy", "Bugün kalan dakika", "Minutos restantes hoje"], "Лимит": ["Limit", "Ліміт", "Límite", "Sınır", "Limite"], "{n} мин/день": ["{n} min/day", "{n} хв/день", "{n} min/día", "{n} dk/gün", "{n} min/dia"], "Вход с {n} уровня, только полной группой из {m} человек": ["Entry from level {n}, only as a full group of {m}", "Вхід з {n} рівня, лише повною групою з {m} осіб", "Entrada desde el nivel {n}, solo con un grupo completo de {m}", "{n}. seviyeden giriş, yalnızca {m} kişilik tam grupla", "Entrada a partir do nível {n}, só com um grupo completo de {m}"], "Войти в зону может только лидер группы — он затягивает за собой остальных участников (группа из {n} человек)": ["Only the group leader can enter the zone — they pull the other members in (a group of {n})", "Увійти в зону може лише лідер групи — він затягує за собою інших учасників (група з {n} осіб)", "Solo el líder del grupo puede entrar en la zona: arrastra consigo al resto (grupo de {n})", "Bölgeye yalnızca grup lideri girebilir — diğer üyeleri de yanında çeker ({n} kişilik grup)", "Só o líder do grupo pode entrar na zona — ele puxa os outros membros (grupo de {n})"], "Если в зоне останется меньше {n} человек группы, всех выводит из зоны": ["If fewer than {n} group members remain in the zone, everyone is taken out", "Якщо в зоні залишиться менше {n} осіб групи, всіх виводить із зони", "Si quedan menos de {n} miembros del grupo en la zona, todos salen de ella", "Bölgede {n} kişiden az grup üyesi kalırsa herkes bölgeden çıkarılır", "Se restarem menos de {n} membros do grupo na zona, todos são retirados"], "{n} комнаты по {m} монстров, сильнее обычных и вдвое быстрее — стоят пачками по {k}, сами не нападают, но удар по одному будит всю пачку": ["{n} rooms of {m} monsters, stronger than usual and twice as fast — they stand in packs of {k}, don't attack first, but hitting one wakes the whole pack", "{n} кімнати по {m} монстрів, сильніші за звичайних і вдвічі швидші — стоять зграями по {k}, самі не нападають, але удар по одному будить усю зграю", "{n} salas de {m} monstruos, más fuertes de lo normal y el doble de rápidos: están en grupos de {k}, no atacan primero, pero golpear a uno despierta a todo el grupo", "{m} canavarlı {n} oda; normalden güçlü ve iki kat hızlı — {k}'lü sürüler halinde durur, kendileri saldırmaz ama birine vurmak tüm sürüyü uyandırır", "{n} salas de {m} monstros, mais fortes que o normal e duas vezes mais rápidos — ficam em grupos de {k}, não atacam primeiro, mas acertar um acorda o grupo todo"], "Не более {n} минут в зоне на игрока в день": ["No more than {n} minutes in the zone per player per day", "Не більше {n} хвилин у зоні на гравця на день", "No más de {n} minutos en la zona por jugador al día", "Oyuncu başına günde en fazla {n} dakika", "No máximo {n} minutos na zona por jogador por dia"], "Погибший возрождается у входа в зону — группа остаётся в сборе": ["A fallen pilot respawns at the zone entrance — the group stays together", "Загиблий відроджується біля входу в зону — група залишається в зборі", "El caído reaparece en la entrada de la zona: el grupo sigue unido", "Ölen pilot bölge girişinde yeniden doğar — grup bir arada kalır", "Quem cai renasce na entrada da zona — o grupo continua junto"], "Дроп с монстров": ["Monster drops", "Дроп із монстрів", "Botín de monstruos", "Canavar ganimeti", "Saque dos monstros"], "Шансы — для монстра {n} уровня: у элитных монстров ценный дроп ×{m} к обычным (кроме осколков)": ["Chances are for a level {n} monster: elite monsters have ×{m} valuable drops vs. regular ones (except shards)", "Шанси — для монстра {n} рівня: в елітних монстрів цінний дроп ×{m} до звичайних (крім уламків)", "Probabilidades para un monstruo de nivel {n}: los élite dan botín valioso ×{m} frente a los normales (salvo fragmentos)", "Şanslar {n}. seviye canavar için: elit canavarlarda değerli ganimet normalin ×{m} katı (parçalar hariç)", "Chances para um monstro de nível {n}: monstros de elite têm saque valioso ×{m} em relação aos normais (exceto fragmentos)"], "Осколок уникального сета (любой)": ["Unique set shard (any)", "Уламок унікального сету (будь-який)", "Fragmento de conjunto único (cualquiera)", "Eşsiz set parçası (herhangi)", "Fragmento de conjunto único (qualquer)"], "Лидер ведёт группу в элитную зону": ["The leader is taking the group into the elite zone", "Лідер веде групу в елітну зону", "El líder lleva al grupo a la zona élite", "Lider grubu elit bölgeye götürüyor", "O líder leva o grupo à zona de elite"], "В элитную зону группу заводит лидер: События → Элитная фарм-зона": ["The leader takes the group into the elite zone: Events → Elite farm zone", "В елітну зону групу заводить лідер: Події → Елітна фарм-зона", "El líder lleva al grupo a la zona élite: Eventos → Zona de farmeo élite", "Gruba elit bölgeye lider götürür: Etkinlikler → Elit farm bölgesi", "O líder leva o grupo à zona de elite: Eventos → Zona de farm de elite"], "Возрождение у входа в зону": ["Respawned at the zone entrance", "Відродження біля входу в зону", "Reaparición en la entrada de la zona", "Bölge girişinde yeniden doğuş", "Renascimento na entrada da zona"], "возрождение у входа в зону…": ["respawning at the zone entrance…", "відродження біля входу в зону…", "reapareciendo en la entrada de la zona…", "bölge girişinde yeniden doğuluyor…", "renascendo na entrada da zona…"], "Выход из элитной зоны": ["Elite zone exit", "Вихід з елітної зони", "Salida de la zona élite", "Elit bölge çıkışı", "Saída da zona de elite"], "Если в зоне останется меньше {n} человек группы, всех выведет из зоны.": ["If fewer than {n} group members remain in the zone, everyone will be taken out.", "Якщо в зоні залишиться менше {n} осіб групи, всіх виведе із зони.", "Si quedan menos de {n} miembros del grupo en la zona, todos saldrán de ella.", "Bölgede {n} kişiden az grup üyesi kalırsa herkes çıkarılır.", "Se restarem menos de {n} membros do grupo na zona, todos serão retirados."], "Покинуть зону": ["Leave the zone", "Покинути зону", "Salir de la zona", "Bölgeden çık", "Sair da zona"], "в зоне {n}/{m}": ["in zone {n}/{m}", "у зоні {n}/{m}", "en la zona {n}/{m}", "bölgede {n}/{m}", "na zona {n}/{m}"], "В зоне меньше {n} человек группы — скоро всех выведет": ["Fewer than {n} group members in the zone — everyone will be taken out soon", "У зоні менше {n} осіб групи — скоро всіх виведе", "Hay menos de {n} miembros del grupo en la zona: pronto saldrán todos", "Bölgede {n} kişiden az grup üyesi var — yakında herkes çıkarılacak", "Menos de {n} membros do grupo na zona — em breve todos serão retirados"], "Выход из зоны": ["Zone exit", "Вихід із зони", "Salida de la zona", "Bölge çıkışı", "Saída da zona"], "Элитная зона": ["Elite zone", "Елітна зона", "Zona élite", "Elit bölge", "Zona de elite"], "Зал I": ["Hall I", "Зала I", "Sala I", "Salon I", "Salão I"], "Зал II": ["Hall II", "Зала II", "Sala II", "Salon II", "Salão II"], "Гвардейский": ["Guards", "Гвардійський", "De la guardia", "Muhafız", "Da guarda"], "Штурмовой": ["Assault", "Штурмовий", "De asalto", "Hücum", "De assalto"], "Карательный": ["Punitive", "Каральний", "Punitivo", "Cezalandırıcı", "Punitivo"], "Ударный": ["Strike", "Ударний", "De choque", "Darbe", "De choque"], "Тяжёлый": ["Heavy", "Важкий", "Pesado", "Ağır", "Pesado"], "Боевой": ["Battle", "Бойовий", "De combate", "Savaş", "De combate"], "Осадный": ["Siege", "Облоговий", "De asedio", "Kuşatma", "De cerco"], "Имперский": ["Imperial", "Імперський", "Imperial", "İmparatorluk", "Imperial"], "Багряный": ["Scarlet", "Багряний", "Escarlata", "Al", "Escarlate"], "Золотой": ["Golden", "Золотий", "Dorado", "Altın", "Dourado"], "Элитная зона открывается с {n} уровня": ["The elite zone opens at level {n}", "Елітна зона відкривається з {n} рівня", "La zona élite se abre en el nivel {n}", "Elit bölge {n}. seviyede açılır", "A zona de elite abre no nível {n}"], "Лимит {n} минут в элитной зоне на сегодня исчерпан": ["Today's {n}-minute elite zone limit is used up", "Ліміт {n} хвилин в елітній зоні на сьогодні вичерпано", "Se agotó el límite de {n} minutos de hoy en la zona élite", "Bugünkü {n} dakikalık elit bölge sınırı doldu", "O limite de {n} minutos na zona de elite de hoje acabou"], "лимит {n} минут на сегодня исчерпан": ["today's {n}-minute limit is used up", "ліміт {n} хвилин на сьогодні вичерпано", "se agotó el límite de {n} minutos de hoy", "bugünkü {n} dakikalık sınır doldu", "o limite de {n} minutos de hoje acabou"], "Открыть набор может только лидер группы": ["Only the group leader can open it to players", "Відкрити набір може лише лідер групи", "Solo el líder del grupo puede abrirlo", "Alımı yalnızca grup lideri açabilir", "Só o líder do grupo pode abrir para jogadores"], "Группа уже в сборе": ["The group is already complete", "Група вже в зборі", "El grupo ya está completo", "Grup zaten tamam", "O grupo já está completo"], "Группа создана — она видна в «Открытых группах»": ["Group created — it's listed in «Open groups»", "Групу створено — вона видна у «Відкритих групах»", "Grupo creado: aparece en «Grupos abiertos»", "Grup kuruldu — «Açık gruplar»da görünüyor", "Grupo criado — aparece em «Grupos abertos»"], "Сначала выйди из своей группы": ["Leave your group first", "Спершу вийди зі своєї групи", "Primero sal de tu grupo", "Önce kendi grubundan çık", "Primeiro saia do seu grupo"], "Эта группа уже закрыла набор": ["This group is no longer taking players", "Ця група вже закрила набір", "Este grupo ya no admite jugadores", "Bu grup artık oyuncu almıyor", "Este grupo já não aceita jogadores"], "В группе уже {n} человека": ["The group already has {n} people", "У групі вже {n} особи", "El grupo ya tiene {n} personas", "Grupta zaten {n} kişi var", "O grupo já tem {n} pessoas"], "вступил в группу": ["joined the group", "вступив у групу", "se unió al grupo", "gruba katıldı", "entrou no grupo"], "Сначала создай группу": ["Create a group first", "Спершу створи групу", "Primero crea un grupo", "Önce bir grup kur", "Primeiro crie um grupo"], "Войти в зону может только лидер группы": ["Only the group leader can enter the zone", "Увійти в зону може лише лідер групи", "Solo el líder del grupo puede entrar en la zona", "Bölgeye yalnızca grup lideri girebilir", "Só o líder do grupo pode entrar na zona"], "Нужна полная группа из {n} человек": ["A full group of {n} is needed", "Потрібна повна група з {n} осіб", "Hace falta un grupo completo de {n}", "{n} kişilik tam grup gerekli", "É preciso um grupo completo de {n}"], "Участник": ["Member", "Учасник", "Miembro", "Üye", "Membro"], "сейчас погиб — подождите возрождения": ["has just died — wait for the respawn", "щойно загинув — зачекайте відродження", "acaba de caer: esperad a que reaparezca", "az önce öldü — yeniden doğmasını bekleyin", "acabou de cair — aguardem o renascimento"], "уже в элитной зоне": ["is already in the elite zone", "вже в елітній зоні", "ya está en la zona élite", "zaten elit bölgede", "já está na zona de elite"], "в бою с игроком — подождите": ["is fighting a player — wait", "у бою з гравцем — зачекайте", "está en combate con un jugador: esperad", "bir oyuncuyla savaşıyor — bekleyin", "está lutando com um jogador — aguardem"], "Все элитные зоны заняты — попробуйте через минуту": ["All elite zones are busy — try again in a minute", "Усі елітні зони зайняті — спробуйте за хвилину", "Todas las zonas élite están ocupadas: probad en un minuto", "Tüm elit bölgeler dolu — bir dakika sonra deneyin", "Todas as zonas de elite estão ocupadas — tentem daqui a um minuto"], "В элитную зону группу заводит лидер": ["The leader takes the group into the elite zone", "В елітну зону групу заводить лідер", "El líder lleva al grupo a la zona élite", "Grubu elit bölgeye lider götürür", "O líder leva o grupo à zona de elite"], "В зоне осталось меньше {n} человек группы — всех вывели из зоны": ["Fewer than {n} group members were left in the zone — everyone was taken out", "У зоні залишилося менше {n} осіб групи — всіх вивели із зони", "Quedaron menos de {n} miembros del grupo en la zona: todos han salido", "Bölgede {n} kişiden az grup üyesi kaldı — herkes çıkarıldı", "Restaram menos de {n} membros do grupo na zona — todos foram retirados"], "В пати уже {n} игрока": ["The party already has {n} players", "У паті вже {n} гравці", "El grupo ya tiene {n} jugadores", "Grupta zaten {n} oyuncu var", "O grupo já tem {n} jogadores"]});
 
+// порталы открываются касанием; вкладка, вытесненная другим окном; сервер обновился
+Object.assign(I18N, {"Город": ["City", "Місто", "Ciudad", "Şehir", "Cidade"], "Переход в Центральный ангар": ["Travel to the Central Hangar", "Перехід до Центрального ангара", "Viaje al Hangar Central", "Merkez Hangar'a geçiş", "Ir ao Hangar Central"], "Выход из башни": ["Leave the tower", "Вихід із вежі", "Salir de la torre", "Kuleden çıkış", "Sair da torre"], "Выйти из башни": ["Leave the tower", "Вийти з вежі", "Salir de la torre", "Kuleden çık", "Sair da torre"], "Выход засчитается как сдача: забег в башне закончится.": ["Leaving counts as giving up: your tower run will end.", "Вихід зарахується як здача: забіг у вежі завершиться.", "Salir cuenta como rendirse: tu recorrido en la torre terminará.", "Çıkış teslim olma sayılır: kule koşun sona erer.", "Sair conta como desistência: sua corrida na torre terminará."], "Игра открыта в другом окне": ["The game is open in another window", "Гра відкрита в іншому вікні", "El juego está abierto en otra ventana", "Oyun başka bir pencerede açık", "O jogo está aberto em outra janela"], "Здесь связь с миром отключена": ["The world connection is off here", "Тут зв'язок зі світом вимкнено", "Aquí la conexión con el mundo está desactivada", "Burada dünya bağlantısı kapalı", "Aqui a conexão com o mundo está desligada"], "Играть здесь": ["Play here", "Грати тут", "Jugar aquí", "Burada oyna", "Jogar aqui"], "Сервер обновился": ["The server was updated", "Сервер оновився", "El servidor se actualizó", "Sunucu güncellendi", "O servidor foi atualizado"], "Прогресс игроков сброшен": ["Player progress was reset", "Прогрес гравців скинуто", "El progreso de los jugadores se reinició", "Oyuncu ilerlemesi sıfırlandı", "O progresso dos jogadores foi redefinido"], "Перезапустить сейчас": ["Restart now", "Перезапустити зараз", "Reiniciar ahora", "Şimdi yeniden başlat", "Reiniciar agora"], "Бонусы": ["Bonuses", "Бонуси", "Bonos", "Bonuslar", "Bônus"], "Облик": ["Looks", "Вигляд", "Aspecto", "Görünüm", "Visual"], "не хватает": ["short by", "бракує", "faltan", "eksik", "faltam"], "Крылья и плащи": ["Wings & cloaks", "Крила й плащі", "Alas y capas", "Kanatlar ve pelerinler", "Asas e capas"], "Ремонт:": ["Repairs:", "Ремонт:", "Reparación:", "Onarım:", "Reparo:"], "Портал сезона": ["Season portal", "Портал сезону", "Portal de temporada", "Sezon portalı", "Portal da temporada"], "Войти в сезонную зону": ["Enter the season zone", "Увійти в сезонну зону", "Entrar en la zona de temporada", "Sezon bölgesine gir", "Entrar na zona da temporada"], "Зона для владельцев билета сезона: больше опыта и дропа.": ["Zone for season ticket holders: more XP and drops.", "Зона для власників квитка сезону: більше досвіду й дропу.", "Zona para quienes tienen el pase de temporada: más XP y botín.", "Sezon bileti sahipleri için bölge: daha fazla XP ve ganimet.", "Zona para quem tem o passe da temporada: mais XP e drops."], "🔒 Вход только с билетом сезона. Билет даёт ×2 опыт, +60% к дропу и премиум-награды пропуска.": ["🔒 Entry with a season ticket only. The ticket gives ×2 XP, +60% drops and premium pass rewards.", "🔒 Вхід лише з квитком сезону. Квиток дає ×2 досвід, +60% до дропу й преміум-нагороди пропуску.", "🔒 Solo se entra con el pase de temporada. Da ×2 XP, +60% de botín y recompensas premium del pase.", "🔒 Giriş yalnızca sezon biletiyle. Bilet ×2 XP, +%60 ganimet ve premium bilet ödülleri verir.", "🔒 Entrada só com o passe da temporada. Ele dá ×2 XP, +60% de drops e recompensas premium do passe."], "Купить билет": ["Buy ticket", "Купити квиток", "Comprar pase", "Bilet satın al", "Comprar passe"], "Пропуск": ["Pass", "Пропуск", "Pase", "Bilet", "Passe"], "Уровень пропуска": ["Pass level", "Рівень пропуску", "Nivel del pase", "Bilet seviyesi", "Nível do passe"], "Уровень пропуска:": ["Pass level:", "Рівень пропуску:", "Nivel del pase:", "Bilet seviyesi:", "Nível do passe:"], "Опыт пропуска": ["Pass XP", "Досвід пропуску", "XP del pase", "Bilet XP", "XP do passe"], "опыта пропуска": ["pass XP", "досвіду пропуску", "XP del pase", "bilet XP", "XP do passe"], "Максимальный уровень пропуска": ["Max pass level", "Максимальний рівень пропуску", "Nivel máximo del pase", "Maksimum bilet seviyesi", "Nível máximo do passe"], "Опыт пропуска — за победы над врагами. Он открывает награды уровней и на рейтинг не влияет.": ["Pass XP comes from defeating enemies. It unlocks level rewards and does not affect the ranking.", "Досвід пропуску — за перемоги над ворогами. Він відкриває нагороди рівнів і не впливає на рейтинг.", "La XP del pase se gana venciendo enemigos. Desbloquea recompensas de nivel y no afecta a la clasificación.", "Bilet XP'si düşmanları yenerek kazanılır. Seviye ödüllerini açar, sıralamayı etkilemez.", "O XP do passe vem de derrotar inimigos. Ele libera recompensas de nível e não afeta o ranking."], "Очки сезона — за задания. По ним место в рейтинге и призы в USDT.": ["Season points come from tasks. They decide your ranking place and USDT prizes.", "Очки сезону — за завдання. За ними місце в рейтингу й призи в USDT.", "Los puntos de temporada se ganan con tareas. Deciden tu puesto en la clasificación y los premios en USDT.", "Sezon puanları görevlerden gelir. Sıralamadaki yerini ve USDT ödüllerini belirler.", "Os pontos da temporada vêm das tarefas. Eles definem sua posição no ranking e os prêmios em USDT."], "Место — по очкам сезона. Призы в USDT получают первые 20 пилотов.": ["Place is by season points. The top 20 pilots get USDT prizes.", "Місце — за очками сезону. Призи в USDT отримують перші 20 пілотів.", "El puesto depende de los puntos de temporada. Los 20 primeros pilotos reciben premios en USDT.", "Sıra sezon puanlarına göredir. İlk 20 pilot USDT ödülü alır.", "A posição é pelos pontos da temporada. Os 20 primeiros pilotos recebem prêmios em USDT."], "Задания, рейтинг и пропуск сезона": ["Season tasks, ranking and pass", "Завдання, рейтинг і пропуск сезону", "Tareas, clasificación y pase de temporada", "Sezon görevleri, sıralama ve bilet", "Tarefas, ranking e passe da temporada"]});
+Object.assign(I18N, {"Сдвоенный Колосс": ["Twin Colossus", "Здвоєний Колос", "Coloso Gemelo", "İkiz Dev", "Colosso Gêmeo"], "Патрульный Краулер": ["Patrol Crawler", "Патрульний Краулер", "Reptador de patrulla", "Devriye Sürüngeni", "Rastejador de patrulha"], "Сторожевой Дрон": ["Sentinel Drone", "Сторожовий Дрон", "Dron centinela", "Nöbetçi Drone", "Drone sentinela"], "Заградительный Страж": ["Barrier Guardian", "Загороджувальний Вартовий", "Guardián de barrera", "Bariyer Muhafızı", "Guardião de barreira"], "Штурмовой Шагоход": ["Assault Walker", "Штурмовий Крокохід", "Caminante de asalto", "Hücum Yürüteci", "Andador de assalto"], "Таранный Краулер": ["Ram Crawler", "Таранний Краулер", "Reptador ariete", "Koçbaşı Sürüngen", "Rastejador aríete"], "Осадный Дрон": ["Siege Drone", "Облоговий Дрон", "Dron de asedio", "Kuşatma Drone'u", "Drone de cerco"], "Карательный Страж": ["Punisher Guardian", "Каральний Вартовий", "Guardián punitivo", "Cezalandırıcı Muhafız", "Guardião punitivo"], "нет в зале · {n} с": ["not in the hall · {n} s", "немає в залі · {n} с", "fuera de la sala · {n} s", "salonda değil · {n} sn", "fora do salão · {n} s"], "Вернуться в забег": ["Return to the run", "Повернутися в забіг", "Volver a la carrera", "Koşuya dön", "Voltar à corrida"], "Возвращение в забег «Сотрудничества»": ["Returning to the Cooperation run", "Повернення в забіг «Співпраці»", "Volviendo a la carrera de Cooperación", "İş birliği koşusuna dönülüyor", "Voltando à corrida da Cooperação"], "Опустошающий Шагоход": ["Ravager Walker", "Спустошливий Крокохід", "Caminante devastador", "Yıkıcı Yürüteç", "Andador devastador"], "Этап": ["Stage", "Етап", "Etapa", "Aşama", "Etapa"], "Этап {n}": ["Stage {n}", "Етап {n}", "Etapa {n}", "Aşama {n}", "Etapa {n}"], "Этап {n}/{m}": ["Stage {n}/{m}", "Етап {n}/{m}", "Etapa {n}/{m}", "Aşama {n}/{m}", "Etapa {n}/{m}"], "Этап {n} пройден": ["Stage {n} cleared", "Етап {n} пройдено", "Etapa {n} superada", "Aşama {n} geçildi", "Etapa {n} concluída"], "Этап {n} откроется через": ["Stage {n} opens in", "Етап {n} відкриється через", "La etapa {n} se abre en", "Aşama {n} açılıyor", "A etapa {n} abre em"], "Этапы": ["Stages", "Етапи", "Etapas", "Aşamalar", "Etapas"], "Босс": ["Boss", "Бос", "Jefe", "Patron", "Chefe"], "{n} монстров": ["{n} monsters", "{n} монстрів", "{n} monstruos", "{n} canavar", "{n} monstros"], "Этап {n} из {m} · монстры {k} уровня": ["Stage {n} of {m} · level {k} monsters", "Етап {n} з {m} · монстри {k} рівня", "Etapa {n} de {m} · monstruos de nivel {k}", "Aşama {n}/{m} · {k}. seviye canavarlar", "Etapa {n} de {m} · monstros de nível {k}"], "Барьер пал:": ["Barrier down:", "Бар'єр упав:", "Barrera caída:", "Bariyer düştü:", "Barreira caiu:"], "ждёт в последнем зале!": ["awaits in the last hall!", "чекає в останній залі!", "espera en la última sala.", "son salonda bekliyor!", "espera no último salão!"], "повержен! Награда по жребию:": ["defeated! Reward by lot:", "переможений! Нагорода за жеребом:", "derrotado. Premio por sorteo:", "yenildi! Kurayla ödül:", "derrotado! Prêmio por sorteio:"], "это ты!": ["that's you!", "це ти!", "¡eres tú!", "bu sensin!", "é você!"], "Это ты!": ["That's you!", "Це ти!", "¡Eres tú!", "Bu sensin!", "É você!"], "Награда по жребию": ["Reward by lot", "Нагорода за жеребом", "Premio por sorteo", "Kurayla ödül", "Prêmio por sorteio"], "Пройдено этапов:": ["Stages cleared:", "Пройдено етапів:", "Etapas superadas:", "Geçilen aşamalar:", "Etapas concluídas:"], "Итоги забега": ["Run results", "Підсумки забігу", "Resultados de la carrera", "Koşu sonuçları", "Resultado da corrida"], "Забег окончен": ["Run over", "Забіг закінчено", "Carrera terminada", "Koşu bitti", "Corrida encerrada"], "Сбор группы": ["Group gathering", "Збір групи", "Reuniendo al grupo", "Grup toplanıyor", "Reunindo o grupo"], "Старт забега": ["Run starting", "Старт забігу", "Inicio de la carrera", "Koşu başlıyor", "Início da corrida"], "Дождитесь напарника": ["Wait for your partner", "Дочекайтеся напарника", "Espera a tu compañero", "Ortağını bekle", "Aguarde seu parceiro"], "Барьер к боссу откроется через": ["Boss barrier opens in", "Бар'єр до боса відкриється через", "La barrera del jefe se abre en", "Patron bariyeri açılıyor", "A barreira do chefe abre em"], "Возврат через {n} с": ["Returning in {n} s", "Повернення через {n} с", "Regreso en {n} s", "{n} sn sonra dönüş", "Retorno em {n} s"], "Начать забег": ["Start the run", "Почати забіг", "Iniciar carrera", "Koşuyu başlat", "Iniciar corrida"], "Группа в сборе — начинайте забег": ["The group is ready — start the run", "Група в зборі — починайте забіг", "Grupo listo: empezad la carrera", "Grup hazır — koşuyu başlatın", "Grupo pronto — iniciem a corrida"], "Группа в сборе — забег начинает лидер": ["The group is ready — the leader starts the run", "Група в зборі — забіг починає лідер", "Grupo listo: el líder inicia la carrera", "Grup hazır — koşuyu lider başlatır", "Grupo pronto — o líder inicia a corrida"], "В пати {n} пилота — нужно ровно {m}": ["{n} pilots in the party — exactly {m} needed", "У паті {n} пілоти — потрібно рівно {m}", "Hay {n} pilotos en el grupo: se necesitan exactamente {m}", "Partide {n} pilot var — tam {m} gerekli", "{n} pilotos no grupo — são necessários exatamente {m}"], "Ждём напарника · {n}/{m}": ["Waiting for a partner · {n}/{m}", "Чекаємо напарника · {n}/{m}", "Esperando compañero · {n}/{m}", "Ortak bekleniyor · {n}/{m}", "Aguardando parceiro · {n}/{m}"], "нет попытки": ["no attempt", "немає спроби", "sin intento", "hak yok", "sem tentativa"], "Не все готовы: нужен {n} уровень, попытка и быть в сети": ["Not everyone is ready: level {n}, an attempt and being online are required", "Не всі готові: потрібен {n} рівень, спроба й бути в мережі", "No todos están listos: hace falta nivel {n}, un intento y estar en línea", "Herkes hazır değil: {n}. seviye, hak ve çevrimiçi olmak gerekli", "Nem todos estão prontos: precisa do nível {n}, uma tentativa e estar online"], "Создайте группу или войдите в чужую — начать забег может только лидер группы": ["Create a group or join someone else's — only the group leader can start the run", "Створіть групу або увійдіть до чужої — почати забіг може лише лідер групи", "Crea un grupo o únete a otro: solo el líder del grupo puede iniciar la carrera", "Grup kur ya da başkasınınkine katıl — koşuyu yalnızca grup lideri başlatabilir", "Crie um grupo ou entre em outro — só o líder do grupo pode iniciar a corrida"], "Одна попытка в день, тратится при входе": ["One attempt per day, spent on entry", "Одна спроба на день, витрачається при вході", "Un intento al día, se gasta al entrar", "Günde bir hak, girişte harcanır", "Uma tentativa por dia, gasta ao entrar"], "{n} этапов по {m} монстров, уровень растёт:": ["{n} stages of {m} monsters, the level grows:", "{n} етапів по {m} монстрів, рівень зростає:", "{n} etapas de {m} monstruos, el nivel sube:", "{m} canavarlı {n} aşama, seviye artıyor:", "{n} etapas de {m} monstros, o nível sobe:"], "Монстры общие на двоих: следующий этап открывается, только когда вы вдвоём зачистите текущий": ["Monsters are shared by both of you: the next stage opens only when the two of you clear the current one", "Монстри спільні на двох: наступний етап відкривається, лише коли ви вдвох зачистите поточний", "Los monstruos son comunes a los dos: la siguiente etapa se abre solo cuando los dos limpiéis la actual", "Canavarlar ikinize ortak: sonraki aşama ancak ikiniz mevcut aşamayı temizleyince açılır", "Os monstros são comuns aos dois: a próxima etapa só abre quando vocês dois limparem a atual"], "В конце — общий босс {n} уровня: {m} титановая сфера (безопасная заточка) и {k} энергоядер одному случайному пилоту": ["At the end — a shared level {n} boss: {m} titanium sphere (safe enchanting) and {k} energy cores to one random pilot", "Наприкінці — спільний бос {n} рівня: {m} титанова сфера (безпечне заточування) і {k} енергоядер одному випадковому пілоту", "Al final, un jefe común de nivel {n}: {m} esfera de titanio (mejora segura) y {k} núcleos de energía para un piloto al azar", "Sonunda — ortak {n}. seviye patron: rastgele bir pilota {m} titanyum küre (güvenli güçlendirme) ve {k} enerji çekirdeği", "No fim — um chefe comum de nível {n}: {m} esfera de titânio (refino seguro) e {k} núcleos de energia para um piloto aleatório"], "Смерть любого из двоих завершает забег для обоих": ["The death of either of you ends the run for both", "Смерть будь-кого з двох завершує забіг для обох", "La muerte de cualquiera de los dos termina la carrera para ambos", "İkinizden birinin ölümü koşuyu ikiniz için de bitirir", "A morte de qualquer um dos dois encerra a corrida para ambos"], "Если вход сорвался или связь оборвалась до первого этапа — попытка вернётся": ["If entry failed or the connection dropped before the first stage, the attempt is returned", "Якщо вхід зірвався або зв'язок обірвався до першого етапу — спроба повернеться", "Si la entrada falló o la conexión se cortó antes de la primera etapa, se devuelve el intento", "Giriş başarısız olursa ya da bağlantı ilk aşamadan önce koparsa hak geri verilir", "Se a entrada falhar ou a conexão cair antes da primeira etapa, a tentativa é devolvida"], "На забег — {n} минут": ["{n} minutes per run", "На забіг — {n} хвилин", "{n} minutos por carrera", "Koşu için {n} dakika", "{n} minutos por corrida"], "Награда за босса": ["Boss reward", "Нагорода за боса", "Premio del jefe", "Patron ödülü", "Prêmio do chefe"], "награда за босса": ["boss reward", "нагорода за боса", "premio del jefe", "patron ödülü", "prêmio do chefe"], "Достаётся одному из двоих по жребию — в итогах забега видно, кому и что выдано": ["Goes to one of the two by lot — the run results show who got what", "Дістається одному з двох за жеребом — у підсумках забігу видно, кому й що видано", "Se lo lleva uno de los dos por sorteo: en los resultados se ve quién recibió qué", "Kurayla ikinizden birine gider — koşu sonuçlarında kimin ne aldığı görünür", "Vai para um dos dois por sorteio — o resultado mostra quem recebeu o quê"], "Опыт и добыча с каждого монстра — тому из двоих, кто нанёс ему больше урона. Монстр сильнее тебя на {n}+ уровней опыта и добычи не даёт.": ["XP and loot from each monster go to whichever of you dealt it more damage. A monster {n}+ levels above you gives no XP or loot.", "Досвід і здобич з кожного монстра — тому з двох, хто завдав йому більше шкоди. Монстр, сильніший за тебе на {n}+ рівнів, не дає досвіду й здобичі.", "La experiencia y el botín de cada monstruo son para quien de los dos le hizo más daño. Un monstruo {n}+ niveles por encima de ti no da experiencia ni botín.", "Her canavarın deneyimi ve ganimeti, ona daha çok hasar verene gider. Senden {n}+ seviye yüksek canavar deneyim ve ganimet vermez.", "XP e saque de cada monstro vão para quem dos dois causou mais dano. Um monstro {n}+ níveis acima de você não dá XP nem saque."], "В зал «Сотрудничества» группу заводит лидер: События → Сотрудничество": ["The leader brings the group into the Cooperation hall: Events → Cooperation", "До зали «Співпраці» групу заводить лідер: Події → Співпраця", "El líder lleva al grupo a la sala de Cooperación: Eventos → Cooperación", "Grubu İş birliği salonuna lider götürür: Etkinlikler → İş birliği", "O líder leva o grupo ao salão da Cooperação: Eventos → Cooperação"], "В зал «Сотрудничества» группу заводит лидер": ["The leader brings the group into the Cooperation hall", "До зали «Співпраці» групу заводить лідер", "El líder lleva al grupo a la sala de Cooperación", "Grubu İş birliği salonuna lider götürür", "O líder leva o grupo ao salão da Cooperação"], "Лидер ведёт группу в зал «Сотрудничества»": ["The leader is taking the group into the Cooperation hall", "Лідер веде групу до зали «Співпраці»", "El líder lleva al grupo a la sala de Cooperación", "Lider grubu İş birliği salonuna götürüyor", "O líder está levando o grupo ao salão da Cooperação"], "Выход из зала": ["Leave the hall", "Вихід із зали", "Salir de la sala", "Salondan çıkış", "Sair do salão"], "Забег окончен — можно возвращаться в ангар.": ["The run is over — you can return to the hangar.", "Забіг закінчено — можна повертатися в ангар.", "La carrera terminó: puedes volver al hangar.", "Koşu bitti — hangara dönebilirsin.", "A corrida acabou — você pode voltar ao hangar."], "Забег ещё не начался: если уйти сейчас, попытка вернётся обоим.": ["The run hasn't started yet: if you leave now, both of you get the attempt back.", "Забіг ще не почався: якщо піти зараз, спроба повернеться обом.", "La carrera aún no ha empezado: si sales ahora, ambos recuperáis el intento.", "Koşu henüz başlamadı: şimdi çıkarsan ikinize de hak geri verilir.", "A corrida ainda não começou: se sair agora, os dois recuperam a tentativa."], "Забег закончится для обоих, а попытка не вернётся.": ["The run will end for both of you, and the attempt won't be returned.", "Забіг закінчиться для обох, а спроба не повернеться.", "La carrera terminará para ambos y el intento no se devolverá.", "Koşu ikiniz için de biter ve hak geri verilmez.", "A corrida termina para os dois e a tentativa não volta."], "Покинуть забег": ["Leave the run", "Покинути забіг", "Abandonar la carrera", "Koşudan ayrıl", "Sair da corrida"], "Попытка возвращена — можно попробовать ещё раз сегодня.": ["Attempt returned — you can try again today.", "Спробу повернуто — можна спробувати ще раз сьогодні.", "Intento devuelto: puedes volver a intentarlo hoy.", "Hak geri verildi — bugün tekrar deneyebilirsin.", "Tentativa devolvida — dá para tentar de novo hoje."], "Барьер откроется, когда начнётся забег": ["The barrier opens when the run starts", "Бар'єр відкриється, коли почнеться забіг", "La barrera se abrirá cuando empiece la carrera", "Bariyer koşu başlayınca açılacak", "A barreira abre quando a corrida começar"], "Барьер к боссу откроется после этапа {n}": ["The boss barrier opens after stage {n}", "Бар'єр до боса відкриється після етапу {n}", "La barrera del jefe se abrirá tras la etapa {n}", "Patron bariyeri {n}. aşamadan sonra açılacak", "A barreira do chefe abre após a etapa {n}"], "Барьер откроется, когда вы вдвоём зачистите этап {n}": ["The barrier opens when the two of you clear stage {n}", "Бар'єр відкриється, коли ви вдвох зачистите етап {n}", "La barrera se abrirá cuando los dos limpiéis la etapa {n}", "Bariyer, ikiniz {n}. aşamayı temizleyince açılacak", "A barreira abre quando vocês dois limparem a etapa {n}"], "сильнее тебя на {n}+ ур.: без награды": ["{n}+ levels above you: no reward", "сильніший за тебе на {n}+ рів.: без нагороди", "{n}+ niveles por encima: sin recompensa", "senden {n}+ sv. yüksek: ödül yok", "{n}+ níveis acima: sem recompensa"], "забег окончен для обоих · возврат в ангар…": ["run over for both · returning to the hangar…", "забіг закінчено для обох · повернення в ангар…", "carrera terminada para ambos · volviendo al hangar…", "koşu ikiniz için bitti · hangara dönülüyor…", "corrida encerrada para os dois · voltando ao hangar…"], "Сейсмический удар!": ["Seismic strike!", "Сейсмічний удар!", "¡Golpe sísmico!", "Sismik darbe!", "Golpe sísmico!"], "ярость": ["rage", "лють", "furia", "öfke", "fúria"], "Ты уже в забеге": ["You're already in a run", "Ти вже в забігу", "Ya estás en una carrera", "Zaten bir koşudasın", "Você já está em uma corrida"], "«Сотрудничество» открывается с {n} уровня": ["Cooperation opens at level {n}", "«Співпраця» відкривається з {n} рівня", "Cooperación se abre desde el nivel {n}", "İş birliği {n}. seviyede açılır", "A Cooperação abre no nível {n}"], "Попытка на сегодня уже использована": ["Today's attempt has already been used", "Спробу на сьогодні вже використано", "El intento de hoy ya se ha usado", "Bugünkü hak zaten kullanıldı", "A tentativa de hoje já foi usada"], "попытка на сегодня уже использована": ["today's attempt has already been used", "спробу на сьогодні вже використано", "el intento de hoy ya se ha usado", "bugünkü hak zaten kullanıldı", "a tentativa de hoje já foi usada"], "Сначала дождись возрождения": ["Wait for your respawn first", "Спершу дочекайся відродження", "Primero espera a reaparecer", "Önce yeniden doğmayı bekle", "Primeiro espere renascer"], "Сначала выйди из группы элитной зоны": ["Leave the elite zone group first", "Спершу вийди з групи елітної зони", "Primero sal del grupo de la zona élite", "Önce elit bölge grubundan çık", "Primeiro saia do grupo da zona de elite"], "В «Сотрудничество» идут вдвоём: в твоей пати больше {n} пилотов": ["Cooperation is for two: your party has more than {n} pilots", "У «Співпрацю» йдуть удвох: у твоєму паті більше {n} пілотів", "Cooperación es para dos: tu grupo tiene más de {n} pilotos", "İş birliği iki kişiliktir: partinde {n} pilottan fazla var", "A Cooperação é em dupla: seu grupo tem mais de {n} pilotos"], "В группе уже двое": ["The group already has two", "У групі вже двоє", "El grupo ya tiene dos", "Grupta zaten iki kişi var", "O grupo já tem dois"], "Начать забег может только лидер группы": ["Only the group leader can start the run", "Почати забіг може лише лідер групи", "Solo el líder del grupo puede iniciar la carrera", "Koşuyu yalnızca grup lideri başlatabilir", "Só o líder do grupo pode iniciar a corrida"], "Все залы «Сотрудничества» заняты — попробуйте через минуту": ["All Cooperation halls are busy — try again in a minute", "Усі зали «Співпраці» зайняті — спробуйте за хвилину", "Todas las salas de Cooperación están ocupadas: prueba en un minuto", "Tüm İş birliği salonları dolu — bir dakika sonra dene", "Todos os salões da Cooperação estão ocupados — tente em um minuto"], "Сначала выйди из группы «Сотрудничества»": ["Leave the Cooperation group first", "Спершу вийди з групи «Співпраці»", "Primero sal del grupo de Cooperación", "Önce İş birliği grubundan çık", "Primeiro saia do grupo da Cooperação"], "Нужна группа из {n} пилотов": ["A group of {n} pilots is needed", "Потрібна група з {n} пілотів", "Se necesita un grupo de {n} pilotos", "{n} pilotluk grup gerekli", "É preciso um grupo de {n} pilotos"], "сейчас в другом событии": ["is in another event right now", "зараз в іншій події", "está ahora en otro evento", "şu anda başka bir etkinlikte", "está em outro evento agora"], "уже в забеге": ["is already in a run", "вже в забігу", "ya está en una carrera", "zaten bir koşuda", "já está em uma corrida"], "погиб — забег окончен": ["died — the run is over", "загинув — забіг закінчено", "murió: la carrera terminó", "öldü — koşu bitti", "morreu — a corrida acabou"], "вышел — забег окончен": ["left — the run is over", "вийшов — забіг закінчено", "salió: la carrera terminó", "ayrıldı — koşu bitti", "saiu — a corrida acabou"], "Напарник": ["Partner", "Напарник", "Compañero", "Ortak", "Parceiro"], "Время забега вышло": ["Run time is up", "Час забігу вийшов", "Se acabó el tiempo de la carrera", "Koşu süresi doldu", "O tempo da corrida acabou"], "Напарник не пришёл — попытка возвращена": ["Your partner didn't arrive — attempt returned", "Напарник не прийшов — спробу повернуто", "Tu compañero no llegó: intento devuelto", "Ortağın gelmedi — hak geri verildi", "O parceiro não veio — tentativa devolvida"], "Забег окончен — возврат в ангар": ["Run over — returning to the hangar", "Забіг закінчено — повернення в ангар", "Carrera terminada: regreso al hangar", "Koşu bitti — hangara dönüş", "Corrida encerrada — voltando ao hangar"], "не поместилась — освободи место в сумке или на складе, награда придёт при следующем входе": ["didn't fit — free up space in the bag or storage, the reward will arrive on your next login", "не помістилася — звільни місце в сумці або на складі, нагорода прийде під час наступного входу", "no cabe: libera espacio en la mochila o el almacén, el premio llegará en tu próxima entrada", "sığmadı — çantada veya depoda yer aç, ödül bir sonraki girişte gelecek", "não coube — libere espaço na bolsa ou no armazém, o prêmio chega no próximo login"]});   // «Сотрудничество»: окно, зал, итоги, сообщения сервера (coop.py)
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
 // в тексте страницы, подсказках полей, уведомлениях и надписях на карте.
@@ -14901,8 +14945,6 @@ function buildTrRe(){
     let list = trIdx.get(first); if(!list) trIdx.set(first, list = []);
     list.push(e);
   });
-// порталы открываются касанием; вкладка, вытесненная другим окном; сервер обновился
-Object.assign(I18N, {"Город": ["City", "Місто", "Ciudad", "Şehir", "Cidade"], "Переход в Центральный ангар": ["Travel to the Central Hangar", "Перехід до Центрального ангара", "Viaje al Hangar Central", "Merkez Hangar'a geçiş", "Ir ao Hangar Central"], "Выход из башни": ["Leave the tower", "Вихід із вежі", "Salir de la torre", "Kuleden çıkış", "Sair da torre"], "Выйти из башни": ["Leave the tower", "Вийти з вежі", "Salir de la torre", "Kuleden çık", "Sair da torre"], "Выход засчитается как сдача: забег в башне закончится.": ["Leaving counts as giving up: your tower run will end.", "Вихід зарахується як здача: забіг у вежі завершиться.", "Salir cuenta como rendirse: tu recorrido en la torre terminará.", "Çıkış teslim olma sayılır: kule koşun sona erer.", "Sair conta como desistência: sua corrida na torre terminará."], "Игра открыта в другом окне": ["The game is open in another window", "Гра відкрита в іншому вікні", "El juego está abierto en otra ventana", "Oyun başka bir pencerede açık", "O jogo está aberto em outra janela"], "Здесь связь с миром отключена": ["The world connection is off here", "Тут зв'язок зі світом вимкнено", "Aquí la conexión con el mundo está desactivada", "Burada dünya bağlantısı kapalı", "Aqui a conexão com o mundo está desligada"], "Играть здесь": ["Play here", "Грати тут", "Jugar aquí", "Burada oyna", "Jogar aqui"], "Сервер обновился": ["The server was updated", "Сервер оновився", "El servidor se actualizó", "Sunucu güncellendi", "O servidor foi atualizado"], "Прогресс игроков сброшен": ["Player progress was reset", "Прогрес гравців скинуто", "El progreso de los jugadores se reinició", "Oyuncu ilerlemesi sıfırlandı", "O progresso dos jogadores foi redefinido"], "Перезапустить сейчас": ["Restart now", "Перезапустити зараз", "Reiniciar ahora", "Şimdi yeniden başlat", "Reiniciar agora"], "Бонусы": ["Bonuses", "Бонуси", "Bonos", "Bonuslar", "Bônus"], "Облик": ["Looks", "Вигляд", "Aspecto", "Görünüm", "Visual"], "не хватает": ["short by", "бракує", "faltan", "eksik", "faltam"], "Крылья и плащи": ["Wings & cloaks", "Крила й плащі", "Alas y capas", "Kanatlar ve pelerinler", "Asas e capas"], "Ремонт:": ["Repairs:", "Ремонт:", "Reparación:", "Onarım:", "Reparo:"], "Портал сезона": ["Season portal", "Портал сезону", "Portal de temporada", "Sezon portalı", "Portal da temporada"], "Войти в сезонную зону": ["Enter the season zone", "Увійти в сезонну зону", "Entrar en la zona de temporada", "Sezon bölgesine gir", "Entrar na zona da temporada"], "Зона для владельцев билета сезона: больше опыта и дропа.": ["Zone for season ticket holders: more XP and drops.", "Зона для власників квитка сезону: більше досвіду й дропу.", "Zona para quienes tienen el pase de temporada: más XP y botín.", "Sezon bileti sahipleri için bölge: daha fazla XP ve ganimet.", "Zona para quem tem o passe da temporada: mais XP e drops."], "🔒 Вход только с билетом сезона. Билет даёт ×2 опыт, +60% к дропу и премиум-награды пропуска.": ["🔒 Entry with a season ticket only. The ticket gives ×2 XP, +60% drops and premium pass rewards.", "🔒 Вхід лише з квитком сезону. Квиток дає ×2 досвід, +60% до дропу й преміум-нагороди пропуску.", "🔒 Solo se entra con el pase de temporada. Da ×2 XP, +60% de botín y recompensas premium del pase.", "🔒 Giriş yalnızca sezon biletiyle. Bilet ×2 XP, +%60 ganimet ve premium bilet ödülleri verir.", "🔒 Entrada só com o passe da temporada. Ele dá ×2 XP, +60% de drops e recompensas premium do passe."], "Купить билет": ["Buy ticket", "Купити квиток", "Comprar pase", "Bilet satın al", "Comprar passe"], "Пропуск": ["Pass", "Пропуск", "Pase", "Bilet", "Passe"], "Уровень пропуска": ["Pass level", "Рівень пропуску", "Nivel del pase", "Bilet seviyesi", "Nível do passe"], "Уровень пропуска:": ["Pass level:", "Рівень пропуску:", "Nivel del pase:", "Bilet seviyesi:", "Nível do passe:"], "Опыт пропуска": ["Pass XP", "Досвід пропуску", "XP del pase", "Bilet XP", "XP do passe"], "опыта пропуска": ["pass XP", "досвіду пропуску", "XP del pase", "bilet XP", "XP do passe"], "Максимальный уровень пропуска": ["Max pass level", "Максимальний рівень пропуску", "Nivel máximo del pase", "Maksimum bilet seviyesi", "Nível máximo do passe"], "Опыт пропуска — за победы над врагами. Он открывает награды уровней и на рейтинг не влияет.": ["Pass XP comes from defeating enemies. It unlocks level rewards and does not affect the ranking.", "Досвід пропуску — за перемоги над ворогами. Він відкриває нагороди рівнів і не впливає на рейтинг.", "La XP del pase se gana venciendo enemigos. Desbloquea recompensas de nivel y no afecta a la clasificación.", "Bilet XP'si düşmanları yenerek kazanılır. Seviye ödüllerini açar, sıralamayı etkilemez.", "O XP do passe vem de derrotar inimigos. Ele libera recompensas de nível e não afeta o ranking."], "Очки сезона — за задания. По ним место в рейтинге и призы в USDT.": ["Season points come from tasks. They decide your ranking place and USDT prizes.", "Очки сезону — за завдання. За ними місце в рейтингу й призи в USDT.", "Los puntos de temporada se ganan con tareas. Deciden tu puesto en la clasificación y los premios en USDT.", "Sezon puanları görevlerden gelir. Sıralamadaki yerini ve USDT ödüllerini belirler.", "Os pontos da temporada vêm das tarefas. Eles definem sua posição no ranking e os prêmios em USDT."], "Место — по очкам сезона. Призы в USDT получают первые 20 пилотов.": ["Place is by season points. The top 20 pilots get USDT prizes.", "Місце — за очками сезону. Призи в USDT отримують перші 20 пілотів.", "El puesto depende de los puntos de temporada. Los 20 primeros pilotos reciben premios en USDT.", "Sıra sezon puanlarına göredir. İlk 20 pilot USDT ödülü alır.", "A posição é pelos pontos da temporada. Os 20 primeiros pilotos recebem prêmios em USDT."], "Задания, рейтинг и пропуск сезона": ["Season tasks, ranking and pass", "Завдання, рейтинг і пропуск сезону", "Tareas, clasificación y pase de temporada", "Sezon görevleri, sıralama ve bilet", "Tarefas, ranking e passe da temporada"]});
 }
 // первая (самая длинная) фраза из списка, которая стоит в s с позиции p целым словом и длиннее найденной best
 function trFirst(list, s, p, afterWord, best){
@@ -15733,6 +15775,620 @@ playerInfoSheet = function(o){
     closeSheet(); openChat(); openDm(nick);
   });
 }
+
+// ===================== «СОТРУДНИЧЕСТВО»: ЗАБЕГ ВДВОЁМ (как в LIBERTY) =====================
+// Группа из 2 пилотов — обычная пати с флагом coop: «Создать группу» открывает набор, группа видна в «Открытых группах»,
+// вступить может любой пилот 10+. Начать забег может только лидер: сервер (coop.py) тратит попытки (1 в день, сутки по Москве),
+// выдаёт паре свой зал coop1…coop8 и затягивает обоих (cp_go). Зал — входной холл и 9 залов змейкой: 8 этапов по 40 монстров
+// (ур. 10, 15, 20, 25, 30, 40, 50, 60) и зал босса, между ними энергобарьеры. Монстры общие (mobworld): прочность и смерть
+// считает сервер, он же открывает следующий барьер, когда этап зачищен и оба на месте («Дождитесь напарника»).
+// Босс 40 ур. «Сдвоенный Колосс» — титановая сфера и 100 энергоядер одному случайному из двоих. Смерть любого — конец забега.
+// Монстры этапа — как монстры «Страха» того же уровня (их прочность знает сервер: mobguard.py), стоят пачками по 4:
+// подошёл близко или ударил одного — бросается вся пачка. Моб сильнее пилота на 12+ уровней опыта и лута не даёт (как на сервере).
+const COOP = {MIN:10, SIZE:2, TRIES:1, SLOTS:8, PER:40, PACK:4, STAGES:[10, 15, 20, 25, 30, 40, 50, 60], BOSS_LV:40, BOSS_HP:40,
+  PRIZE:{item:"sph_ti", n:1, cores:100}, TIME:40, COLOR:"#5BD38A", AGGRO:150, ATK_CD:1.7, LVL_GAP:12};
+COOP.BOSS_IDX = COOP.STAGES.length*COOP.PER; COOP.BOSS_STAGE = COOP.STAGES.length + 1;
+// вид монстров этапа (как COOP_BASE в ledger.py) и их названия
+const COOP_BASE = ["scrap_crawler", "rogue_drone", "sentry_bot", "war_walker", "scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"];
+const COOP_NAMES = ["Патрульный Краулер", "Сторожевой Дрон", "Заградительный Страж", "Штурмовой Шагоход", "Таранный Краулер",
+  "Осадный Дрон", "Карательный Страж", "Опустошающий Шагоход"];
+const COOP_BOSS_NAME = "Сдвоенный Колосс";
+const coopHp = L => Math.round((20 + 14*L + 0.25*L*L)*0.5);           // как mob_hp("cw…") на сервере
+COOP.STAGES.forEach((L, s) => {
+  const base = COOP_BASE[s], b = NPCS[base], k = L - 1;
+  NPCS["cw" + L] = {name:COOP_NAMES[s], lvl:L, base, dungeon:true, coop:true, stage:s + 1,
+    hp:coopHp(L), atk:Math.max(1, Math.round((4 + 1.2*L + 0.01*L*L)*0.5)), def:Math.floor(L/3),
+    exp:Math.max(1, Math.round((5 + 3*k + 0.2*k*k)*0.5)), scrap:[L + 1, 2*L + 4],
+    color:b.color, r:b.r, speed:b.speed + 20 + Math.min(40, Math.floor(k/2)), range:b.range, ranged:b.ranged,
+    loot:Object.fromEntries(Object.entries(b.loot).map(([id, c]) => [id, +(c*0.6).toFixed(3)]))};
+});
+{ // босс: главарь подземелья 40 ур. с общей на двоих прочностью ×COOP.BOSS_HP (как mob_hp("cb40") на сервере)
+  const m = NPCS["dg" + COOP.BOSS_LV];
+  NPCS["cb" + COOP.BOSS_LV] = {...m, name:COOP_BOSS_NAME, boss:true, coop:true, coopBoss:true, stage:COOP.BOSS_STAGE,
+    hp:m.hp*COOP.BOSS_HP, atk:Math.round(m.atk*2.4), def:Math.round(m.def*1.5), exp:m.exp*15,
+    scrap:[m.scrap[0]*10, m.scrap[1]*10], r:Math.round(m.r*BOSS_SCALE*1.25), speed:Math.round(m.speed*0.8), range:110, ranged:false};
+}
+const coopLoc = k => typeof k === "string" && /^coop[1-9]$/.test(k) && !!LOCS[k];
+// залы: как элитная зона (подписи пачек, «Выход из зоны», нет в админском телепорте), без PvP, гибель без ремонта
+for(let i = 1; i <= COOP.SLOTS; i++){
+  LOCS["coop" + i] = {name:"Сотрудничество", min:COOP.MIN, dungeon:true, named:true, hidden:true, elite:true, coop:true, nopvp:true, noLoss:true,
+    levels:"10–60", ground:"#0B1512", npcs:[], count:0};
+  DUNGEONS["coop" + i] = {shape:"coop"};
+  AMB["coop" + i] = {tint:"rgba(91,211,138,.045)", kind:"rad", n:28, c:["#9CF5C0", "#5FD4E8"]};
+}
+TILE_PAL.coop = ["#22302E", "#1D2927", "#2A3B38", "#16201E"];
+TILE_PAL.coopc = ["#1F2A2B", "#1A2425", "#263334", "#141C1D"];
+
+// ---- карта: входной холл внизу слева и 9 залов змейкой (3 ряда по 3), между залами — коридоры с барьерами ----
+const CPL = {rw:600, rh:480, gap:150, corr:120, x0:100, y0:120, W:2300, H:2380,
+  hall:{x:190, y:2010, w:420, h:260}, spawn:{x:400, y:2125}, portal:{x:400, y:2228},
+  order:[[2, 0], [2, 1], [2, 2], [1, 2], [1, 1], [1, 0], [0, 0], [0, 1], [0, 2]]};   // [ряд, колонка] залов 1…8 и зала босса
+const cpRoomXY = (row, col) => ({x:CPL.x0 + col*(CPL.rw + CPL.gap), y:CPL.y0 + row*(CPL.rh + CPL.gap)});
+let cpRooms = [], cpGates = [];
+function coopLayout(){
+  const h = CPL.hall;
+  dgRects.push({x:h.x, y:h.y, w:h.w, h:h.h, hall:true});
+  cpRooms = []; cpGates = [];
+  CPL.order.forEach(([row, col], j) => {
+    const {x, y} = cpRoomXY(row, col), boss = j === COOP.STAGES.length;
+    const rm = {x, y, w:CPL.rw, h:CPL.rh, room:true, kind:"big", n:boss ? 1 : COOP.PER, cx:x + CPL.rw/2, cy:y + CPL.rh/2, noBoss:true,
+      coopStage:j + 1, boss, lv:boss ? COOP.BOSS_LV : COOP.STAGES[j], name:boss ? "Зал босса" : "Этап " + (j + 1)};
+    dgRects.push(rm); dgRooms.push(rm); cpRooms.push(rm);
+  });
+  // коридор k ведёт в зал k+1 (из холла — в первый); барьер — посередине коридора
+  const c = CPL.corr, hc = c/2;
+  for(let k = 0; k < cpRooms.length; k++){
+    const to = cpRooms[k], from = k ? cpRooms[k - 1] : {x:h.x, y:h.y, w:h.w, h:h.h, cx:h.x + h.w/2, cy:h.y + h.h/2};
+    let corr, gate, door;
+    if(Math.abs(from.cy - to.cy) < 1){                                          // по горизонтали
+      const right = from.cx < to.cx, x1 = right ? from.x + from.w : to.x + to.w, x2 = right ? to.x : from.x;
+      corr = {x:x1 - 10, y:to.cy - hc, w:x2 - x1 + 20, h:c, corr:true, door:true};
+      gate = {k, x:(x1 + x2)/2 - 7, y:to.cy - hc, w:14, h:c, v:true};
+      door = {x:right ? to.x : to.x + to.w, y:to.cy};
+    } else {                                                                     // по вертикали (снизу вверх)
+      const y1 = to.y + to.h, y2 = from.y;
+      corr = {x:to.cx - hc, y:y1 - 10, w:c, h:y2 - y1 + 20, corr:true, door:true};
+      gate = {k, x:to.cx - hc, y:(y1 + y2)/2 - 7, w:c, h:14, v:false};
+      door = {x:to.cx, y:to.y + to.h};
+    }
+    dgRects.push(corr); cpGates.push(gate); to.door = door;
+  }
+}
+{ const _dgLayoutCp = dgLayout;
+  dgLayout = function(key){
+    if(!coopLoc(key)) return _dgLayoutCp(key);
+    dgKey = key; dgRects = []; dgRooms = []; dgMarks = [];
+    coopLayout();
+  }; }
+// пачки по 4: места одинаковы у всех телефонов (своё зерно на этап, не зависит от номера зала)
+function coopPacks(rm, s){
+  const rng = seeded(52021 + s*977), centers = [], pad = 85, n = COOP.PER/COOP.PACK;
+  for(let t = 0; centers.length < n && t < 6000; t++){
+    const x = rm.x + pad + rng()*(rm.w - 2*pad), y = rm.y + pad + rng()*(rm.h - 2*pad);
+    if(Math.hypot(x - rm.door.x, y - rm.door.y) < 210) continue;                // у входа в зал — свободно
+    if(centers.every(([a, b]) => Math.hypot(a - x, b - y) >= (t < 4000 ? 140 : 110))) centers.push([x, y]);
+  }
+  while(centers.length < n) centers.push([rm.cx + (centers.length % 3 - 1)*120, rm.cy + (Math.floor(centers.length/3) % 3 - 1)*110]);
+  const out = [];
+  centers.forEach(([cx, cy], j) => { for(let q = 0; q < COOP.PACK; q++){
+    const a = q/COOP.PACK*Math.PI*2 + rng()*0.6, r = 30 + rng()*12;
+    out.push({x:cx + Math.cos(a)*r, y:cy + Math.sin(a)*r*0.8, pack:s*100 + j}); } });
+  return out;
+}
+{ const _bdCp = buildDungeon;
+  buildDungeon = function(key){
+    if(!coopLoc(key)) return _bdCp(key);
+    dgLayout(key);
+    W = CPL.W; H = CPL.H; rocks = [];
+    npcs = [{kind:"back", x:CPL.portal.x, y:CPL.portal.y}];
+    // номер моба = этап*40 + место; босс — последний (COOP.BOSS_IDX), как coop.mob_type на сервере
+    COOP.STAGES.forEach((L, s) => {
+      const rm = cpRooms[s], type = "cw" + L, k = NPCS[type];
+      for(const m of coopPacks(rm, s)) enemies.push({type, x:m.x, y:m.y, hx:m.x, hy:m.y, tx:m.x, ty:m.y, hp:k.hp, max:k.hp, cd:0.6, ang:Math.PI/2,
+        chase:false, dead:true, respawn:Infinity, flash:0, wanderT:0, lunge:0, room:rm, pack:m.pack, cpStage:s + 1, cpKilled:false});
+    });
+    const brm = cpRooms[COOP.STAGES.length], bt = "cb" + COOP.BOSS_LV, bk = NPCS[bt];
+    enemies.push({type:bt, x:brm.cx, y:brm.cy - 20, hx:brm.cx, hy:brm.cy - 20, tx:brm.cx, ty:brm.cy - 20, hp:bk.hp, max:bk.hp, cd:1.2, ang:Math.PI/2,
+      chase:false, dead:true, respawn:Infinity, flash:0, wanderT:0, lunge:0, room:brm, boss:true, cpStage:COOP.BOSS_STAGE, cpKilled:false});
+    enemies.forEach((e, i) => e.idx = i);
+    const pt = cpParty(), sx = CPL.spawn.x + (!pt || typeof NET === "undefined" || pt.leader === NET.id ? -70 : 70);
+    CPZ.seen = -1; CPZ.puffs = []; CPZ.okX = sx; CPZ.okY = CPL.spawn.y; CPZ.inT = now; CPZ.hideTag = true;
+    if(CPZ.run && CPZ.run.loc === key) setTimeout(coopApply, 0);
+    return {x:sx, y:CPL.spawn.y};
+  }; }
+
+// ---- состояние ----
+const CP = {st:null, pollT:0, sig:""};           // окно события: попытки, группы (сервер: {"t":"coop"})
+const CPZ = {run:null, runT:0, pass:0, end:null, seen:-1, puffs:[], okX:0, okY:0, warn:0, inT:0, homeT:0, stageT:0, wave:{slot:-1, hit:false}};
+const cpSend = o => netSend({t:"coop", ...o});
+const cpNet = () => typeof NET !== "undefined" && NET.on && NET.ws && NET.ws.readyState === 1;
+const cpLvOk = () => !!window.NET_ADMIN || S.level >= COOP.MIN;
+const cpLeft = () => CP.st ? Math.max(0, +CP.st.left || 0) : COOP.TRIES;
+const cpParty = () => typeof NET !== "undefined" && NET.party ? NET.party : null;
+const cpStage = () => CPZ.run && CPZ.run.loc === locKey ? +CPZ.run.stage || 0 : 0;
+const cpFight = () => !!(CPZ.run && CPZ.run.loc === locKey && CPZ.run.phase === "fight");
+const cpLeftMs = () => CPZ.run ? Math.max(0, (+CPZ.run.left || 0) - (performance.now() - CPZ.runT)) : 0;
+const cpTimeMs = () => CPZ.run ? Math.max(0, (+CPZ.run.tl || 0) - (CPZ.run.stage > 0 && CPZ.run.phase !== "done" ? performance.now() - CPZ.runT : 0)) : 0;
+const cpBoss = () => coopLoc(locKey) ? enemies[COOP.BOSS_IDX] || null : null;
+const mmss = ms => { const s = Math.ceil(ms/1000); return Math.floor(s/60) + ":" + String(s % 60).padStart(2, "0"); };
+const COOP_ICON = `<svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 57,17.5 57,46.5 32,61 7,46.5 7,17.5" fill="#0F2219" stroke="#5BD38A" stroke-width="2.6" stroke-linejoin="round"/>
+  <polygon points="32,10 51,21 51,43 32,54 13,43 13,21" fill="none" stroke="#5BD38A" stroke-opacity=".35" stroke-width="1.2"/>
+  <circle cx="26" cy="25" r="6.2" fill="none" stroke="#8FF0B4" stroke-width="2.6"/><path d="M15 44.5c0-6.6 4.9-11 11-11s11 4.4 11 11" fill="none" stroke="#8FF0B4" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="39.5" cy="23.5" r="5.2" fill="none" stroke="#5BD38A" stroke-width="2.4"/><path d="M40 31.4c5.3.3 9.3 4.2 9.3 9.9" fill="none" stroke="#5BD38A" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+function coopPill(){
+  return !cpLvOk() ? `<i class="ev-live off">С ${COOP.MIN} ур.</i>` : cpLeft() < 1 && !window.NET_ADMIN ? `<i class="ev-live off">Нет попыток</i>` : `<i class="ev-live">Можно начать</i>`;
+}
+
+// ---- окно события (как в эталоне): статус, попытки, кнопка, своя группа, открытые группы, правила, этапы, награда ----
+function cpDyn(){
+  const pt = cpParty(), me = typeof NET !== "undefined" ? NET.id : null, lead = !!pt && pt.leader === me, n = pt ? pt.members.length : 0;
+  const net = cpNet(), lv = cpLvOk(), left = cpLeft(), st = CP.st || {}, my = st.my || null, adm = !!window.NET_ADMIN;
+  const inRun = !!st.run || coopLoc(locKey), coopPt = !!(pt && pt.coop);
+  const mLeft = id => my && my.left && my.left[id] !== undefined ? +my.left[id] : 1;
+  const ready = !!pt && pt.members.every(m => m.online && ((+m.lvl || 1) >= COOP.MIN || adm) && (mLeft(m.id) > 0 || adm));
+  const pill = !lv ? `<i class="fr-st no">С ${COOP.MIN} уровня</i>` : !net ? `<i class="fr-st no">Нужна связь с сервером</i>`
+    : left < 1 && !adm ? `<i class="fr-st no">Попытки закончились</i>` : `<i class="fr-st ok">Можно начать</i>`;
+  const sub = inRun ? "Идёт забег" : !lv ? `Доступно с ${COOP.MIN} уровня` : left < 1 && !adm ? "Новые попытки — в 00:00 МСК"
+    : coopPt && n === COOP.SIZE && !ready ? `Не все готовы: нужен ${COOP.MIN} уровень, попытка и быть в сети`
+    : coopPt && n === COOP.SIZE ? (lead ? "Группа в сборе — начинайте забег" : "Группа в сборе — забег начинает лидер") : "Войдите, чтобы начать";
+  let btn;
+  const can = net && lv && (left >= 1 || adm);
+  if(inRun && st.run && !coopLoc(locKey)) btn = `<button class="fr-go gold cp-go" type="button" data-cp-back="${esc(st.run)}">Вернуться в забег</button>`;
+  else if(inRun) btn = `<button class="fr-go" type="button" disabled>Идёт забег</button>`;
+  else if(!pt) btn = `<button class="fr-go" type="button" data-cp="create" ${can ? "" : "disabled"}>Создать группу</button>`;
+  else if(n > COOP.SIZE) btn = `<button class="fr-go" type="button" disabled>В пати ${n} пилота — нужно ровно ${COOP.SIZE}</button>`;
+  else if(!lead) btn = `<button class="fr-go" type="button" disabled>Ждём лидера · ${n}/${COOP.SIZE}</button>`;
+  else if(!coopPt) btn = `<button class="fr-go" type="button" data-cp="create" ${can ? "" : "disabled"}>Создать группу</button>`;
+  else if(n === COOP.SIZE || adm) btn = `<button class="fr-go gold cp-go" type="button" data-cp="enter" ${net && (ready || adm) ? "" : "disabled"}>Начать забег</button>`;
+  else if(!(my && my.open)) btn = `<button class="fr-go" type="button" data-cp="create" ${can ? "" : "disabled"}>Открыть набор в группу</button>`;
+  else btn = `<button class="fr-go" type="button" disabled>Ждём напарника · ${n}/${COOP.SIZE}</button>`;
+  const mine = pt ? `<div class="el-sec">Моя группа <em>${n}/${COOP.SIZE}${my && my.open ? " · набор открыт" : ""}</em></div>
+    <div class="el-mine">${pt.members.map(m => { const C = CLASSES[m.cls], ok = (+m.lvl || 1) >= COOP.MIN, tr = mLeft(m.id) > 0;
+      return `<div class="el-m"><span class="el-mn" data-notr style="color:${C ? C.color : "#E4DED1"}">${m.id === pt.leader ? "★ " : ""}${esc(m.nick)}</span>
+        <span class="el-ml ${ok ? "" : "bad"}">${+m.lvl || 1} ур.${ok ? "" : " · нужен " + COOP.MIN}</span>${tr ? "" : `<span class="el-ml bad">нет попытки</span>`}${m.online ? "" : `<span class="el-ml bad">не в сети</span>`}</div>`; }).join("")}
+      ${Array.from({length:Math.max(0, COOP.SIZE - n)}, () => `<div class="el-m empty"><span>Свободное место</span></div>`).join("")}</div>
+    ${inRun ? "" : `<button class="btn wide el-leave" type="button" data-cp="leave">Покинуть группу</button>`}` : "";
+  const open = (st.open || []).filter(g => !pt || g.pid !== pt.id), canJoin = can && !pt && !inRun;
+  const list = open.length ? open.map(g => `<div class="el-g"><div class="el-gt"><b data-notr>★ ${esc(g.leader)}</b><small>${g.lvl} ур. · ${g.members.map(m => `<i style="background:${CLASSES[m.cls] ? CLASSES[m.cls].color : "#93A0AC"}"></i>`).join("")}</small></div>
+      <span class="el-gn">${g.n}/${COOP.SIZE}</span><button class="act" type="button" data-cp-join="${esc(g.pid)}" ${canJoin ? "" : "disabled"}>Вступить</button></div>`).join("")
+    : `<p class="el-none">${net ? "Открытых групп пока нет" : "Список групп появится, когда будет связь с сервером"}</p>`;
+  return `<div class="fr-head"><div class="fr-ic">${COOP_ICON}</div><div class="fr-tx"><b>Сотрудничество</b><small>Совместное прохождение вдвоём</small>${pill}</div></div>
+    <div class="fr-tries"><small>Попыток на сегодня</small><b>${adm ? COOP.TRIES : left}/${COOP.TRIES}</b><span>${sub}</span></div>
+    ${btn}${mine}<div class="el-sec">Открытые группы</div><div class="el-open">${list}</div>
+    <div class="fr-grid"><div><small>Уровень</small><b>${COOP.MIN}+</b></div><div><small>Когда</small><b>Доступно всегда</b></div>
+      <div><small>Игроки</small><b>${COOP.SIZE}</b></div><div><small>Попытки</small><b>${adm ? COOP.TRIES : left}/${COOP.TRIES}</b></div></div>`;
+}
+function cpStagesHtml(){
+  const cells = COOP.STAGES.map((L, s) => `<div class="cp-st"><i>${s + 1}</i><div><b>Этап ${s + 1}</b><small>${COOP.PER} монстров · ур. ${L}</small></div></div>`).join("");
+  return `<div class="cp-stages">${cells}<div class="cp-st boss"><i>☠</i><div><b>${COOP_BOSS_NAME}</b><small>Босс · ур. ${COOP.BOSS_LV}</small></div></div></div>`;
+}
+function renderCoop(){
+  CP.sig = "";
+  const pz = COOP.PRIZE;
+  body().innerHTML = `<section class="fr el cp" style="--c:${COOP.COLOR}"><div id="cpDyn">${cpDyn()}</div>
+    <h4 class="fr-how">Как это работает</h4>
+    <ol class="fr-steps"><li>Создайте группу или войдите в чужую — начать забег может только лидер группы</li>
+      <li>Только с ${COOP.MIN} уровня</li>
+      <li>Одна попытка в день, тратится при входе</li>
+      <li>${COOP.STAGES.length} этапов по ${COOP.PER} монстров, уровень растёт: ${COOP.STAGES.join(", ")}</li>
+      <li>Монстры общие на двоих: следующий этап открывается, только когда вы вдвоём зачистите текущий</li>
+      <li>В конце — общий босс ${COOP.BOSS_LV} уровня: 1 титановая сфера (безопасная заточка) и ${pz.cores} энергоядер одному случайному пилоту</li>
+      <li>Смерть любого из двоих завершает забег для обоих</li>
+      <li>Если вход сорвался или связь оборвалась до первого этапа — попытка вернётся</li>
+      <li>На забег — ${COOP.TIME} минут</li></ol>
+    <h4 class="fr-how">Этапы</h4>${cpStagesHtml()}
+    <h4 class="fr-how">Награда за босса</h4><p class="hint el-dh">Достаётся одному из двоих по жребию — в итогах забега видно, кому и что выдано</p>
+    <div class="el-drops cp-prize"><div class="el-drop"><span class="el-di">${icon(pz.item)}</span><span class="el-dn" style="color:#8FD8F0">${ITEMS[pz.item].name}</span><b style="color:#8FD8F0">×${pz.n}</b></div>
+      <div class="el-drop"><span class="el-di">${coreIcon("ci-m")}</span><span class="el-dn" style="color:#5FD4E8">Энергоядра</span><b style="color:#5FD4E8">+${pz.cores}</b></div>
+</div>
+    <p class="hint el-dh">Опыт и добыча с каждого монстра — тому из двоих, кто нанёс ему больше урона. Монстр сильнее тебя на ${COOP.LVL_GAP}+ уровней опыта и добычи не даёт.</p></section>
+    <button class="btn wide" type="button" data-evback="1">← Все события</button>`;
+}
+function cpRefresh(){
+  const box = document.getElementById("cpDyn"); if(!box || sheetRender !== renderCoop) return;
+  const h = cpDyn(); if(h !== CP.sig){ CP.sig = h; box.innerHTML = h; }
+}
+function openCoop(){ openSheet("События", "Регулярные активности", renderCoop); cpSend({op:"state"}); }
+setInterval(() => {                       // пока открыто окно — состояние раз в 2 с
+  if(sheetRender !== renderCoop || !cpNet()) return;
+  if(performance.now() - CP.pollT > 2000){ CP.pollT = performance.now(); cpSend({op:"state"}); }
+  cpRefresh();
+}, 500);
+{ const _openEventsCp = openEvents;
+  openEvents = function(){ const r = _openEventsCp.apply(this, arguments); if(cpNet()) cpSend({op:"state"}); return r; }; }
+$("shBody").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b || b.disabled) return;
+  if(b.dataset.cp){ b.disabled = true; if(!cpSend({op:b.dataset.cp})) toast("Нет связи с сервером"); Sfx.play("ui"); }
+  else if(b.dataset.cpJoin){ b.disabled = true; cpSend({op:"join", pid:b.dataset.cpJoin}); Sfx.play("ui"); }
+  else if(b.dataset.cpBack && coopLoc(b.dataset.cpBack)){ CPZ.pass = performance.now(); closeSheet(); showTab("game"); travel(b.dataset.cpBack); }
+  else if(b.dataset.cpquit){ cpSend({op:"quit"}); closeSheet(); travel("lobby"); }
+  else if(b.dataset.cpres){ closeSheet(); }
+});
+
+// ---- вход и выход: в зал — только по сигналу сервера (cp_go), выход через портал — конец забега для обоих ----
+{ const _trCp = travel;
+  travel = function(key){
+    if(coopLoc(key) && key !== locKey && !(CPZ.pass && performance.now() - CPZ.pass < 8000)){
+      toast("В зал «Сотрудничества» группу заводит лидер: События → Сотрудничество"); return; }
+    if(coopLoc(key)) CPZ.pass = 0;
+    return _trCp(key);
+  }; }
+{ const _openBackCp = openBackPortal;
+  openBackPortal = function(){
+    if(!coopLoc(locKey)) return _openBackCp();
+    const r = CPZ.run, before = !r || !(+r.stage > 0), over = r && r.phase === "done";
+    openSheet("Выход из зала", "Сотрудничество", () => {
+      $("shBody").innerHTML = `<p class="hint">${over ? "Забег окончен — можно возвращаться в ангар." : before ? "Забег ещё не начался: если уйти сейчас, попытка вернётся обоим." : "Забег закончится для обоих, а попытка не вернётся."}</p>
+        <button class="btn pri wide" type="button" data-cpquit="1">${over ? "Вернуться в ангар" : "Покинуть забег"}</button>`;
+    });
+  }; }
+
+// ---- сообщения сервера ----
+function coopApply(){
+  // какие мобы видны: этап открыт и моб не убит; новый этап — вспышки, из которых выходят монстры
+  if(!coopLoc(locKey)) return;
+  const cur = cpStage(), fresh = cur > CPZ.seen && CPZ.seen >= 0 && (performance.now() - (CPZ.stageT || 0)) < 4000;
+  for(const e of enemies){
+    if(!e.cpStage) continue;
+    const show = e.cpStage <= cur && !e.cpKilled && !(e.cpStage === COOP.BOSS_STAGE && cur < COOP.BOSS_STAGE);
+    if(show && e.dead){ const k = NPCS[e.type]; Object.assign(e, {dead:false, x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:Math.max(1, Math.min(k.hp, e.cpHp ?? k.hp)), max:k.hp, chase:false, cd:0.8, pend:0, owner:0, rx:null, ry:null});
+      if(fresh || e.cpStage === cur) CPZ.puffs.push({x:e.x, y:e.y, life:.5, max:.5, boss:!!k.coopBoss}); }
+    else if(!show && !e.dead){ e.dead = true; e.chase = false; }
+    if(e.dead) e.respawn = Infinity;
+  }
+  if(cur > CPZ.seen) CPZ.seen = cur;
+}
+{ const _onNetCp = onNetExtra;
+  onNetExtra = function(d){
+    if(!d) return _onNetCp(d);
+    if(d.t === "coop"){ CP.st = d; if(sheetRender === renderCoop) cpRefresh();
+      const pill = document.querySelector('.evcard[data-ev="coop"] .ev-live'); if(pill) pill.outerHTML = coopPill(); return; }
+    if(d.t === "cp_go" && coopLoc(d.loc)){
+      if(locKey === d.loc) return;
+      CPZ.pass = performance.now(); CPZ.end = null; CPZ.run = null; if(sheetRender) closeSheet(); showTab("game");
+      toast("👥 Лидер ведёт группу в зал «Сотрудничества»"); travel(d.loc); return;
+    }
+    if(d.t === "cprun"){
+      const prev = CPZ.run, wasStage = prev && prev.loc === d.loc ? +prev.stage || 0 : 0;
+      CPZ.run = d; CPZ.runT = performance.now();
+      if(d.loc !== locKey && d.phase !== "done" && coopLoc(d.loc) && p && !p.dead && !(CPZ.pass && performance.now() - CPZ.pass < 4000)){
+        CPZ.pass = performance.now(); if(sheetRender) closeSheet(); showTab("game"); toast("👥 Возвращение в забег «Сотрудничества»"); travel(d.loc); return;
+      }
+      if(d.loc === locKey){
+        if(+d.stage > wasStage && d.phase === "fight"){ CPZ.stageT = performance.now(); coopStageStart(+d.stage); }
+        coopApply();
+      }
+      return;
+    }
+    if(d.t === "cpend"){ coopEnd(d); return; }
+    // общие мобы зала: убитые не возрождаются, «снимок» при входе отмечает убитых и не воскрешает скрытых (этап закрыт)
+    if((d.t === "mdie" || d.t === "mstate") && coopLoc(d.loc) && d.loc === locKey){
+      if(d.t === "mdie"){ const e = enemies[d.i]; const r = _onNetCp(d); if(e && e.idx === d.i){ e.cpKilled = true; e.respawn = Infinity; } return r; }
+      const dead = new Set((d.dead || []).map(x => x[0]));
+      for(const e of enemies){ if(e.idx == null) continue; if(dead.has(e.idx)){ e.cpKilled = true; e.dead = true; e.chase = false; e.respawn = Infinity; } }
+      for(const [i, hp, max] of d.hp || []){ const e = enemies[i]; if(!e) continue; e.cpHp = hp; if(!e.dead){ e.max = max; e.hp = Math.min(e.hp, hp); } }
+      for(const [i, uid, x, y] of d.own || []){ const e = enemies[i]; if(e && !e.dead && uid !== NET.id){ e.owner = uid; e.x = e.rx = x; e.y = e.ry = y; } }
+      coopApply(); return;
+    }
+    if(d.t === "mres" && coopLoc(d.loc)) return;                     // в зале забега мобы не возрождаются
+    return _onNetCp(d);
+  }; }
+function coopStageStart(s){
+  Sfx.play("portal");
+  if(s === COOP.BOSS_STAGE) toast("☠ Барьер пал: " + COOP_BOSS_NAME + " ждёт в последнем зале!");
+  else toast("⚔ Этап " + s + " из " + COOP.STAGES.length + " · монстры " + COOP.STAGES[s - 1] + " уровня");
+}
+function coopEnd(d){
+  CPZ.end = d; if(CPZ.run && CPZ.run.loc === d.loc){ CPZ.run.phase = "done"; CPZ.run.left = d.win ? 15000 : 3000; CPZ.runT = performance.now();
+    CPZ.run.result = {win:!!d.win, reason:d.reason, prize:d.prize || null, stage:d.stage}; CPZ.run.wait = false; }
+  const mine = d.prize && typeof NET !== "undefined" && d.prize.uid === NET.id;
+  if(d.win){ Sfx.play("level"); toast("👑 " + COOP_BOSS_NAME + " повержен! Награда по жребию: " + (d.prize ? d.prize.nick : "—") + (mine ? " — это ты!" : "")); }
+  else { Sfx.play("hit"); toast(String(d.text || "Забег окончен").slice(0, 80)); }
+  CP.st = null;                                                  // попытки и группа — заново с сервера
+  if(!coopLoc(locKey)) coopResultSheet();                        // итоги — сразу, если уже в ангаре; иначе — по возвращении
+  else if(!d.win && p && !p.dead) setTimeout(() => { if(coopLoc(locKey) && p && !p.dead) travel("lobby"); }, 1200);
+}
+function coopResultSheet(){
+  const d = CPZ.end; if(!d || d.shown) return; d.shown = true;
+  const pz = d.prize, mine = pz && typeof NET !== "undefined" && pz.uid === NET.id, stages = COOP.STAGES.length;
+  openSheet("Сотрудничество", "Итоги забега", () => {
+    body().innerHTML = `<div class="ench-run done cp-res ${d.win ? "ok" : "fail"}"><div class="ench-mark">${d.win ? "✓" : "✕"}</div>
+      <h3>${d.win ? "Победа!" : "Забег окончен"}</h3><p>${esc(String(d.text || ""))}</p>
+      <div class="cp-res-st">Пройдено этапов: <b>${Math.min(stages, +d.stage || 0)} из ${stages}</b></div>
+      ${pz ? `<div class="cp-res-pz"><small>🎲 Награда по жребию</small><b data-notr>${esc(pz.nick)}</b>${mine ? `<em>Это ты!</em>` : ""}
+        <div class="el-drop"><span class="el-di">${icon(pz.item)}</span><span class="el-dn" style="color:#8FD8F0">${ITEMS[pz.item] ? ITEMS[pz.item].name : pz.item}</span><b style="color:#8FD8F0">×${pz.n}</b></div>
+        <div class="el-drop"><span class="el-di">${coreIcon("ci-m")}</span><span class="el-dn" style="color:#5FD4E8">Энергоядра</span><b style="color:#5FD4E8">+${pz.cores}</b></div></div>` : ""}
+      ${d.refund ? `<p class="hint">Попытка возвращена — можно попробовать ещё раз сегодня.</p>` : ""}
+      <button class="btn pri wide" type="button" data-cpres="1">Закрыть</button></div>`;
+  });
+}
+// вернулись в ангар после забега — показываем итоги
+setInterval(() => { if(CPZ.end && !CPZ.end.shown && !coopLoc(locKey) && locKey === "lobby" && p && !p.dead && !sheetRender) coopResultSheet(); }, 700);
+
+// ---- в зале: барьеры, пачки, сила монстров, моб «ждёт сервер», возврат после победы ----
+const cpGateOpen = g => { const r = CPZ.run; return !!r && r.loc === locKey && (+r.stage || 0) >= g.k + 1; };
+const cpHitGate = (x, y, rad) => cpGates.find(g => !cpGateOpen(g) && x + rad > g.x && x - rad < g.x + g.w && y + rad > g.y && y - rad < g.y + g.h);
+function cpCrossGate(x0, y0, x1, y1, rad){                     // путь от прошлой точки задевает закрытый барьер
+  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)/6));
+  for(let i = 1; i <= n; i++){ const g = cpHitGate(x0 + (x1 - x0)*i/n, y0 + (y1 - y0)*i/n, rad); if(g) return g; }
+  return null;
+}
+{ const _ggCp = guardGate;
+  guardGate = function(){
+    _ggCp();
+    if(!coopLoc(locKey) || !p) return;
+    const g = cpCrossGate(CPZ.okX, CPZ.okY, p.x, p.y, p.r*0.8);
+    if(!g){ CPZ.okX = p.x; CPZ.okY = p.y; return; }
+    p.x = CPZ.okX; p.y = CPZ.okY; p.dashT = 0; p.vx = p.vy = 0;
+    if(now > CPZ.warn){ CPZ.warn = now + 2.5; Sfx.play("hit");
+      toast(g.k === 0 ? "Барьер откроется, когда начнётся забег" : g.k === COOP.STAGES.length ? "Барьер к боссу откроется после этапа " + COOP.STAGES.length : "Барьер откроется, когда вы вдвоём зачистите этап " + g.k); }
+  }; }
+{ const _hitCp = hitEnemy;
+  hitEnemy = function(e, dmg, kind){
+    if(e && e.cpStage && coopLoc(locKey) && (!cpFight() || e.cpStage !== cpStage())) return;     // закрытый этап — удар не проходит
+    return _hitCp(e, dmg, kind);
+  }; }
+// моб сильнее пилота на 12+ уровней: сервер не засчитает убийство (items.process_kills) — у себя тоже без опыта и лута
+{ const _killCp = killEnemy;
+  killEnemy = function(e){
+    const k = e && NPCS[e.type];
+    if(e && k && k.coop && coopLoc(locKey) && !window.NET_ADMIN && (k.lvl || 1) > S.level + COOP.LVL_GAP && (e._srv || !shOn())){
+      e._srv = false; e.dead = true; e.respawn = Infinity; e.pend = 0; Sfx.play("kill");     // убит ли он на сервере — скажет mdie
+      if(p && p.target === e) p.target = null;
+      if(now > (CPZ.gapT || 0)){ CPZ.gapT = now + 6; addText(e.x, e.y - 34, "сильнее тебя на " + COOP.LVL_GAP + "+ ур.: без награды", "#93A0AC"); }
+      return;
+    }
+    const r = _killCp(e);
+    if(e && e.cpStage && coopLoc(locKey) && e.dead){ e.respawn = Infinity; }
+    return r;
+  }; }
+// разница уровней — как в «Страхе»: монстр ниже пилота бьёт слабее (−8% за уровень), выше — сильнее (+4%, до +50%)
+const coopDmgK = (lv, boss) => { const d = S.level - lv; return d >= 0 ? Math.max(boss ? 0.6 : 0.1, 1 - 0.08*d) : Math.min(1.5, 1 - 0.04*d); };
+{ const _hurtCp = hurtPlayer;
+  hurtPlayer = function(dmg, by, src){
+    const k = src && NPCS[src.type];
+    if(k && k.coop && coopLoc(locKey) && !(p && p._pvpHit)){ const v = dmg*coopDmgK(k.lvl, k.coopBoss); dmg = Math.floor(v) + (Math.random() < v % 1 ? 1 : 0); if(dmg <= 0) return; }
+    const was = p && p.dead, r = _hurtCp(dmg, by, src);
+    if(!was && p && p.dead && coopLoc(locKey)){ const sm = $("death").querySelector(".death-box small"); if(sm) sm.textContent = "забег окончен для обоих · возврат в ангар…"; }
+    return r;
+  }; }
+{ const _updCp = updateEnemies;
+  updateEnemies = function(dt, st){
+    if(!coopLoc(locKey)) return _updCp(dt, st);
+    const fight = cpFight(), cur = cpStage(), me = typeof NET !== "undefined" ? NET.id : 0;
+    for(const e of enemies){
+      if(!e.cpStage) continue;
+      if(e.dead){ e.respawn = Infinity; continue; }                    // убитые и скрытые не возвращаются
+      e._hp0 = e.hp;
+      if(e.pend && now - e.pend > 0.9) e.pend = now;                    // ждём решения сервера, а не «убиваем у себя»
+      // пачка бросается, если подойти близко (по прямой видимости) — только монстры открытого этапа
+      if(fight && e.cpStage === cur && !e.chase && (!e.owner || e.owner === me) && p && !p.dead && !NPCS[e.type].coopBoss){
+        const d = Math.hypot(e.x - p.x, e.y - p.y);
+        if(d < COOP.AGGRO + NPCS[e.type].r && los(e.x, e.y, p.x, p.y)) for(const o of enemies) if(o.pack === e.pack && !o.dead && !o.chase && (!o.owner || o.owner === me)) o.chase = true;
+      }
+      if(fight && NPCS[e.type].coopBoss && !e.chase && (!e.owner || e.owner === me) && p && !p.dead && canReach(e)) e.chase = true;   // в зале босса он бросается сам
+    }
+    const r = _updCp(dt, st);
+    for(const e of enemies){
+      if(!e.cpStage || e.dead) continue;
+      if(e._hp0 != null && e.hp > e._hp0 && !e.chase) e.hp = e._hp0;    // монстры забега не лечатся (как на сервере)
+      if(!NPCS[e.type].coopBoss){ if(e.cd > (e._cd ?? 0) + 0.5) e.cd *= COOP.ATK_CD; e._cd = e.cd; }   // толпа бьёт реже
+    }
+    for(const f of CPZ.puffs) f.life -= dt; CPZ.puffs = CPZ.puffs.filter(f => f.life > 0);
+    coopBossWave(dt);
+    return r;
+  }; }
+// ---- босс: «Сейсмический удар» — каждые 8 с (при прочности ниже 40% — каждые 5 с) кольцо 210 px вокруг Колосса;
+// за 1,2 с до удара на полу вспыхивает круг — успей выйти. Расписание по часам — одинаковое у обоих телефонов.
+const CP_WAVE = {R:210, TELE:1.2, PCT:0.3};
+const cpWavePeriod = b => b && b.hp < b.max*0.4 ? 5000 : 8000;
+function coopBossWave(){
+  const b = cpBoss(); if(!b || b.dead || !cpFight() || cpStage() !== COOP.BOSS_STAGE || !(b.chase || b.owner || b.hp < b.max)){ CPZ.wave.on = false; CPZ.wave.armed = false; return; }
+  const per = cpWavePeriod(b), t = Date.now(), slot = Math.floor(t/per), into = (t % per)/1000, tl = per/1000 - into;
+  CPZ.wave.on = true; CPZ.wave.k = tl <= CP_WAVE.TELE ? 1 - tl/CP_WAVE.TELE : 0; CPZ.wave.x = b.x; CPZ.wave.y = b.y;
+  if(CPZ.wave.slot !== slot){                                   // начался новый круг: удар прошлого — уже был
+    if(CPZ.wave.slot >= 0 && CPZ.wave.armed && p && !p.dead && ((p.x - b.x)/CP_WAVE.R)**2 + ((p.y - b.y)/(CP_WAVE.R*0.6))**2 < 1){   // как нарисован круг
+      hurtPlayer(Math.max(1, Math.round(stat().maxhp*CP_WAVE.PCT)), COOP_BOSS_NAME, null); addText(p.x, p.y - 50, "Сейсмический удар!", "#FF8A6A");
+    }
+    if(CPZ.wave.armed) CPZ.wave.flash = 0.35;
+    CPZ.wave.slot = slot; CPZ.wave.armed = false;
+  }
+  if(tl <= CP_WAVE.TELE) CPZ.wave.armed = true;                 // удар засчитывается, только если круг успел появиться
+  if(CPZ.wave.flash > 0) CPZ.wave.flash -= 1/60;
+}
+
+// ---- вид зала: свой пол и стены, знаки этапов, барьеры, подписи, вспышки появления, круг удара босса ----
+function coopDrawDungeon(cx, cy, t){
+  ctx.fillStyle = "#08100E"; ctx.fillRect(cx, cy, vw, vh);
+  const vis = r => r.x + r.w + 30 > cx && r.x - 30 < cx + vw && r.y + r.h + 40 > cy && r.y - 40 < cy + vh;
+  for(const r of dgRects){ if(!vis(r)) continue; ctx.fillStyle = typeof wallPat === "function" ? wallPat() : "#141C25"; ctx.fillRect(r.x - 12, r.y - 12, r.w + 24, r.h + 24); }
+  for(const r of dgRects){ if(!vis(r)) continue; ctx.fillStyle = tilePattern(r.corr ? "coopc" : "coop"); ctx.fillRect(r.x, r.y, r.w, r.h); }
+  if(typeof drawGround === "function") drawGround(cx, cy);
+  const cur = cpStage(), r0 = CPZ.run;
+  // лицевая грань стены и лампы — зелёный свет «Сотрудничества»
+  for(const r of dgRects){
+    if(!vis(r) || r.corr) continue;
+    ctx.fillStyle = "#2E4A44"; ctx.fillRect(r.x, r.y - 16, r.w, 16); ctx.fillStyle = "#223833"; ctx.fillRect(r.x, r.y - 4, r.w, 4);
+    for(let x = r.x + 10; x < r.x + r.w; x += 30){ ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x, r.y - 16, 1.5, 12); }
+    const fl = .7 + Math.sin(t*9 + r.x)*.2;
+    for(const lx of [r.x + r.w*0.25, r.x + r.w*0.75]){ if(r.hall && lx !== r.x + r.w*0.25) continue;
+      ctx.fillStyle = "#56616D"; ctx.fillRect(lx - 3, r.y - 10, 6, 6);
+      ctx.fillStyle = `rgba(120,240,170,${fl})`; ctx.beginPath(); ctx.arc(lx, r.y - 12, 3, 0, Math.PI*2); ctx.fill(); }
+  }
+  // знак этапа на полу зала: шестигранник и два кольца-«напарника»; цвет — пройден, идёт, закрыт
+  for(const rm of cpRooms){
+    if(!vis(rm)) continue;
+    const s = rm.coopStage, done = r0 && ((r0.cleared || 0) >= s || (r0.result && r0.result.win)), act = cur === s && (!r0 || r0.phase !== "done");
+    const col = done ? "#5BD38A" : act ? (rm.boss ? "#FF6A5A" : "#5FD4E8") : "#3E4F57", pu = act ? .55 + Math.sin(t*3)*.25 : .35;
+    ctx.save(); ctx.globalAlpha = pu*.45; ctx.strokeStyle = col; ctx.lineWidth = 6;
+    ctx.beginPath(); for(let i = 0; i < 6; i++){ const a = Math.PI/6 + i*Math.PI/3; ctx.lineTo(rm.cx + Math.cos(a)*170, rm.cy + Math.sin(a)*170*.8); } ctx.closePath(); ctx.stroke();
+    ctx.globalAlpha = pu*.3; ctx.lineWidth = 4;
+    for(const dx of [-38, 38]){ ctx.beginPath(); ctx.ellipse(rm.cx + dx, rm.cy, 52, 52*.8, 0, 0, Math.PI*2); ctx.stroke(); }
+    ctx.restore();
+    const lbl = rm.boss ? T("Босс") + " · " + T("ур.") + " " + rm.lv : T("Этап") + " " + s + " · " + T("ур.") + " " + rm.lv;
+    nameText(lbl + (done ? " ✓" : ""), rm.cx, rm.y + 26, done ? "#8FF0B4" : act ? "#BFF6FF" : "#7E8E98", "700 14px Rubik, sans-serif");
+  }
+  // холл: две площадки для пилотов
+  { const h = CPL.hall, pu = .5 + Math.sin(t*2.4)*.2;
+    ctx.save(); ctx.globalAlpha = pu*.5; ctx.strokeStyle = "#5BD38A"; ctx.lineWidth = 3;
+    for(const dx of [-70, 70]){ ctx.beginPath(); ctx.ellipse(CPL.spawn.x + dx, CPL.spawn.y + 6, 34, 14, 0, 0, Math.PI*2); ctx.stroke(); }
+    ctx.restore(); }
+  // барьеры: закрытый — пульсирующее поле, следующий за открытыми — ярче, открытый — едва заметный
+  for(const g of cpGates){
+    if(g.x > cx + vw + 60 || g.x + g.w < cx - 60 || g.y > cy + vh + 60 || g.y + g.h < cy - 60) continue;
+    const open = cpGateOpen(g), next = !open && g.k === cur, boss = g.k === COOP.STAGES.length;
+    const col = open ? "#5BD38A" : boss ? "#FF5A4A" : next ? "#FFB347" : "#E0694A", fl = .55 + Math.sin(t*8 + g.k)*.2;
+    ctx.save();
+    ctx.globalAlpha = open ? .12 : .32 + fl*.3; ctx.fillStyle = col; ctx.fillRect(g.x, g.y, g.w, g.h);
+    if(!open){
+      ctx.globalAlpha = .95; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+      if(g.v){ for(let y = g.y; y <= g.y + g.h; y += 6) ctx.lineTo(g.x + g.w/2 + Math.sin(y*0.4 + t*14)*4, y); }
+      else { for(let x = g.x; x <= g.x + g.w; x += 6) ctx.lineTo(x, g.y + g.h/2 + Math.sin(x*0.4 + t*14)*4); }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.fillStyle = "#56616D";                                  // эмиттеры по краям
+    if(g.v){ ctx.fillRect(g.x - 3, g.y - 8, g.w + 6, 8); ctx.fillRect(g.x - 3, g.y + g.h, g.w + 6, 8); }
+    else { ctx.fillRect(g.x - 8, g.y - 3, 8, g.h + 6); ctx.fillRect(g.x + g.w, g.y - 3, 8, g.h + 6); }
+    ctx.restore();
+    if(!open){ const tx = g.x + g.w/2, ty = g.v ? g.y - 16 : g.y - 10;
+      nameText(boss ? "☠ " + T("Босс") : "🔒 " + T("Этап") + " " + (g.k + 1), tx, ty, col, "700 12px Rubik, sans-serif"); }
+  }
+  // вспышки появления монстров
+  ctx.lineWidth = 3;
+  for(const f of CPZ.puffs){ const k = 1 - f.life/f.max, r = (f.boss ? 30 : 10) + k*(f.boss ? 90 : 30);
+    ctx.globalAlpha = (1 - k)*.85; ctx.strokeStyle = f.boss ? "#FF6A5A" : "#5BD38A"; ctx.beginPath(); ctx.ellipse(f.x, f.y + 8, r, r*.45, 0, 0, Math.PI*2); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+  // круг «Сейсмического удара» босса
+  const w = CPZ.wave;
+  if(w.on && (w.k > 0 || w.flash > 0)){
+    ctx.save();
+    if(w.k > 0){ ctx.globalAlpha = .18 + w.k*.25; ctx.fillStyle = "#FF3A2A"; ctx.beginPath(); ctx.ellipse(w.x, w.y, CP_WAVE.R*w.k, CP_WAVE.R*w.k*.6, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = .9; ctx.strokeStyle = "#FF6A5A"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.lineDashOffset = -t*40;
+      ctx.beginPath(); ctx.ellipse(w.x, w.y, CP_WAVE.R, CP_WAVE.R*.6, 0, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
+    if(w.flash > 0){ ctx.globalAlpha = Math.min(1, w.flash*3); ctx.strokeStyle = "#FFE08A"; ctx.lineWidth = 8;
+      const rr2 = CP_WAVE.R*(1.1 - w.flash); ctx.beginPath(); ctx.ellipse(w.x, w.y, rr2, rr2*.6, 0, 0, Math.PI*2); ctx.stroke(); }
+    ctx.restore();
+  }
+}
+{ const _ddCp = drawDungeon;
+  drawDungeon = function(cx, cy, t){ return coopLoc(locKey) ? coopDrawDungeon(cx, cy, t) : _ddCp(cx, cy, t); }; }
+
+// ---- Сдвоенный Колосс: два корпуса на общих ногах, между ними реактор-«мост» с дугой; пушка слева, молот справа ----
+function drawTwinColossus(x, y, t, atk, hpk, flash){
+  const g = ctx, b = Math.sin(t*2.2)*3, pulse = (Math.sin(t*4) + 1)/2, rage = hpk < 0.4;
+  const sw = atk ? Math.sin(t*18)*0.5 : Math.sin(t*1.4)*0.1;
+  g.save(); g.translate(x, y);
+  g.fillStyle = "rgba(0,0,0,.5)"; g.beginPath(); g.ellipse(0, 6, 100, 24, 0, 0, Math.PI*2); g.fill();
+  // ноги: по паре на каждый корпус, переставляются по очереди
+  for(const side of [-1, 1]) for(const q of [0, 1]){
+    const ph = t*2.2 + q*Math.PI + (side > 0 ? 1.4 : 0), lift = Math.max(0, Math.sin(ph))*7, kx = side*(26 + q*30);
+    g.strokeStyle = "#1E2A30"; g.lineWidth = 13; g.lineCap = "round";
+    g.beginPath(); g.moveTo(side*(18 + q*16), -46 + b); g.lineTo(kx + side*10, -26 + b - lift*.5); g.lineTo(kx + side*16, -lift); g.stroke();
+    g.strokeStyle = "#4E6670"; g.lineWidth = 7; g.beginPath(); g.moveTo(side*(18 + q*16), -46 + b); g.lineTo(kx + side*10, -26 + b - lift*.5); g.lineTo(kx + side*16, -lift); g.stroke();
+    g.fillStyle = "#2B3A40"; g.fillRect(kx + side*16 - 9, -lift - 4, 18, 7);
+  }
+  g.translate(0, b);
+  // таз — общая плита
+  g.fillStyle = "#26343A"; g.beginPath(); g.moveTo(-58, -52); g.lineTo(58, -52); g.lineTo(46, -36); g.lineTo(-46, -36); g.closePath(); g.fill();
+  // два корпуса
+  for(const side of [-1, 1]){
+    const bx = side*36, grd = g.createLinearGradient(bx, -132, bx, -50);
+    grd.addColorStop(0, side < 0 ? "#5C7A7E" : "#6E6A5A"); grd.addColorStop(1, side < 0 ? "#22333A" : "#2F2C24");
+    g.fillStyle = grd; g.beginPath(); g.moveTo(bx - 30, -128); g.lineTo(bx + 30, -128); g.lineTo(bx + 24, -54); g.lineTo(bx - 24, -54); g.closePath(); g.fill();
+    g.strokeStyle = "#11191C"; g.lineWidth = 3; g.stroke();
+    g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(bx - 26, -124, 52, 5);
+    for(let i = 0; i < 3; i++){ g.fillStyle = "#1A2428"; g.fillRect(bx - 18, -104 + i*14, 36, 4); }       // броневые рёбра
+    // наплечник
+    g.fillStyle = side < 0 ? "#3E5A60" : "#5A5440"; g.beginPath(); g.moveTo(bx + side*18, -132); g.lineTo(bx + side*46, -126); g.lineTo(bx + side*40, -104); g.lineTo(bx + side*16, -110); g.closePath(); g.fill();
+    // голова
+    g.fillStyle = "#1B262A"; g.fillRect(bx - 13, -150, 26, 22); g.fillStyle = side < 0 ? "#2E4448" : "#4A4636"; g.fillRect(bx - 11, -148, 22, 6);
+    const eye = rage || atk ? `rgba(255,${80 + pulse*60},60,${.8 + pulse*.2})` : side < 0 ? `rgba(120,255,180,${.7 + pulse*.3})` : `rgba(255,190,90,${.7 + pulse*.3})`;
+    g.fillStyle = eye; if(side < 0) g.fillRect(bx - 9, -139, 18, 4); else { for(const ex of [-7, 0, 7]) g.fillRect(bx + ex - 2, -140, 4, 4); }
+  }
+  // реактор-мост и дуга между корпусами
+  const core = g.createRadialGradient(0, -92, 2, 0, -92, 26);
+  core.addColorStop(0, "#F2FFF6"); core.addColorStop(.45, rage ? "rgba(255,110,70,.95)" : "rgba(91,211,138,.95)"); core.addColorStop(1, "rgba(40,120,90,0)");
+  g.fillStyle = "#0E1614"; g.beginPath(); g.arc(0, -92, 17, 0, Math.PI*2); g.fill();
+  g.fillStyle = core; g.beginPath(); g.arc(0, -92, 12 + pulse*6, 0, Math.PI*2); g.fill();
+  g.save(); g.globalCompositeOperation = "lighter"; g.strokeStyle = rage ? "rgba(255,140,90,.9)" : "rgba(140,255,200,.9)"; g.lineWidth = 2;
+  for(const yy of [-110, -76]){ g.beginPath(); g.moveTo(-22, yy); for(let k = 1; k <= 6; k++) g.lineTo(-22 + k*44/6, yy + (Math.sin(t*30 + k*1.7 + yy) * 5)); g.stroke(); }
+  g.restore();
+  // левая рука — двуствольная пушка
+  g.save(); g.translate(-70, -106); g.rotate(-0.2 + sw*0.6);
+  g.fillStyle = "#33464C"; g.fillRect(-12, -10, 24, 20); g.fillStyle = "#1E2A30"; g.fillRect(-46, -8, 36, 6); g.fillRect(-46, 3, 36, 6);
+  g.fillStyle = rage ? "#FF6A5A" : "#5FD4E8"; g.globalAlpha = .5 + pulse*.5; g.fillRect(-48, -7, 4, 4); g.fillRect(-48, 4, 4, 4); g.globalAlpha = 1;
+  g.restore();
+  // правая рука — молот
+  g.save(); g.translate(70, -108); g.rotate(0.3 - (atk ? 1.1 + sw : sw));
+  g.fillStyle = "#4A4636"; g.fillRect(-6, -6, 12, 40); g.fillStyle = "#6E6A5A"; g.fillRect(-20, 30, 40, 22); g.fillStyle = "#2F2C24"; g.fillRect(-20, 46, 40, 6);
+  g.restore();
+  if(flash > 0){ g.globalAlpha = .5; g.fillStyle = "#fff"; g.beginPath(); g.ellipse(0, -90, 80, 70, 0, 0, Math.PI*2); g.fill(); g.globalAlpha = 1; }
+  g.restore();
+}
+{ const _deCp = drawEnemy;
+  drawEnemy = function(e, t){
+    const k = NPCS[e.type];
+    if(!k || !k.coopBoss) return _deCp(e, t);
+    const pu = .5 + Math.sin(t*3)*.25, rage = e.hp < e.max*0.4, fy = e.y + 36;         // ноги ниже центра: корпус закрывает круг столкновений
+    ctx.save(); ctx.globalAlpha = pu; ctx.strokeStyle = rage ? "#FF5A4A" : "#5BD38A"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(e.x, fy + 4, 96, 34, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+    if(p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e)){
+      ctx.save(); ctx.strokeStyle = "rgba(224,105,74,.95)"; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.ellipse(e.x, fy + 4, 108, 40, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+    drawTwinColossus(e.x, fy, t, e.lunge > 0, e.hp/e.max, e.flash);
+    nameText("☠ " + T(k.name), e.x, fy - 166, rage ? "#FF8A6A" : "#8FF0B4", "700 13px Rubik, sans-serif");
+    nameText(T("Уровень") + " " + k.lvl + (rage ? " · " + T("ярость") : ""), e.x, fy - 180, "#93A0AC", "10px Rubik, sans-serif");
+  }; }
+
+// ---- плашки на экране: этап и счётчик, отсчёт, «Дождитесь напарника», прочность босса ----
+const cpPill = document.createElement("div"); cpPill.className = "fear-wave cp-pill"; cpPill.hidden = true;
+const cpCd = document.createElement("div"); cpCd.className = "fear-cd cp-cd"; cpCd.hidden = true; cpCd.innerHTML = `<b data-notr>5</b><span></span>`;
+const cpWait = document.createElement("div"); cpWait.className = "cp-wait"; cpWait.hidden = true;
+const cpBar = document.createElement("div"); cpBar.className = "wb-bar cp-bar"; cpBar.hidden = true;
+cpBar.innerHTML = `<b>${COOP_BOSS_NAME}</b><div class="wb-hp"><i></i><span data-notr></span></div>`;
+document.getElementById("scrGame").append(cpPill, cpCd, cpWait, cpBar);
+const cpSet = (el, key, html) => { if(el._k !== key){ el._k = key; el.innerHTML = html; } };
+setInterval(() => {
+  const on = coopLoc(locKey); document.body.classList.toggle("cp-run", on);
+  if(!on){ for(const el of [cpPill, cpCd, cpWait, cpBar]) if(!el.hidden) el.hidden = true; document.body.classList.remove("cp-boss"); return; }
+  if(CPZ.hideTag){ CPZ.hideTag = false; $("zoneTag").classList.remove("show"); }
+  const r = CPZ.run && CPZ.run.loc === locKey ? CPZ.run : null, ph = r ? r.phase : "gather", st = +(r && r.stage) || 0, n = COOP.STAGES.length;
+  const left = cpLeftMs(), tl = cpTimeMs();
+  // плашка этапа
+  let main, sub = "";
+  if(!r || ph === "gather") main = "Сбор группы";
+  else if(ph === "done") main = r.result && r.result.win ? "Победа!" : "Забег окончен";
+  else if(ph === "count") main = "Старт забега";
+  else if(st === COOP.BOSS_STAGE) main = "Босс · " + COOP_BOSS_NAME;
+  else if(ph === "break") main = "Этап " + st + " пройден";
+  else { const k = enemies.filter(e => e.cpStage === st && e.cpKilled).length; main = "Этап " + st + "/" + n; sub = Math.max(k, +r.kills || 0) + "/" + COOP.PER; }
+  const tail = ph === "done" ? (r.result && r.result.win ? "Возврат через " + Math.ceil(left/1000) + " с" : "") : st > 0 ? "⏱ " + mmss(tl) : "";
+  cpSet(cpPill, main + "|" + sub + "|" + tail, `<span><b>${main}</b>${sub ? ` <i data-notr>${sub}</i>` : ""}</span>${tail ? `<small>${tail}</small>` : ""}`);
+  if(cpPill.hidden) cpPill.hidden = false;
+  cpPill.classList.toggle("won", ph === "done" && !!(r.result && r.result.win));
+  cpPill.classList.toggle("boss", st === COOP.BOSS_STAGE && ph === "fight");
+  // «Дождитесь напарника»: сбор, отсчёт или передышка, а напарника нет в зале; в бою — если связь у него пропала
+  const mate = r && (r.members || []).find(m => typeof NET === "undefined" || m.id !== NET.id);
+  const away = mate && !mate.in && ph !== "done" ? Math.max(0, (+mate.away || 0) + Math.floor((performance.now() - CPZ.runT)/1000)) : 0;
+  const wait = !!(r && ph !== "done" && ((r.wait && ph !== "fight") || (ph === "fight" && away >= 2))) || (!r && now - CPZ.inT > 2);
+  const left2 = mate && !mate.in && r && r.grace && ph !== "gather" ? Math.max(0, r.grace - away) : 0;
+  cpSet(cpWait, "w" + wait + (mate ? mate.nick : "") + "|" + left2, `<b>Дождитесь напарника</b>${mate ? `<small><span data-notr>${esc(mate.nick)}</span>${left2 ? ` · нет в зале · ${left2} с` : ""}</small>` : ""}`);
+  if(cpWait.hidden === wait) cpWait.hidden = !wait;
+  // отсчёт: перед первым этапом и между этапами
+  const cd = !wait && r && (ph === "count" || ph === "break") && left > 0;
+  if(cpCd.hidden === cd) cpCd.hidden = !cd;
+  if(cd){ const nn = String(Math.max(1, Math.ceil(left/1000))), txt = ph === "count" ? "Монстры появятся через" : st + 1 === COOP.BOSS_STAGE ? "Барьер к боссу откроется через" : "Этап " + (st + 1) + " откроется через";
+    const b = cpCd.querySelector("b"), s = cpCd.querySelector("span");
+    if(s._t !== txt){ s._t = txt; s.textContent = txt; }
+    if(b.textContent !== nn){ b.textContent = nn; cpCd.classList.remove("tick"); void cpCd.offsetWidth; cpCd.classList.add("tick"); } }
+  // прочность босса
+  const B = cpBoss(), bon = !!(B && !B.dead && st === COOP.BOSS_STAGE);
+  if(cpBar.hidden === bon) cpBar.hidden = !bon; document.body.classList.toggle("cp-boss", bon);
+  if(bon){ const k = Math.max(0, B.hp/B.max); cpBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
+    cpBar.querySelector("span").textContent = Math.ceil(Math.max(0, B.hp)).toLocaleString("ru-RU") + " / " + B.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%"; }
+  // победа: время собрать добычу босса, потом — домой
+  if(ph === "done" && r.result && r.result.win && left <= 0 && p && !p.dead && now > CPZ.homeT){ CPZ.homeT = now + 5; travel("lobby"); }
+}, 200);
 
 // ---- перевод страницы ----
 const trOrig = new WeakMap(), trDone = new WeakMap();

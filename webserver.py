@@ -41,6 +41,7 @@ import worldboss
 import tower
 import fear
 import elite
+import coop
 import vip
 import ledger
 from config import WEBAPP_URL
@@ -53,6 +54,9 @@ SEASON_LOC = "season1"                                   # сезонная зо
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда (в логове мирового босса wboss — есть)
 LOCS |= set(elite.LOCS)                                # экземпляры элитной фарм-зоны (по одному на группу)
 SAFE_LOCS |= set(elite.LOCS)                           # в зоне только своя группа — PvP нет
+LOCS |= set(coop.LOCS)                                 # залы «Сотрудничества» (по одному на пару)
+SAFE_LOCS |= set(coop.LOCS)                            # в зале только напарники — PvP нет
+mobworld.set_rules(coop.PREFIX, coop.allow_hit, coop.on_kill)   # общие мобы зала: только текущий этап, без возрождения
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -1410,8 +1414,9 @@ PARTY_MAX = 4
 
 
 def party_cap(pid):
-    """Сколько человек помещается в пати: в группе элитной фарм-зоны — ровно elite.SIZE."""
-    return elite.SIZE if parties.get(pid, {}).get("elite") else PARTY_MAX
+    """Сколько человек помещается в пати: в группе элитной фарм-зоны — ровно elite.SIZE, в «Сотрудничестве» — coop.SIZE."""
+    pt = parties.get(pid, {})
+    return elite.SIZE if pt.get("elite") else coop.SIZE if pt.get("coop") else PARTY_MAX
 parties = {}                 # id пати -> {"id", "leader", "members": [tg_id, ...]}
 member_party = {}            # tg_id -> id пати
 invites = {}                 # tg_id приглашённого -> {tg_id пригласившего: время}
@@ -1621,7 +1626,8 @@ def party_payload(pid):
         i = online(uid) or {}
         members.append({"id": uid, "nick": i.get("nick", "?"), "lvl": i.get("lvl", 1), "cls": i.get("cls", ""),
                         "hp": i.get("hp", 0), "mhp": i.get("mhp", 1), "loc": i.get("loc", ""), "online": bool(i)})
-    return {"id": pid, "leader": pt["leader"], "members": members, "elite": bool(pt.get("elite")), "open": elite.is_open(pid)}
+    return {"id": pid, "leader": pt["leader"], "members": members, "elite": bool(pt.get("elite")), "coop": bool(pt.get("coop")),
+            "open": elite.is_open(pid) or coop.is_open(pid)}
 
 
 async def send_party(pid, extra_uids=()):
@@ -1648,8 +1654,17 @@ async def party_leave(uid, kicked=False):
         elite.set_open(pid, True)
         await send_party(pid)
         return
+    if pt.get("coop") and pt["members"]:
+        # группа «Сотрудничества» тоже не распадается: до забега место снова в «Открытых группах», а в забеге
+        # оставшийся ждёт напарника (обрыв связи) — вернувшийся снова попадает в эту же группу (coop_rejoin)
+        if pt["leader"] == uid:
+            pt["leader"] = pt["members"][0]
+        coop.set_open(pid, not coop.run_of_pid(pid))
+        await send_party(pid)
+        return
     if len(pt["members"]) <= 1:
         elite.set_open(pid, False)
+        coop.set_open(pid, False)
         for rest in pt["members"]:
             member_party.pop(rest, None)
             await push_to_player(rest, {"t": "party", "party": None})
@@ -1702,6 +1717,8 @@ async def handle_elite(d, info, conn):
             say(f"Элитная зона открывается с {elite.MIN_LVL} уровня")
         elif elite.left(uid) < 60:
             say(limit_txt)
+        elif pid and parties[pid].get("coop"):
+            say("Сначала выйди из группы «Сотрудничества»")
         elif pid and parties[pid]["leader"] != uid:
             say("Открыть набор может только лидер группы")
         elif pid and len(parties[pid]["members"]) >= elite.SIZE:
@@ -1782,6 +1799,232 @@ def elite_tick():
         metrics.inc("elite.kick")
 
 
+# ---------- «Сотрудничество» (coop.py): группа из 2, забег по 8 этапам и общий босс ----------
+async def coop_state(info):
+    """Состояние для окна события: попытки, открытые группы, своя группа (и попытки напарника)."""
+    uid = info["id"]
+    pid = member_party.get(uid)
+    groups = []
+    for gp, _t in coop.open_groups():
+        pt = parties.get(gp)
+        if not pt or not pt.get("coop") or len(pt["members"]) >= coop.SIZE or coop.run_of_pid(gp) or gp == pid:
+            continue
+        li = online(pt["leader"])
+        if not li:
+            continue
+        groups.append({"pid": gp, "leader": li.get("nick", "?"), "lvl": int(li.get("lvl") or 1), "n": len(pt["members"]),
+                       "members": [{"cls": (online(m) or {}).get("cls", "")} for m in pt["members"]]})
+        if len(groups) >= 20:
+            break
+    my = None
+    if pid and pid in parties:
+        pt = parties[pid]
+        my = {"pid": pid, "coop": bool(pt.get("coop")), "open": coop.is_open(pid), "leader": pt["leader"] == uid,
+              "run": coop.run_of_pid(pid), "left": {str(m): coop.left(m) for m in pt["members"]}}
+    r = coop.run_of_uid(uid)
+    return {"t": "coop", "left": coop.left(uid), "tries": coop.TRIES, "open": groups, "my": my, "run": r["loc"] if r else None}
+
+
+async def handle_coop(d, info, conn):
+    """Окно «Сотрудничества»: create — создать группу (открыть набор), join — вступить в открытую группу,
+    leave — выйти из группы, enter — лидер начинает забег, quit — выйти из забега (портал выхода), state — только состояние."""
+    op, uid = d.get("op"), info["id"]
+    admin = bool(info.get("admin"))
+    pid = member_party.get(uid)
+    if pid and pid not in parties:
+        member_party.pop(uid, None)
+        pid = None
+
+    def say(text):
+        conn.push(realtime.encode({"t": "pinfo", "text": text}))
+    lvl_ok = admin or int(info.get("lvl") or 1) >= coop.MIN_LVL
+    tries_ok = admin or coop.left(uid) > 0
+    in_run = coop.run_of_uid(uid)
+    if op == "create":
+        pt = parties.get(pid) if pid else None
+        if in_run:
+            say("Ты уже в забеге")
+        elif not lvl_ok:
+            say(f"«Сотрудничество» открывается с {coop.MIN_LVL} уровня")
+        elif not tries_ok:
+            say("Попытка на сегодня уже использована")
+        elif info.get("dead"):
+            say("Сначала дождись возрождения")
+        elif pt and pt.get("elite"):
+            say("Сначала выйди из группы элитной зоны")
+        elif pt and pt["leader"] != uid:
+            say("Открыть набор может только лидер группы")
+        elif pt and len(pt["members"]) > coop.SIZE:
+            say(f"В «Сотрудничество» идут вдвоём: в твоей пати больше {coop.SIZE} пилотов")
+        elif pt and pt.get("coop") and len(pt["members"]) >= coop.SIZE:
+            say("Группа уже в сборе")
+        else:
+            if not pt:
+                pid = f"c{uid}-{int(time.time())}"
+                parties[pid] = pt = {"id": pid, "leader": uid, "members": [uid]}
+                member_party[uid] = pid
+            pt["coop"] = True
+            coop.set_open(pid, len(pt["members"]) < coop.SIZE)
+            await send_party(pid)
+            say("Группа создана — она видна в «Открытых группах»" if len(pt["members"]) < coop.SIZE else "Группа в сборе — начинайте забег")
+    elif op == "join":
+        target = str(d.get("pid") or "")[:48]
+        pt = parties.get(target)
+        if pid:
+            say("Сначала выйди из своей группы")
+        elif not pt or not pt.get("coop") or not coop.is_open(target) or coop.run_of_pid(target):
+            say("Эта группа уже закрыла набор")
+        elif len(pt["members"]) >= coop.SIZE:
+            say("В группе уже двое")
+        elif not lvl_ok:
+            say(f"«Сотрудничество» открывается с {coop.MIN_LVL} уровня")
+        elif not tries_ok:
+            say("Попытка на сегодня уже использована")
+        elif info.get("dead"):
+            say("Сначала дождись возрождения")
+        else:
+            pt["members"].append(uid)
+            member_party[uid] = target
+            if len(pt["members"]) >= coop.SIZE:
+                coop.set_open(target, False)
+            await send_party(target)
+            for m in pt["members"]:
+                if m != uid:
+                    await push_to_player(m, {"t": "pinfo", "text": f"{info['nick']} вступил в группу"})
+    elif op == "leave":
+        if in_run:
+            coop.leave(uid)                                    # выход из группы посреди забега — выход из забега
+        if pid:
+            await party_leave(uid)
+    elif op == "quit":
+        if in_run:
+            coop.leave(uid)
+    elif op == "enter":
+        pt = parties.get(pid) if pid else None
+        if not pt or not pt.get("coop"):
+            say("Сначала создай группу")
+        elif pt["leader"] != uid:
+            say("Начать забег может только лидер группы")
+        else:
+            members = list(pt["members"])
+            infos = {m: online(m) for m in members}
+            why = coop.check_enter(uid, members, infos, admin=admin, busy=lambda m: bool(infos.get(m)) and in_pvp_combat(infos[m]))
+            if why:
+                say(why)
+            else:
+                loc = coop.start(pid, members, infos, need=len(members) if admin else coop.SIZE, admin=admin)
+                if not loc:
+                    say("Все залы «Сотрудничества» заняты — попробуйте через минуту")
+                else:
+                    metrics.inc("coop.start")
+                    await coop_pump()                          # cp_go — сразу, не дожидаясь тика мира
+    conn.push(realtime.encode(await coop_state(info)))
+
+
+def coop_pos_guard(d, info, conn, old_loc):
+    """В зал «Сотрудничества» — только участники его забега (телефон получает loc_fix и возвращается)."""
+    nl = d.get("loc")
+    if nl in coop.LOCS and nl != old_loc and not coop.member_of(nl, info["id"]):
+        d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+        if time.time() - info.get("cp_warn", 0) > 2:
+            info["cp_warn"] = time.time()
+            back = old_loc if old_loc not in coop.LOCS else "lobby"
+            conn.push(realtime.encode({"t": "loc_fix", "loc": back, "x": info["x"], "y": info["y"],
+                                       "text": "В зал «Сотрудничества» группу заводит лидер"}))
+    return d
+
+
+async def coop_after_pos(info, old_loc, conn):
+    """После позиции: смерть в зале заканчивает забег; вошедшему — состояние забега и место в своей группе."""
+    loc = info.get("loc")
+    if loc not in coop.LOCS:
+        return
+    if info.get("dead"):
+        coop.on_dead(loc, info["id"])
+    if loc != old_loc:
+        r = coop.run_of_loc(loc)
+        if r and info["id"] in r["members"]:
+            conn.push(realtime.encode(coop.view(r)))
+            await coop_rejoin(info["id"], r)
+
+
+async def coop_rejoin(uid, r):
+    """Связь оборвалась посреди забега: сервер вывел пилота из пати. Вернулся — снова в группе с напарником."""
+    others = [m for m in r["members"] if m != uid]
+    pid = member_party.get(uid)
+    if not others or (pid and pid == member_party.get(others[0])):
+        return
+    if pid:
+        return                                                 # успел вступить в другую пати — не трогаем
+    mate_pid = member_party.get(others[0])
+    pt = parties.get(mate_pid) if mate_pid else None
+    if pt is None:
+        if member_party.get(others[0]) or not online(others[0]):
+            return
+        mate_pid = f"c{others[0]}-{int(time.time())}"
+        parties[mate_pid] = pt = {"id": mate_pid, "leader": others[0], "members": [others[0]], "coop": True}
+        member_party[others[0]] = mate_pid
+    if len(pt["members"]) >= party_cap(mate_pid):
+        return
+    pt["members"].append(uid)
+    member_party[uid] = mate_pid
+    coop.set_open(mate_pid, False)
+    await send_party(mate_pid)
+
+
+def coop_where(uid):
+    i = online(uid)
+    return i.get("loc") if i else None
+
+
+def coop_dead(uid):
+    i = online(uid)
+    return bool(i and i.get("dead"))
+
+
+async def coop_pump():
+    """Разослать то, что накопил coop.py: состояние забега, итоги, возврат в ангар, сброс мобов зала, награду."""
+    for a in coop.drain():
+        kind = a[0]
+        if kind == "msg":
+            hub.to_uid(a[1], a[2])
+        elif kind == "home":
+            uid, loc, text = a[1], a[2], a[3]
+            i = online(uid)
+            if i and i.get("loc") == loc and not i.get("dead"):     # погибший уйдёт сам (экран гибели)
+                hub.to_uid(uid, {"t": "loc_fix", "loc": "lobby", "x": 500, "y": 640, "text": text})
+        elif kind == "reset":
+            mobworld.reset(a[1])
+        elif kind == "end":
+            res = a[1]["result"] or {}
+            metrics.inc("coop.win" if res.get("win") else "coop.end." + str(res.get("reason")))
+            if res.get("win") and res.get("prize"):
+                asyncio.create_task(coop_reward(a[1]))
+
+
+async def coop_reward(r):
+    """Награда за босса — одному случайному из двоих (жребий тянет coop.py): титановая сфера и энергоядра.
+    Выдача — как у админа и башни: запись Grant (придёт и офлайн, при входе) и учтённая сфера на счёт игрока."""
+    pz = r["result"]["prize"]
+    uid, now = pz["uid"], int(time.time())
+    try:
+        async with SessionLocal() as s:
+            g1 = Grant(tg_id=uid, kind="item", payload=json.dumps({"amount": pz["n"], "item": pz["item"], "grade": 0, "reg": True}),
+                       by_admin="coop", created=now)
+            g2 = Grant(tg_id=uid, kind="cores", payload=json.dumps({"amount": pz["cores"]}), by_admin="coop", created=now)
+            s.add(g1)
+            s.add(g2)
+            await items.add_spheres(s, uid, pz["item"], pz["n"])
+            await s.commit()
+            gs = [grant_dict(g1), grant_dict(g2)]
+        for g in gs:
+            await push_to_player(uid, {"t": "grant", "grant": g})
+        log.info("Сотрудничество: награда за босса — игрок %s (%s), %s", uid, pz["nick"], r["loc"])
+    except Exception:
+        log.exception("coop reward uid=%s", uid)
+        metrics.inc("coop.reward_error")
+
+
 async def handle_party(d, info):
     t, uid = d.get("t"), info["id"]
     try:
@@ -1832,6 +2075,8 @@ async def handle_party(d, info):
         member_party[uid] = pid
         if len(parties[pid]["members"]) >= elite.SIZE:
             elite.set_open(pid, False)                 # группа в сборе — из «Открытых групп» убираем
+        if len(parties[pid]["members"]) >= coop.SIZE:
+            coop.set_open(pid, False)
         await send_party(pid)
     elif t == "pdec":
         if invites.get(uid, {}).pop(other, None):
@@ -1872,7 +2117,7 @@ async def handle_party(d, info):
             return
         if tgt is not info:
             pid = member_party.get(uid)
-            friend = (pid and member_party.get(other) == pid) or same_guild(info, tgt)
+            friend = (pid and member_party.get(other) == pid) or same_guild(info, tgt) or coop.partners(uid, other)
             if not friend or tgt["loc"] != info["loc"]:
                 return
             if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > MED_RANGE:
@@ -2627,6 +2872,7 @@ async def handle_ws_message(d, t, info, conn):
             if time.time() - info.get("el_warn", 0) > 2:
                 info["el_warn"] = time.time()
                 conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"], "text": "В элитную зону группу заводит лидер"}))
+        d = coop_pos_guard(d, info, conn, old_loc)                # в зал «Сотрудничества» — только его пара
         if d.get("loc") == worldboss.LOC and old_loc != worldboss.LOC and not info.get("admin") and not worldboss.open_now():
             d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}         # босса нет и добычи нет — логово закрыто
             if time.time() - info.get("wb_warn", 0) > 2:
@@ -2653,6 +2899,8 @@ async def handle_ws_message(d, t, info, conn):
             fear.seen_inside(info["id"])
         elif old_loc == fear.LOC:
             fear.left(info["id"])                            # вышел из подземелья — следующий вход будет новой попыткой
+        if info["loc"] in coop.LOCS or old_loc in coop.LOCS:
+            await coop_after_pos(info, old_loc, conn)        # смерть в зале — конец забега для обоих
         if info["loc"] != old_loc:
             hub.moved(conn, old_loc)
             conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
@@ -2670,6 +2918,8 @@ async def handle_ws_message(d, t, info, conn):
             queue_kills(d, info, conn)
     elif t == "elite":
         await handle_elite(d, info, conn)
+    elif t == "coop":
+        await handle_coop(d, info, conn)
     elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
         await handle_party(d, info)
     elif t == "pvp":
@@ -2854,7 +3104,17 @@ async def world_loop():
                 for pid in list(parties):
                     await send_party(pid)
                 elite_tick()                                # элитная зона: лимит минут и неполная группа
+                try:
+                    coop.tick(coop_where, coop_dead)        # «Сотрудничество»: сбор, этапы, напарник пропал, время
+                except Exception:
+                    log.exception("coop tick")              # ошибка события не должна останавливать общих мобов
+                    metrics.inc("coop.tick_error")
             mobworld.tick(hub)                              # общие мобы: прочность, смерть, возрождение
+            try:
+                await coop_pump()                           # этап зачищен, итоги забега — без ожидания секунды
+            except Exception:
+                log.exception("coop pump")
+                metrics.inc("coop.pump_error")
             worldboss.tick(hub)                             # мировой босс: расписание, удары по площади
             if tick % 5 == 0:
                 await tower.tick(hub, seasonpts, push_to_player)   # Кровавая башня: запись, старт, итоги
@@ -2912,6 +3172,7 @@ async def cleanup_loop():
             worldboss.cleanup()
             tower.cleanup()
             elite.cleanup(online_ids, set(parties))
+            coop.cleanup(online_ids, set(parties))
             fear.cleanup()
             special_quests.cleanup()
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),

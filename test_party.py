@@ -12,12 +12,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import elite  # noqa: E402
+import coop   # noqa: E402
 
 SRC = (Path(__file__).resolve().parent / "webserver.py").read_text(encoding="utf-8")
 
 
 def load():
-    ns = {"time": time, "asyncio": asyncio, "elite": elite,
+    ns = {"time": time, "asyncio": asyncio, "elite": elite, "coop": coop,
           "metrics": types.SimpleNamespace(inc=lambda *a, **k: None),
           "pvpguard": types.SimpleNamespace(in_combat=lambda *a: False, heal=lambda *a: None, combat_left=lambda *a: 0)}
     a = SRC.index("PARTY_MAX = 4")

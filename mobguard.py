@@ -42,10 +42,20 @@ FEAR_LOC, FEAR_WAVES = "arena_fear", 59
 # элитная фарм-зона (elite.py): элитные монстры el26…el36 — только в экземплярах elite1…elite6
 ELITE_LOCS, ELITE_RANGE = tuple(f"elite{i}" for i in range(1, 7)), (26, 36)
 ELITE_HP = 2.5                                            # прочность ×2,5 к мобу подземелья того же уровня (как NPCS["el…"] в игре)
+# «Сотрудничество» (coop.py): монстры этапов cw10…cw60 и босс cb40 — только в залах забега coop1…coop8.
+# Монстр этапа — как монстр «Страха» того же уровня (их много и они идут пачками), босс — моб подземелья 40 ур. ×COOP_BOSS_HP
+COOP_LOCS, COOP_STAGES, COOP_BOSS = tuple(f"coop{i}" for i in range(1, 9)), (10, 15, 20, 25, 30, 40, 50, 60), 40
+COOP_BOSS_HP = 40
 
 
 def mob_level(mob, loc):
     """Уровень моба в этой локации или None — такого моба здесь не бывает."""
+    m = re.fullmatch(r"c([wb])(\d{2})", mob or "")
+    if m:
+        lv = int(m.group(2))
+        if loc not in COOP_LOCS:
+            return None
+        return lv if (lv in COOP_STAGES if m.group(1) == "w" else lv == COOP_BOSS) else None
     m = re.fullmatch(r"el(\d{2})", mob or "")
     if m:
         lv = int(m.group(1))
@@ -85,6 +95,11 @@ def mob_hp(mob):
     if len(mob) >= 3 and mob[:2] == "fw" and mob[2:].isdigit():
         lv = int(mob[2:])                                 # монстр «Страха»: вдвое слабее монстра подземелья (fearHp в игре)
         return _js_round((20 + 14 * lv + 0.25 * lv * lv) * 0.5) if 1 <= lv <= FEAR_WAVES else None
+    if len(mob) == 4 and mob[:2] == "cw" and mob[2:].isdigit():
+        lv = int(mob[2:])                                 # монстр «Сотрудничества»: как монстр «Страха» (coopHp в игре)
+        return _js_round((20 + 14 * lv + 0.25 * lv * lv) * 0.5) if lv in COOP_STAGES else None
+    if mob == f"cb{COOP_BOSS}":
+        return mob_hp(f"dg{COOP_BOSS}") * COOP_BOSS_HP     # босс «Сотрудничества»: прочность общая на двоих
     if len(mob) >= 3 and mob[:2] in ("dg", "db") and mob[2:].isdigit():
         lv = int(mob[2:])
         if not 1 <= lv <= 40:

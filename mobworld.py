@@ -47,6 +47,33 @@ _iid = itertools.count(int(time.time()) % 100000 * 1000 + 7_000_000_000)
 _budget = {}                         # uid -> [запас урона, время] — бюджет урона по общим мобам
 LVL_GAP = 12                         # как в items.process_kills: моб сильнее предела уровня на 12+ не засчитывается
 
+# Особые зоны со своими правилами (coop.py — залы «Сотрудничества»): префикс локации -> (allow, killed).
+#   allow(loc, номер, тип) — можно ли сейчас бить этого моба (только текущий этап забега);
+#   killed(loc, номер, тип, победитель, время) — моб убит (счётчик этапа).
+# В таких зонах убитые мобы не возрождаются (до конца забега, потом reset), а моб выше уровня пилота на LVL_GAP
+# урон всё равно получает: уровни этапов заданы событием (до 60), и без этого телефон «убивал» моба только у себя.
+# Лут и опыт за такого моба items.process_kills по-прежнему не засчитает — правило LVL_GAP там не тронуто.
+NO_RESPAWN = 6 * 3600
+_rules = {}
+
+
+def set_rules(prefix, allow, killed):
+    _rules[prefix] = (allow, killed)
+
+
+def _rule(loc):
+    if isinstance(loc, str):
+        for pre, r in _rules.items():
+            if loc.startswith(pre):
+                return r
+    return None
+
+
+def reset(loc):
+    """Забыть всё о мобах локации (новый забег в том же зале)."""
+    for d in (_mobs, _dirty, _own, _moved):
+        d.pop(loc, None)
+
 
 def _mob(loc, i, typ):
     """Состояние моба номер i. None — такого моба здесь быть не может, или под этим номером другой моб.
@@ -57,6 +84,9 @@ def _mob(loc, i, typ):
     раскладка мобов у всех телефонов одинаковая, честный клиент другой тип не пришлёт."""
     if mobguard.mob_level(typ, loc) is None:
         return None
+    rule = _rule(loc)
+    if rule and not rule[0](loc, i, typ):
+        return None                                           # залы «Сотрудничества»: только текущий этап, свой тип
     m = _mobs.setdefault(loc, {}).get(i)
     if m is not None:
         return m if m["type"] == typ else None
@@ -102,7 +132,7 @@ def on_hits(info, d, hub):
             continue
         if m["dead_until"] > now:
             continue
-        if not info.get("admin") and mobguard.mob_level(typ, loc) > lvl + LVL_GAP:
+        if not info.get("admin") and mobguard.mob_level(typ, loc) > lvl + LVL_GAP and not _rule(loc):
             continue                                          # слишком сильный моб — его убийство всё равно не засчитают
         dmg = min(dmg, m["max"])                              # один пакет не больше полной прочности
         if not info.get("admin"):
@@ -182,7 +212,8 @@ def _kill(loc, i, m, hub, now):
     if len(fights) >= mobguard.MAX_FIGHTS:
         fights.pop(next(iter(fights)))
     fights[iid] = [m["type"], m["max"], now, now]
-    m["dead_until"] = now + (RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN_ELITE if m["type"].startswith("el") else RESPAWN)
+    rule = _rule(loc)
+    m["dead_until"] = now + (NO_RESPAWN if rule else RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN_ELITE if m["type"].startswith("el") else RESPAWN)
     m["dmg"] = {}
     m["hp"] = m["max"]
     _dirty.get(loc, set()).discard(i)
@@ -190,6 +221,8 @@ def _kill(loc, i, m, hub, now):
     _own.get(loc, {}).pop(i, None)
     _moved.get(loc, set()).discard(i)
     metrics.inc("mobs.shared_kill")
+    if rule:
+        rule[1](loc, i, m["type"], winner, now)
 
 
 def tick(hub):
@@ -220,7 +253,7 @@ def tick(hub):
                     m["dead_until"] = 0
                     hub.to_loc(loc, {"t": "mres", "loc": loc, "i": i})
                     mobs.pop(i, None)
-            elif m["hp"] < m["max"] and now - m["last"] > REGEN_AFTER:
+            elif m["hp"] < m["max"] and now - m["last"] > REGEN_AFTER and not _rule(loc):   # монстры события не лечатся
                 m["hp"], m["dmg"] = m["max"], {}
                 _dirty.setdefault(loc, set()).add(i)
         dirty = _dirty.pop(loc, None)
