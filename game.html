@@ -1344,6 +1344,31 @@ body.cp-run .tframe{top:calc(var(--hb, 120px) + 40px)}
 .cx-slot{width:40px;height:40px;border-radius:9px;background:#141B22;border:1.5px solid;display:grid;place-items:center;position:relative;opacity:.45;padding:0}
 .cx-slot svg{width:30px;height:30px}.cx-slot.in{opacity:1;box-shadow:0 0 0 2px var(--ok) inset}.cx-slot.arm{opacity:1;box-shadow:0 0 0 2px #F2C14B inset}
 .cx-cnt{font-size:12px;color:var(--muted);min-width:28px;text-align:right}
+/* ---- Кодекс → «Самоцветы» ---- */
+.cx-sec{margin-top:0}
+.gm-tot{border:1px solid color-mix(in srgb,#2FD6B5 45%,var(--line));background:color-mix(in srgb,#2FD6B5 9%,var(--panel-2));border-radius:12px;padding:10px 12px;margin:8px 0}
+.gm-tot b{display:block;font-size:13px}.gm-tot span{font-size:12px;color:var(--ok);font-weight:700}.gm-tot i{font-style:normal;white-space:nowrap}
+.gm-done{font-size:12px;font-weight:700;color:var(--ok);margin-left:auto}
+.gmcard{background:var(--panel-2);border:1px solid color-mix(in srgb,var(--gc) 35%,var(--line));border-radius:14px;padding:12px;margin-bottom:8px}
+.gmcard.max{background:color-mix(in srgb,var(--gc) 8%,var(--panel-2));border-color:color-mix(in srgb,var(--gc) 70%,var(--line))}
+.gm-head{display:flex;align-items:center;gap:10px}
+.gm-ic{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;background:#141B22;border:1.5px solid color-mix(in srgb,var(--gc) 60%,transparent)}
+.gm-ic svg{width:34px;height:34px}
+.gm-tx{flex:1;min-width:0}.gm-tx b{display:block;font-size:14px;color:var(--gc)}.gm-tx small{font-size:11.5px;color:var(--muted)}
+.gm-cnt{text-align:right;flex:none}.gm-cnt b{display:block;font:18px 'Russo One',sans-serif;line-height:1.1}.gm-cnt small{font-size:11px;color:var(--muted)}
+.gm-bar{height:6px;border-radius:4px;background:color-mix(in srgb,var(--line) 70%,transparent);overflow:hidden;margin:10px 0 5px}
+.gm-bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,color-mix(in srgb,var(--gc) 55%,#fff),var(--gc))}
+.gm-next{font-size:12px;margin:0 0 8px}
+.gm-steps{display:flex;flex-wrap:wrap;gap:4px}
+.gm-steps span{font-size:11px;padding:3px 7px;border-radius:8px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+.gm-steps span b{margin-right:5px;color:var(--text)}
+.gm-steps span.on{border-color:color-mix(in srgb,var(--ok) 60%,transparent);color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,var(--panel))}
+.gm-steps span.nx{border-color:var(--gc);color:var(--text)}
+.gm-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
+.gm-foot small{font-size:11.5px;color:var(--muted)}
+.gm-btns{display:flex;gap:6px;margin-left:auto}
+:root[data-theme="light"] .gm-tx b{color:color-mix(in srgb,var(--gc) 62%,#14191F)}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .gm-tx b{color:color-mix(in srgb,var(--gc) 62%,#14191F)}}
 .mklist{display:grid;gap:6px;margin-top:8px}
 .mkrow{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-align:left;color:var(--text);width:100%}
 .mkrow .ic{width:44px;height:44px;border-radius:10px;background:#141B22;display:grid;place-items:center;flex:none}
@@ -1834,6 +1859,48 @@ const SHARD = {
 };
 const SHARD_IDS = Object.keys(SHARD), SHARD_MIN_LVL = 15;
 for(const id of SHARD_IDS) ITEMS[id] = {name:SHARD[id].name, type:"shard", sell:0, nosell:true, desc:"Осколок для уникальных сетов Кузнеца · падает с врагов от 15 уровня"};
+// ===================== САМОЦВЕТЫ =====================
+// Четыре вида, как «Кодекс самоцветов» в LIBERTY. Падают с врагов в Нижних и Глубинных цехах, Фарм-зоне и Сезонной
+// зоне только по решению сервера (items.py → roll_gems), то есть в живой игре; сервер их учитывает, и их можно продать
+// на маркете за GRAM не дешевле GEM_MIN_PRICE за штуку. В Кодексе → «Самоцветы» их сдают до GEM_MAX штук каждого вида:
+// бонусы порогов складываются (на 20 сданных действуют пороги 1, 10 и 20) и остаются навсегда, сданные камни исчезают.
+// Сколько сдано, хранит сервер (items.py → GEM_CX): телефон берёт счётчики при входе (regSync).
+// kind: "c" — частый (шанс как у медной сферы), "r" — редкий (как у титановой). shape — огранка на иконке.
+const GEM_MAX = 500, GEM_MIN_PRICE = 0.4;
+const GEM_LOCS = ["sector1", "sector2", "farm1", "season1"];
+const GEM_STEPS = {
+  c:[[1, {atk:5}], [10, {atk:5, def:5}], [20, {atk:5, def:5}], [50, {atk:10}], [100, {atk:10, def:10}], [300, {atk:30, def:30, hp:3000}], [500, {atk:50, def:50, rate:0.2}]],
+  r:[[1, {atk:10}], [10, {atk:10, def:10}], [30, {atk:20}], [60, {atk:20, def:20}], [100, {atk:30}], [150, {atk:30, def:30}], [300, {atk:50, def:50, hp:5000}], [500, {atk:100, def:100, rate:0.2}]]
+};
+const GEMS = {
+  gm_emer:{name:"Изумрудная линза", kind:"c", col:"#3FE08A", lt:"#DAFFE8", dk:"#0E6A3A", shape:0, lore:"Линза из прицела древнего разведчика: сквозь неё видны слабые узлы брони"},
+  gm_ruby:{name:"Рубиновый конденсатор", kind:"c", col:"#FF4D5E", lt:"#FFD9DE", dk:"#7A0E1E", shape:1, lore:"Кристалл держит заряд дольше любой батареи и отдаёт его одним ударом"},
+  gm_abys:{name:"Кристалл бездны", kind:"r", col:"#A66BFF", lt:"#EEE2FF", dk:"#35137A", shape:2, lore:"Поднят из самых глубоких цехов, внутри гудит чужая энергия"},
+  gm_jade:{name:"Нефритовый резонатор", kind:"r", col:"#2FD6B5", lt:"#D6FFF5", dk:"#0A5C4F", shape:3, lore:"Гасит вибрацию брони и разгоняет приводы до предела"}
+};
+const GEM_IDS = Object.keys(GEMS);
+for(const id of GEM_IDS) ITEMS[id] = {name:GEMS[id].name, type:"gem", sell:0, nosell:true, desc:GEMS[id].lore + " · Сдаётся в Кодекс → «Самоцветы» за вечный бонус · продаётся на маркете за GRAM"};
+// сколько этого самоцвета сдано в Кодекс (S.gemCx; в живой игре счётчики присылает сервер)
+const gemCx = id => Math.max(0, Math.min(GEM_MAX, Math.floor(+(S.gemCx || {})[id] || 0)));
+// бонус одного вида: действуют все пороги до n включительно
+function gemStepBonus(kind, n){
+  const b = {atk:0, def:0, hp:0, rate:0};
+  for(const [need, bon] of GEM_STEPS[kind]) if(n >= need) for(const k in bon) b[k] += bon[k];
+  b.rate = Math.round(b.rate*100)/100;
+  return b;
+}
+// бонус всех сданных самоцветов. stat() вызывается очень часто — пересчёт только когда меняются счётчики
+const GEM_BON = {key:"", v:{atk:0, def:0, hp:0, rate:0}};
+function gemBonus(){
+  const key = GEM_IDS.map(gemCx).join(",");
+  if(key !== GEM_BON.key){
+    const b = {atk:0, def:0, hp:0, rate:0};
+    for(const id of GEM_IDS){ const s = gemStepBonus(GEMS[id].kind, gemCx(id)); for(const k in b) b[k] += s[k]; }
+    b.rate = Math.round(b.rate*100)/100;
+    GEM_BON.key = key; GEM_BON.v = b;
+  }
+  return GEM_BON.v;
+}
 // ===================== РЕДКОСТЬ И ХАРАКТЕРИСТИКИ РУН И АРТЕФАКТОВ =====================
 // Пять ступеней редкости (цвет названия и рамки), у каждой характеристики свой цвет — строки бонусов читаются
 // с одного взгляда. Значения хранятся в b: atk/def/hp/spd/rate/cpow/xp/scrap — доли (0.04 = +4%),
@@ -2383,6 +2450,7 @@ function stat(){
   let maxhp = S.max_hp + 30*(U.hp || 0), spd = 0, crit = 3 + 0.3*(U.crit || 0);
   for(const e of Object.values(S.eq)){ if(!e) continue; const s = gearStats(e.id, e.g, e.e); atk += s.atk||0; def += s.def||0; maxhp += s.hp||0; spd += s.spd||0; crit += s.crit||0; }
   if(typeof codexBonus === "function"){ const cb = codexBonus(); atk += cb.atk; def += cb.def; maxhp += cb.hp; crit += cb.crit; }
+  const GB = gemBonus(); atk += GB.atk; def += GB.def; maxhp += GB.hp;        // самоцветы Кодекса (скорость атаки — ниже)
   // комплект: 3 вещи одного поколения — +1,5% атаки за номер поколения, 6 вещей — ещё +2% прочности и +крит
   for(const [t, n] of Object.entries(setCounts())){ if(n >= 3) atk = Math.round(atk*(1 + 0.015*t)); if(n >= 6){ maxhp = Math.round(maxhp*(1 + 0.02*t)); crit += Math.ceil(t/2); } }
   maxhp = Math.round(maxhp*(1 + 0.03*pasLv("vital")));
@@ -2413,7 +2481,7 @@ function stat(){
   atk = Math.round(atk*C.atk); def = Math.round(def*C.def); maxhp = Math.round(maxhp*C.hp);
   return {atk, def, maxhp, spd, crit, maxcp:maxhp*10 + 200*(U.cpup || 0),
     critPow:2 + 0.003*(U.cpow || 0) + 0.04*pasLv("fury") + (RB.cpow || 0),
-    rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift") + (RB.rate || 0),
+    rate:1 + 0.01*(U.aspd || 0) + 0.02*pasLv("swift") + (RB.rate || 0) + GB.rate,
     regen:1*(U.regen || 0) + 0.2*pasLv("selfrepair") + (RB.regen || 0),
     xpUp:0.001*(U.xpup || 0) + (DB.xp || 0) + (RB.xp || 0), dropUp:0.001*(U.dropup || 0),
     dmgRed:Math.min(0.45, 0.03*pasLv("steelskin")),
@@ -3021,7 +3089,7 @@ function update(dt){
     if(dist < 24 && !d.stuck){
       if(d.kind === "cores" && typeof ticketActive === "function" && ticketActive() && !d.x2){ d.amt *= 2; d.x2 = true; }   // билет сезона: ×2 ядер
       if(d.kind === "scrap" || d.kind === "cores"){ Sfx.play("pick"); S[d.kind] += d.amt; addText(p.x, p.y-40, "+" + d.amt + (d.kind === "scrap" ? " лома" : " ядро"), d.kind === "scrap" ? "#C9D1D8" : "#2FE0D0"); d.got = true; }
-      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); addText(p.x, p.y-40, ITEMS[d.kind].name + (SHARD[d.kind] && d.amt > 1 ? " ×" + d.amt : ""), d.g !== undefined ? gradeColor(d.g) : SHARD[d.kind] ? SHARD[d.kind].col : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
+      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); addText(p.x, p.y-40, ITEMS[d.kind].name + (SHARD[d.kind] && d.amt > 1 ? " ×" + d.amt : ""), d.g !== undefined ? gradeColor(d.g) : SHARD[d.kind] ? SHARD[d.kind].col : GEMS[d.kind] ? GEMS[d.kind].col : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(GEMS[d.kind]){ toast("💎 Самоцвет: " + ITEMS[d.kind].name + " — сдай его в Кодекс"); Sfx.play("level"); } if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
       else { d.stuck = true; d.mag = false; d.stuckT = now + 6; if(fullWarnT <= 0){ toast("Сумка заполнена. Освободи место на складе или продай"); fullWarnT = 4; } }
     }
   }
@@ -5407,7 +5475,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   let adm = {kind:"scrap", item:"g_rifle_10", grade:3};
   // все предметы игры, по группам (список строится при открытии панели — к этому моменту описаны все предметы)
   const ADM_GROUPS = [["gear:weapon", "Оружие"], ["gear:head", "Сенсоры"], ["gear:armor", "Корпуса"], ["gear:module", "Модули"], ["gear:core", "Реакторы"], ["gear:legs", "Ходовые"],
-    ["wings", "Крылья"], ["cloak", "Плащи"], ["artifact", "Артефакты"], ["drone", "Дроны"], ["rune", "Руны"], ["ench", "Сферы заточки"], ["book", "Книги"],
+    ["wings", "Крылья"], ["cloak", "Плащи"], ["artifact", "Артефакты"], ["drone", "Дроны"], ["rune", "Руны"], ["ench", "Сферы заточки"], ["gem", "Самоцветы"], ["book", "Книги"],
     ["pot", "Зелья"], ["use", "Ремкомплекты"], ["mat", "Материалы"]];
   function admItemOptions(){
     const groups = new Map(ADM_GROUPS.map(([k]) => [k, []])), other = [];
@@ -6120,7 +6188,8 @@ function bonusesView(){
     ["🎁", "Доп. шанс дропа", vb.drop, `VIP ${vl}`]
   ];
   return `<section class="pcard"><h3>Все бонусы</h3><div class="bonlist">${rows.map(([ic, n, v, src]) => `<div class="bonrow"><span>${ic} ${n}<small>${src}</small></span><b class="${v > 0 ? "up" : ""}">${pct(v)}${v > 0 ? " ▲" : ""}</b></div>`).join("")}
-    <div class="bonrow"><span>📘 Кодекс<small>завершённые наборы</small></span><b class="${cb.atk || cb.def || cb.hp || cb.crit ? "up" : ""}">+${cb.atk} АТК · +${cb.def} ЗАЩ · +${cb.hp} ПРОЧ · +${cb.crit}% КРИТ</b></div></div></section>`;
+    <div class="bonrow"><span>📘 Кодекс<small>завершённые наборы</small></span><b class="${cb.atk || cb.def || cb.hp || cb.crit ? "up" : ""}">+${cb.atk} АТК · +${cb.def} ЗАЩ · +${cb.hp} ПРОЧ · +${cb.crit}% КРИТ</b></div>
+    ${(() => { const gb = gemBonus(); return `<div class="bonrow"><span>💎 Самоцветы<small>сданные в Кодекс</small></span><b class="${gb.atk || gb.def || gb.hp || gb.rate ? "up" : ""}">+${gb.atk} АТК · +${gb.def} ЗАЩ · +${gb.hp} ПРОЧ · +${Math.round(gb.rate*100)}% СКОР. АТАКИ</b></div>`; })()}</div></section>`;
 }
 function upgradesView(){
   const seg = `<div class="seg upseg">${[["stats", "Характеристики"], ["bonus", "Все бонусы"]].map(([k, n]) => `<button type="button" data-upsub="${k}" aria-pressed="${upSub === k}">${n}</button>`).join("")}</div>`;
@@ -8463,7 +8532,10 @@ function mobDrops(type, loc){
   for(const b of BOOK_IDS) out.items.push({id:b, chance:P(ITEMS[b].pas ? 0.0001 : lv > 10 ? 0.0002 : 0.0001), sect:ITEMS[b].pas ? "bookp" : "book"});
   const pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= lv + 2 && (ITEMS[id].lvl || 1) >= lv - 10);   // вещи своего уровня и до 10 ниже
   out.gear = {pool, per:gearPer(lv)};
+  // самоцветы: только в цехах, Фарм-зоне и Сезонной зоне. Бросает их сервер (items.roll_gems), здесь — шансы для карты
+  out.gems = GEM_LOCS.includes(loc) ? GEM_IDS.map(id => ({id, chance:P(GEMS[id].kind === "c" ? +(0.0033 + 0.000036*s).toFixed(6) : +(0.00033 + 0.0000036*s).toFixed(7))})) : [];
   if(k.boss){                                            // главарь: шансы ценного лута ×150
+    out.gems.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
     out.items.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
     out.gear.per = out.gear.per.map(v => Math.min(0.5, v*BOSS_LOOT));
   } else if(k.elite){                                    // элитный моб: шансы ×ELITE.LOOT (как ELITE_LOOT на сервере)
@@ -8760,6 +8832,7 @@ function mobCard(type){
     const mats = D.items.filter(i => i.sect === "mat"), sph = D.items.filter(i => i.sect === "sph");
     if(mats.length) h += `<div class="dsect">Материалы и расходники</div>` + mats.map(i => row(icon(i.id), ITEMS[i.id].name, (i.amt ? "×" + i.amt[0] + "–" + i.amt[1] : "×1") + " · " + pctF(i.chance))).join("");
     if(sph.length) h += `<div class="dsect">Сферы и ядра</div>` + sph.map(i => row(i.id === "cores" ? coreIcon("ci-m") : icon(i.id), i.id === "cores" ? "Энергоядро" : ITEMS[i.id].name, "×1 · " + pctF(i.chance))).join("");
+    if(D.gems && D.gems.length) h += `<div class="dsect">Самоцветы для Кодекса</div>` + D.gems.map(i => row(icon(i.id), ITEMS[i.id].name, "×1 · " + pctF(i.chance), GEMS[i.id].col)).join("");
     const bookRow = i => { const it = ITEMS[i.id], cn = it.cls ? CLASSES[it.cls].name : "общая"; return row(icon(i.id), `${it.name} <span class="muted">(${cn})</span>`, "×1 · " + pctF(i.chance), it.cls === S.cls ? "#F2C14B" : ""); };
     const bk = D.items.filter(i => i.sect === "book"), bp = D.items.filter(i => i.sect === "bookp");
     const lateBooks = `${bk.length ? `<div class="dsect">Книги навыков (все классы)</div>` + bk.map(bookRow).join("") : ""}${bp.length ? `<div class="dsect">Книги пассивок (все классы)</div>` + bp.map(bookRow).join("") : ""}`;
@@ -9481,11 +9554,17 @@ function codexBonus(){
 const STAT_RU = {atk:"атаки", def:"брони", hp:"прочности", crit:"% крита"};
 const STAT_SHORT = {atk:"АТК", def:"ЗАЩ", hp:"ПРОЧ", crit:"КРИТ%"};
 const cxBonText = bon => Object.entries(bon).map(([k, v]) => `<em>+${v} ${STAT_SHORT[k]}</em>`).join("");
-let cxTab = "all", cxQ = "", cxArm = null, cxCls = "all", cxGrade = "all", cxShow = 40, cxOpenBon = false;
+let cxTab = "all", cxQ = "", cxArm = null, cxCls = "all", cxGrade = "all", cxShow = 40, cxOpenBon = false, cxSec = "sets";
 function openCodex(){
   openSheet("Кодекс", "Коллекции снаряжения с вечными бонусами", renderCodex);
 }
 function renderCodex(){
+  // два раздела, как в LIBERTY: «Наборы» (снаряжение) и «Самоцветы»
+  const sec = `<div class="seg cx-sec">${[["sets", "Наборы"], ["gems", "Самоцветы"]].map(([k, n]) => `<button type="button" data-cxsec="${k}" aria-pressed="${cxSec === k}">${n}</button>`).join("")}</div>`;
+  if(cxSec === "gems"){ body().innerHTML = sec + gemCodexHtml(); return; }
+  renderCodexSets(); body().insertAdjacentHTML("afterbegin", sec);
+}
+function renderCodexSets(){
   const done = CODEX.filter(codexDone).length, b = codexBonus(), q = cxQ.toLowerCase();
   const list = CODEX.filter(c => (cxTab === "all" || (cxTab === "done" ? codexDone(c) : !codexDone(c) && (S.codex[c.id] || []).some(Boolean)))
       && (cxCls === "all" || (cxCls === "none" ? !c.cls : c.cls === cxCls)) && (cxGrade === "all" || c.g === +cxGrade)
@@ -9527,6 +9606,69 @@ function codexSlot(cid, i){
   if(codexDone(c)){ toast("Набор завершён: " + Object.entries(c.bon).map(([k, v]) => "+" + v + " " + STAT_RU[k]).join(", ")); Sfx.play("level"); }
   save(); renderCodex();
 }
+// ---- Кодекс → «Самоцветы»: сдать 1 или все, пороги складываются и остаются навсегда ----
+const gemBonText = bon => Object.entries(bon).map(([k, v]) => k === "rate" ? `+${Math.round(v*100)}% СКОР. АТАКИ` : `+${v} ${STAT_SHORT[k]}`).join(" · ");
+const gemOnline = () => typeof REG !== "undefined" && REG.on && typeof regOnline === "function" && regOnline();
+let gemBusy = false;
+// ответ сервера может прийти, когда открыто уже другое окно: перерисовываем только Кодекс
+const gemRedraw = () => { if(typeof sheetRender !== "undefined" && sheetRender === renderCodex) renderCodex(); };
+// сколько штук можно сдать: в живой игре — только учтённые сервером (выпавшие с врагов или купленные на маркете)
+function gemCanGive(id){
+  const have = count(S.inv, id) + count(S.store, id);
+  return Math.min(GEM_MAX - gemCx(id), gemOnline() ? Math.min(have, REG.sph[id] || 0) : have);
+}
+function gemCard(id){
+  const G = GEMS[id], n = gemCx(id), steps = GEM_STEPS[G.kind], have = count(S.inv, id) + count(S.store, id), can = gemCanGive(id);
+  const ni = steps.findIndex(([need]) => n < need), next = ni >= 0 ? steps[ni] : null, prev = ni > 0 ? steps[ni - 1][0] : 0;
+  const pct = next ? Math.min(100, (n - prev)/(next[0] - prev)*100) : 100, free = gemOnline() ? have - Math.min(have, REG.sph[id] || 0) : 0;
+  return `<section class="gmcard ${next ? "" : "max"}" style="--gc:${G.col}">
+    <div class="gm-head"><span class="gm-ic">${gemIcon(id, true)}</span>
+      <div class="gm-tx"><b>${G.name}</b><small>${G.kind === "c" ? "Частый · шанс как у медной сферы" : "Редкий · шанс как у титановой сферы"}</small></div>
+      <div class="gm-cnt"><b>${n}</b><small>из ${GEM_MAX}</small></div></div>
+    <div class="gm-bar"><i style="width:${pct}%"></i></div>
+    <p class="gm-next">${next ? `До порога ${next[0]}: ещё ${next[0] - n} · ${gemBonText(next[1])}` : "Все пороги собраны"}</p>
+    <div class="gm-steps">${steps.map(([need, bon]) => `<span class="${n >= need ? "on" : next && next[0] === need ? "nx" : ""}"><b>${need}</b>${gemBonText(bon)}</span>`).join("")}</div>
+    <div class="gm-foot"><small>${have ? `В сумке и на складе: ${have}` : "Нет в сумке и на складе"}${free > 0 ? ` · не учтено сервером: ${free}` : ""}</small>
+      ${next ? `<div class="gm-btns"><button class="act alt" type="button" data-gmgive="${id}" data-n="1" ${can > 0 && !gemBusy ? "" : "disabled"}>Сдать 1</button><button class="act" type="button" data-gmgive="${id}" data-n="all" ${can > 0 && !gemBusy ? "" : "disabled"}>Сдать все</button></div>`
+        : `<span class="gm-done">✓ Собрано полностью</span>`}</div>
+  </section>`;
+}
+function gemCodexHtml(){
+  const b = gemBonus();
+  return `<p class="hint" style="margin-top:0">Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне и Сезонной зоне. Каждый вид собирается отдельно, до ${GEM_MAX} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.</p>
+    <div class="gm-tot"><b>Бонус самоцветов</b><span>${[`+${b.atk} АТК`, `+${b.def} ЗАЩ`, `+${b.hp} ПРОЧ`, `+${Math.round(b.rate*100)}% СКОР. АТАКИ`].map(s => `<i>${s}</i>`).join(" · ")}</span></div>
+    ${GEM_IDS.map(gemCard).join("")}
+    <p class="hint">Самоцветы можно продавать и покупать на маркете — не дешевле ${String(GEM_MIN_PRICE).replace(".", ",")} GRAM за штуку.</p>`;
+}
+async function gemGive(id, all){
+  const G = GEMS[id]; if(!G || gemBusy) return;
+  const n0 = gemCx(id), have = count(S.inv, id) + count(S.store, id);
+  if(n0 >= GEM_MAX){ toast("Собрано максимум: " + GEM_MAX); return; }
+  let k = Math.min(all ? Infinity : 1, gemCanGive(id));
+  if(k <= 0){ toast(have ? "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете" : "Нет в сумке и на складе: " + G.name); return; }
+  if(gemOnline()){
+    gemBusy = true; gemRedraw();
+    let r; try{ r = await regApi("gem", {id, n:k}); }catch(e){ r = null; }
+    gemBusy = false;
+    if(!r || !r.ok){
+      if(r && r.cx != null) S.gemCx = {...(S.gemCx || {}), [id]:+r.cx};
+      if(r && r.sph != null) REG.sph[id] = +r.sph;
+      toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); gemRedraw(); return;
+    }
+    k = +r.given || 0; REG.sph[id] = +r.sph || 0; S.gemCx = {...(S.gemCx || {}), [id]:+r.cx};
+  } else S.gemCx = {...(S.gemCx || {}), [id]:n0 + k};
+  // камни уходят из сумки, а если там меньше — со склада
+  const fromInv = Math.min(k, count(S.inv, id)); removeItem(S.inv, id, fromInv); if(k > fromInv) removeItem(S.store, id, k - fromInv);
+  const n1 = gemCx(id), crossed = GEM_STEPS[G.kind].filter(([need]) => n0 < need && n1 >= need);
+  if(crossed.length){ toast("Порог " + crossed[crossed.length - 1][0] + " · " + G.name + ": " + crossed.map(([, bon]) => gemBonText(bon)).join(" · ")); Sfx.play("level"); }
+  else { toast("Сдано в Кодекс: " + G.name + " ×" + k); Sfx.play("pick"); }
+  save(); gemRedraw();
+}
+$("shBody").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.cxsec){ if(cxSec !== b.dataset.cxsec){ cxSec = b.dataset.cxsec; Sfx.play("ui"); renderCodex(); } }
+  else if(b.dataset.gmgive && !b.disabled) gemGive(b.dataset.gmgive, b.dataset.n === "all");
+});
 codexReady = true;
 
 // ===================== МАРКЕТ =====================
@@ -9538,8 +9680,8 @@ const mkOnline = () => typeof NET !== "undefined" && NET.on && NET.id;
 // Разделы — по тому, что сервер разрешает продавать (items.escrow_for_market): снаряжение, сферы, осколки, руны,
 // дроны, артефакты, крылья и плащи. Раньше были «Книги» и «Материалы» (их выставить нельзя — всегда пусто),
 // а дроны, крылья и плащи попадали в «Материалы». Пустые разделы не показываются (кроме выбранного).
-const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["art", "Артефакты"], ["rune", "Руны"], ["drone", "Дроны"], ["look", "Крылья и плащи"], ["shard", "Осколки"], ["ench", "Сферы"]];
-const MK_CAT_OF_TYPE = {ench:"ench", shard:"shard", artifact:"art", rune:"rune", drone:"drone", wings:"look", cloak:"look"};
+const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["art", "Артефакты"], ["rune", "Руны"], ["drone", "Дроны"], ["look", "Крылья и плащи"], ["shard", "Осколки"], ["gem", "Самоцветы"], ["ench", "Сферы"]];
+const MK_CAT_OF_TYPE = {ench:"ench", shard:"shard", gem:"gem", artifact:"art", rune:"rune", drone:"drone", wings:"look", cloak:"look"};
 const mkCatOf = id => { const it = ITEMS[id]; return it.type === "gear" ? (it.slot === "weapon" ? "weapon" : "gear") : MK_CAT_OF_TYPE[it.type] || "other"; };
 function mkLocal(){
   if(!S.mkLocal || !S.mkLocal.gram){
@@ -9627,9 +9769,12 @@ function mkNewSheet(){
 }
 function mkForm(i){
   const x = S.inv[i]; if(!x) return;
-  const sug = Math.max(0.05, Math.round(sellPrice(x)/200*100)/100);
-  $("mkForm").innerHTML = `<section class="pcard"><b>${mkItemName(x)}</b>${(() => { const lim = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n; return lim > 1 ? `<label class="flabel">Количество (можно продать ${lim})</label><input class="field" id="mkN" type="number" min="1" max="${lim}" value="${lim}">` : ""; })()}
-    <label class="flabel">Цена за лот, GRAM</label><input class="field" id="mkP" type="number" min="0.01" step="0.01" value="${sug}">
+  const gem = !!GEMS[x.id], lim0 = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n;
+  // самоцветы — не дешевле GEM_MIN_PRICE за штуку (сервер проверяет то же самое)
+  const sug = gem ? Math.round(GEM_MIN_PRICE*Math.max(1, lim0)*100)/100 : Math.max(0.05, Math.round(sellPrice(x)/200*100)/100);
+  $("mkForm").innerHTML = `<section class="pcard"><b>${mkItemName(x)}</b>${(() => { const lim = lim0; return lim > 1 ? `<label class="flabel">Количество (можно продать ${lim})</label><input class="field" id="mkN" type="number" min="1" max="${lim}" value="${lim}">` : ""; })()}
+    <label class="flabel">Цена за лот, GRAM</label><input class="field" id="mkP" type="number" min="${gem ? GEM_MIN_PRICE : 0.01}" step="0.01" value="${sug}">
+    ${gem ? `<p class="hint" style="margin:-4px 0 8px">Самоцветы — не дешевле ${String(GEM_MIN_PRICE).replace(".", ",")} GRAM за штуку</p>` : ""}
     <button class="btn pri wide" type="button" data-mkcreate="${i}">Выставить</button></section>`;
   ["mkN", "mkP"].forEach(id => { const el = $(id); if(el) el.addEventListener("keydown", e => e.stopPropagation()); });
   $("mkForm").scrollIntoView({block:"nearest", behavior:"smooth"});
@@ -9639,6 +9784,7 @@ async function mkCreate(i){
   if(x.r && x.r.some(Boolean)){ toast("Сначала вынь руны из вещи: Персонаж → вещь → гнёзда"); return; }
   const lim = mkOnline() && typeof regTradable === "function" ? regTradable(x) : x.n;
   const n = Math.max(1, Math.min(lim, parseInt(($("mkN") || {}).value) || lim)), price = Math.round(Math.max(0.01, Math.min(100000, parseFloat($("mkP").value) || 0))*100)/100;
+  if(GEMS[x.id] && price < Math.round(GEM_MIN_PRICE*n*100)/100){ toast("Самоцветы — не дешевле " + String(GEM_MIN_PRICE).replace(".", ",") + " GRAM за штуку · за лот от " + gramF(GEM_MIN_PRICE*n) + " GRAM"); return; }
   const item = {id:x.id, g:x.g || 0, e:x.e || 0, n, ...(x.uid ? {uid:x.uid} : {})};
   if(ITEMS[x.id].type === "gear") S.inv.splice(i, 1); else removeItem(S.inv, x.id, n);
   if(mkOnline() && !x.uid && typeof regAddSph === "function" && REG_IDS.includes(x.id)) regAddSph(x.id, -n);
@@ -11801,7 +11947,7 @@ function drawCrimsonWarden(x, y, t, atk){
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
 const REG = {on:false, sph:{sph_cu:0, sph_ti:0}, uids:new Set()};
 // учтённые сервером расходники: сферы, руны и дроны (их можно продать за GRAM). Сервер — items.py → REG_IDS
-const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS, ...DRONE_IDS, ...ART_IDS, ...WING_IDS, ...CLOAK_IDS, ...SHARD_IDS];
+const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS, ...DRONE_IDS, ...ART_IDS, ...WING_IDS, ...CLOAK_IDS, ...SHARD_IDS, ...GEM_IDS];
 const regOnline = () => typeof NET !== "undefined" && NET.on && NET.id && NET.ws && NET.ws.readyState === 1;
 const regApi = (op, body) => NET.api("/api/items/" + op, body || {});
 
@@ -11811,6 +11957,8 @@ async function regSync(){
   try{
     const r = await regApi("state"); if(!r || !r.ok) return;
     REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = Object.fromEntries(REG_IDS.map(id => [id, +(r.sph || {})[id] || 0]));
+    // сданные в Кодекс самоцветы считает сервер: его счётчики главнее сохранения на телефоне
+    if(r.gemcx) S.gemCx = Object.fromEntries(GEM_IDS.map(id => [id, Math.max(0, Math.min(GEM_MAX, +r.gemcx[id] || 0))]));
     // дроны и артефакты, которые сервер за игроком числит, но которых нет в сумке и на складе:
     // их стирала старая ошибка загрузки сохранения — возвращаем
     const back = [];
@@ -13670,6 +13818,66 @@ function uniqIcon(id, anim){
   };
 }
 
+// ---- иконки самоцветов: у каждого вида своя огранка и деталь «железа» ----
+// 0 — ступенчатая огранка с ободком линзы, 1 — круглый бриллиант с выводами конденсатора,
+// 2 — двуглавый кристалл с тёмным ядром, 3 — шестигранный кабошон с катушкой резонатора
+function gemIcon(id, anim){
+  const G = GEMS[id]; if(!G) return "";
+  const u = "gmi" + (++svgUid), fill = `url(#${u})`, glow = anim ? `<animate attributeName="opacity" values=".5;1;.5" dur="2.4s" repeatCount="indefinite"/>` : "";
+  const art = [
+    `<polygon points="10,5 22,5 27,10 27,22 22,27 10,27 5,22 5,10" fill="${fill}" stroke="${G.dk}" stroke-width="1.1"/>
+     <polygon points="12.5,10 19.5,10 22,12.5 22,19.5 19.5,22 12.5,22 10,19.5 10,12.5" fill="url(#${u}t)" stroke="${G.dk}" stroke-width=".6" opacity=".95"/>
+     <path d="M10 5 12.5 10M22 5 19.5 10M27 10 22 12.5M27 22 22 19.5M22 27 19.5 22M10 27 12.5 22M5 22 10 19.5M5 10 10 12.5" stroke="${G.dk}" stroke-width=".6" opacity=".7"/>
+     <circle cx="16" cy="16" r="13.5" fill="none" stroke="#B9C3CD" stroke-width="1.2" stroke-dasharray="3 2.2" opacity=".75"/>`,
+    `<rect x="11.4" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/><rect x="18.8" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/>
+     <circle cx="16" cy="14" r="11" fill="${fill}" stroke="${G.dk}" stroke-width="1.1"/>
+     <polygon points="16,8.5 19.9,10.1 21.5,14 19.9,17.9 16,19.5 12.1,17.9 10.5,14 12.1,10.1" fill="url(#${u}t)" stroke="${G.dk}" stroke-width=".6"/>
+     <path d="M16 3V8.5M23.8 6.2 19.9 10.1M27 14H21.5M23.8 21.8 19.9 17.9M16 25V19.5M8.2 21.8 12.1 17.9M5 14H10.5M8.2 6.2 12.1 10.1" stroke="${G.dk}" stroke-width=".6" opacity=".7"/>`,
+    `<polygon points="16,1.5 23.5,9 21,27 16,30.5 11,27 8.5,9" fill="${fill}" stroke="${G.dk}" stroke-width="1.1"/>
+     <polygon points="16,1.5 8.5,9 11,27 16,30.5" fill="${G.dk}" opacity=".3"/><polygon points="16,1.5 16,30.5 21,27 23.5,9" fill="#FFFFFF" opacity=".12"/>
+     <ellipse cx="16" cy="16" rx="3.6" ry="5.4" fill="#120726" stroke="${G.lt}" stroke-width=".9">${glow}</ellipse>
+     <ellipse cx="16" cy="16" rx="1.3" ry="2.6" fill="${G.col}">${glow}</ellipse>`,
+    `<polygon points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="${fill}" stroke="${G.dk}" stroke-width="1.1"/>
+     <circle cx="16" cy="16" r="7.6" fill="none" stroke="${G.lt}" stroke-width="1.2" stroke-dasharray="2.6 1.6" opacity=".9"/>
+     <circle cx="16" cy="16" r="4.4" fill="url(#${u}t)" stroke="${G.dk}" stroke-width=".7"/>
+     <path d="M16 3V7M27 9.5 23.6 11.5M27 22.5 23.6 20.5M16 29V25M5 22.5 8.4 20.5M5 9.5 8.4 11.5" stroke="${G.dk}" stroke-width="1" opacity=".55"/>`
+  ][G.shape % 4];
+  return `<svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible">
+    <defs><linearGradient id="${u}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${G.lt}"/><stop offset=".45" stop-color="${G.col}"/><stop offset="1" stop-color="${G.dk}"/></linearGradient>
+    <radialGradient id="${u}t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="${G.lt}"/><stop offset="1" stop-color="${G.col}"/></radialGradient>
+    <radialGradient id="${u}r"><stop offset="0" stop-color="${G.col}" stop-opacity=".7"/><stop offset="1" stop-color="${G.col}" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="16" cy="16" r="16" fill="url(#${u}r)">${glow}</circle>${art}
+    <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/>
+    <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF">${anim ? `<animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite"/>` : ""}</path></g>
+  </svg>`;
+}
+{ const _iconG = icon; icon = function(id, g){ const it = ITEMS[id]; if(it && it.type === "gem") return gemIcon(id); return _iconG(id, g); }; }
+
+// ---- самоцветы на земле: огранённый камень с ореолом своего цвета и искрой ----
+{
+  const _drawDropsG = drawDrops;
+  drawDrops = function(){
+    const all = drops, gm = all.filter(d => GEMS[d.kind]);
+    if(!gm.length) return _drawDropsG();
+    drops = all.filter(d => !GEMS[d.kind]);
+    try{ _drawDropsG(); } finally { drops = all; }
+    for(const d of gm){
+      const G = GEMS[d.kind], bob = Math.sin(d.t*5)*3;
+      ctx.save(); ctx.translate(d.x, d.y + bob);
+      const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, 22); rg.addColorStop(0, G.col + "B0"); rg.addColorStop(1, G.col + "00");
+      ctx.globalAlpha = .75 + Math.sin(d.t*4)*.2; ctx.fillStyle = rg; circle(0, 0, 22); ctx.fill(); ctx.globalAlpha = 1;
+      const gr = ctx.createLinearGradient(-8, -8, 8, 8); gr.addColorStop(0, G.lt); gr.addColorStop(.5, G.col); gr.addColorStop(1, G.dk);
+      ctx.fillStyle = gr; ctx.strokeStyle = G.dk; ctx.lineWidth = 1.2; ctx.shadowColor = G.col; ctx.shadowBlur = 12;
+      const pts = G.shape === 2 ? [[0, -11], [6, -5], [4, 8], [0, 11], [-4, 8], [-6, -5]] : G.shape === 3 ? [[0, -9], [8, -4.5], [8, 4.5], [0, 9], [-8, 4.5], [-8, -4.5]]
+        : [[-4, -8], [4, -8], [8, -4], [8, 4], [4, 8], [-4, 8], [-8, 4], [-8, -4]];
+      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(1, -6); ctx.lineTo(-2, -1); ctx.closePath(); ctx.fill();
+      const tw = (Math.sin(d.t*6) + 1)/2; ctx.globalAlpha = tw; ctx.fillStyle = "#fff"; ctx.fillRect(7, -12, 1.6, 6); ctx.fillRect(5.2, -9.8, 5.2, 1.6); ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+  };
+}
+
 // ---- бонус сета: 3 вещи — половина, 5 — полностью (только свой класс) ----
 const UNIQ_BONUS_NAME = {atk:"атаки", hp:"прочности", def:"брони", crit:"крита", spd:"скорости", cpow:"силы крита", rate:"скорости атаки", regen:"прочности/сек", skill:"урона умений", cdr:"перезарядки умений", red:"снижения урона", steal:"вампиризма"};
 function uniqBonusText(cls, k){
@@ -14001,7 +14209,7 @@ $("shBody").addEventListener("click", async e => {
 // сумке не меняется), плитки 4 в ряд с названием и количеством. Одиночная вещь переносится сразу, у стопки
 // открывается окно «Положить/Забрать» со степпером, ползунком и кнопками 1 · ½ · Все.
 const ST_CATS = [["all", "Все"]];
-const stCatOf = id => { const t = (ITEMS[id] || {}).type; return t === "gear" ? "gear" : t === "mat" || t === "shard" || t === "ench" ? "res" : t === "use" || t === "pot" || t === "tp" ? "cons" : "spec"; };
+const stCatOf = id => { const t = (ITEMS[id] || {}).type; return t === "gear" ? "gear" : t === "mat" || t === "shard" || t === "gem" || t === "ench" ? "res" : t === "use" || t === "pot" || t === "tp" ? "cons" : "spec"; };
 const ST_SORTS = [["put", "Как положили"], ["type", "По типу"], ["rare", "По редкости"], ["name", "По названию"], ["qty", "По количеству"]];
 let stSortOpen = false;
 const stSortKey = () => (S.settings && S.settings.stSort) || "type";
@@ -14919,6 +15127,8 @@ Object.assign(I18N, {"Группа из {n}": ["Group of {n}", "Група з {n
 // порталы открываются касанием; вкладка, вытесненная другим окном; сервер обновился
 Object.assign(I18N, {"Город": ["City", "Місто", "Ciudad", "Şehir", "Cidade"], "Переход в Центральный ангар": ["Travel to the Central Hangar", "Перехід до Центрального ангара", "Viaje al Hangar Central", "Merkez Hangar'a geçiş", "Ir ao Hangar Central"], "Выход из башни": ["Leave the tower", "Вихід із вежі", "Salir de la torre", "Kuleden çıkış", "Sair da torre"], "Выйти из башни": ["Leave the tower", "Вийти з вежі", "Salir de la torre", "Kuleden çık", "Sair da torre"], "Выход засчитается как сдача: забег в башне закончится.": ["Leaving counts as giving up: your tower run will end.", "Вихід зарахується як здача: забіг у вежі завершиться.", "Salir cuenta como rendirse: tu recorrido en la torre terminará.", "Çıkış teslim olma sayılır: kule koşun sona erer.", "Sair conta como desistência: sua corrida na torre terminará."], "Игра открыта в другом окне": ["The game is open in another window", "Гра відкрита в іншому вікні", "El juego está abierto en otra ventana", "Oyun başka bir pencerede açık", "O jogo está aberto em outra janela"], "Здесь связь с миром отключена": ["The world connection is off here", "Тут зв'язок зі світом вимкнено", "Aquí la conexión con el mundo está desactivada", "Burada dünya bağlantısı kapalı", "Aqui a conexão com o mundo está desligada"], "Играть здесь": ["Play here", "Грати тут", "Jugar aquí", "Burada oyna", "Jogar aqui"], "Сервер обновился": ["The server was updated", "Сервер оновився", "El servidor se actualizó", "Sunucu güncellendi", "O servidor foi atualizado"], "Прогресс игроков сброшен": ["Player progress was reset", "Прогрес гравців скинуто", "El progreso de los jugadores se reinició", "Oyuncu ilerlemesi sıfırlandı", "O progresso dos jogadores foi redefinido"], "Перезапустить сейчас": ["Restart now", "Перезапустити зараз", "Reiniciar ahora", "Şimdi yeniden başlat", "Reiniciar agora"], "Бонусы": ["Bonuses", "Бонуси", "Bonos", "Bonuslar", "Bônus"], "Облик": ["Looks", "Вигляд", "Aspecto", "Görünüm", "Visual"], "не хватает": ["short by", "бракує", "faltan", "eksik", "faltam"], "Крылья и плащи": ["Wings & cloaks", "Крила й плащі", "Alas y capas", "Kanatlar ve pelerinler", "Asas e capas"], "Ремонт:": ["Repairs:", "Ремонт:", "Reparación:", "Onarım:", "Reparo:"], "Портал сезона": ["Season portal", "Портал сезону", "Portal de temporada", "Sezon portalı", "Portal da temporada"], "Войти в сезонную зону": ["Enter the season zone", "Увійти в сезонну зону", "Entrar en la zona de temporada", "Sezon bölgesine gir", "Entrar na zona da temporada"], "Зона для владельцев билета сезона: больше опыта и дропа.": ["Zone for season ticket holders: more XP and drops.", "Зона для власників квитка сезону: більше досвіду й дропу.", "Zona para quienes tienen el pase de temporada: más XP y botín.", "Sezon bileti sahipleri için bölge: daha fazla XP ve ganimet.", "Zona para quem tem o passe da temporada: mais XP e drops."], "🔒 Вход только с билетом сезона. Билет даёт ×2 опыт, +60% к дропу и премиум-награды пропуска.": ["🔒 Entry with a season ticket only. The ticket gives ×2 XP, +60% drops and premium pass rewards.", "🔒 Вхід лише з квитком сезону. Квиток дає ×2 досвід, +60% до дропу й преміум-нагороди пропуску.", "🔒 Solo se entra con el pase de temporada. Da ×2 XP, +60% de botín y recompensas premium del pase.", "🔒 Giriş yalnızca sezon biletiyle. Bilet ×2 XP, +%60 ganimet ve premium bilet ödülleri verir.", "🔒 Entrada só com o passe da temporada. Ele dá ×2 XP, +60% de drops e recompensas premium do passe."], "Купить билет": ["Buy ticket", "Купити квиток", "Comprar pase", "Bilet satın al", "Comprar passe"], "Пропуск": ["Pass", "Пропуск", "Pase", "Bilet", "Passe"], "Уровень пропуска": ["Pass level", "Рівень пропуску", "Nivel del pase", "Bilet seviyesi", "Nível do passe"], "Уровень пропуска:": ["Pass level:", "Рівень пропуску:", "Nivel del pase:", "Bilet seviyesi:", "Nível do passe:"], "Опыт пропуска": ["Pass XP", "Досвід пропуску", "XP del pase", "Bilet XP", "XP do passe"], "опыта пропуска": ["pass XP", "досвіду пропуску", "XP del pase", "bilet XP", "XP do passe"], "Максимальный уровень пропуска": ["Max pass level", "Максимальний рівень пропуску", "Nivel máximo del pase", "Maksimum bilet seviyesi", "Nível máximo do passe"], "Опыт пропуска — за победы над врагами. Он открывает награды уровней и на рейтинг не влияет.": ["Pass XP comes from defeating enemies. It unlocks level rewards and does not affect the ranking.", "Досвід пропуску — за перемоги над ворогами. Він відкриває нагороди рівнів і не впливає на рейтинг.", "La XP del pase se gana venciendo enemigos. Desbloquea recompensas de nivel y no afecta a la clasificación.", "Bilet XP'si düşmanları yenerek kazanılır. Seviye ödüllerini açar, sıralamayı etkilemez.", "O XP do passe vem de derrotar inimigos. Ele libera recompensas de nível e não afeta o ranking."], "Очки сезона — за задания. По ним место в рейтинге и призы в USDT.": ["Season points come from tasks. They decide your ranking place and USDT prizes.", "Очки сезону — за завдання. За ними місце в рейтингу й призи в USDT.", "Los puntos de temporada se ganan con tareas. Deciden tu puesto en la clasificación y los premios en USDT.", "Sezon puanları görevlerden gelir. Sıralamadaki yerini ve USDT ödüllerini belirler.", "Os pontos da temporada vêm das tarefas. Eles definem sua posição no ranking e os prêmios em USDT."], "Место — по очкам сезона. Призы в USDT получают первые 20 пилотов.": ["Place is by season points. The top 20 pilots get USDT prizes.", "Місце — за очками сезону. Призи в USDT отримують перші 20 пілотів.", "El puesto depende de los puntos de temporada. Los 20 primeros pilotos reciben premios en USDT.", "Sıra sezon puanlarına göredir. İlk 20 pilot USDT ödülü alır.", "A posição é pelos pontos da temporada. Os 20 primeiros pilotos recebem prêmios em USDT."], "Задания, рейтинг и пропуск сезона": ["Season tasks, ranking and pass", "Завдання, рейтинг і пропуск сезону", "Tareas, clasificación y pase de temporada", "Sezon görevleri, sıralama ve bilet", "Tarefas, ranking e passe da temporada"]});
 Object.assign(I18N, {"Сдвоенный Колосс": ["Twin Colossus", "Здвоєний Колос", "Coloso Gemelo", "İkiz Dev", "Colosso Gêmeo"], "Патрульный Краулер": ["Patrol Crawler", "Патрульний Краулер", "Reptador de patrulla", "Devriye Sürüngeni", "Rastejador de patrulha"], "Сторожевой Дрон": ["Sentinel Drone", "Сторожовий Дрон", "Dron centinela", "Nöbetçi Drone", "Drone sentinela"], "Заградительный Страж": ["Barrier Guardian", "Загороджувальний Вартовий", "Guardián de barrera", "Bariyer Muhafızı", "Guardião de barreira"], "Штурмовой Шагоход": ["Assault Walker", "Штурмовий Крокохід", "Caminante de asalto", "Hücum Yürüteci", "Andador de assalto"], "Таранный Краулер": ["Ram Crawler", "Таранний Краулер", "Reptador ariete", "Koçbaşı Sürüngen", "Rastejador aríete"], "Осадный Дрон": ["Siege Drone", "Облоговий Дрон", "Dron de asedio", "Kuşatma Drone'u", "Drone de cerco"], "Карательный Страж": ["Punisher Guardian", "Каральний Вартовий", "Guardián punitivo", "Cezalandırıcı Muhafız", "Guardião punitivo"], "нет в зале · {n} с": ["not in the hall · {n} s", "немає в залі · {n} с", "fuera de la sala · {n} s", "salonda değil · {n} sn", "fora do salão · {n} s"], "Вернуться в забег": ["Return to the run", "Повернутися в забіг", "Volver a la carrera", "Koşuya dön", "Voltar à corrida"], "Возвращение в забег «Сотрудничества»": ["Returning to the Cooperation run", "Повернення в забіг «Співпраці»", "Volviendo a la carrera de Cooperación", "İş birliği koşusuna dönülüyor", "Voltando à corrida da Cooperação"], "Опустошающий Шагоход": ["Ravager Walker", "Спустошливий Крокохід", "Caminante devastador", "Yıkıcı Yürüteç", "Andador devastador"], "Этап": ["Stage", "Етап", "Etapa", "Aşama", "Etapa"], "Этап {n}": ["Stage {n}", "Етап {n}", "Etapa {n}", "Aşama {n}", "Etapa {n}"], "Этап {n}/{m}": ["Stage {n}/{m}", "Етап {n}/{m}", "Etapa {n}/{m}", "Aşama {n}/{m}", "Etapa {n}/{m}"], "Этап {n} пройден": ["Stage {n} cleared", "Етап {n} пройдено", "Etapa {n} superada", "Aşama {n} geçildi", "Etapa {n} concluída"], "Этап {n} откроется через": ["Stage {n} opens in", "Етап {n} відкриється через", "La etapa {n} se abre en", "Aşama {n} açılıyor", "A etapa {n} abre em"], "Этапы": ["Stages", "Етапи", "Etapas", "Aşamalar", "Etapas"], "Босс": ["Boss", "Бос", "Jefe", "Patron", "Chefe"], "{n} монстров": ["{n} monsters", "{n} монстрів", "{n} monstruos", "{n} canavar", "{n} monstros"], "Этап {n} из {m} · монстры {k} уровня": ["Stage {n} of {m} · level {k} monsters", "Етап {n} з {m} · монстри {k} рівня", "Etapa {n} de {m} · monstruos de nivel {k}", "Aşama {n}/{m} · {k}. seviye canavarlar", "Etapa {n} de {m} · monstros de nível {k}"], "Барьер пал:": ["Barrier down:", "Бар'єр упав:", "Barrera caída:", "Bariyer düştü:", "Barreira caiu:"], "ждёт в последнем зале!": ["awaits in the last hall!", "чекає в останній залі!", "espera en la última sala.", "son salonda bekliyor!", "espera no último salão!"], "повержен! Награда по жребию:": ["defeated! Reward by lot:", "переможений! Нагорода за жеребом:", "derrotado. Premio por sorteo:", "yenildi! Kurayla ödül:", "derrotado! Prêmio por sorteio:"], "это ты!": ["that's you!", "це ти!", "¡eres tú!", "bu sensin!", "é você!"], "Это ты!": ["That's you!", "Це ти!", "¡Eres tú!", "Bu sensin!", "É você!"], "Награда по жребию": ["Reward by lot", "Нагорода за жеребом", "Premio por sorteo", "Kurayla ödül", "Prêmio por sorteio"], "Пройдено этапов:": ["Stages cleared:", "Пройдено етапів:", "Etapas superadas:", "Geçilen aşamalar:", "Etapas concluídas:"], "Итоги забега": ["Run results", "Підсумки забігу", "Resultados de la carrera", "Koşu sonuçları", "Resultado da corrida"], "Забег окончен": ["Run over", "Забіг закінчено", "Carrera terminada", "Koşu bitti", "Corrida encerrada"], "Сбор группы": ["Group gathering", "Збір групи", "Reuniendo al grupo", "Grup toplanıyor", "Reunindo o grupo"], "Старт забега": ["Run starting", "Старт забігу", "Inicio de la carrera", "Koşu başlıyor", "Início da corrida"], "Дождитесь напарника": ["Wait for your partner", "Дочекайтеся напарника", "Espera a tu compañero", "Ortağını bekle", "Aguarde seu parceiro"], "Барьер к боссу откроется через": ["Boss barrier opens in", "Бар'єр до боса відкриється через", "La barrera del jefe se abre en", "Patron bariyeri açılıyor", "A barreira do chefe abre em"], "Возврат через {n} с": ["Returning in {n} s", "Повернення через {n} с", "Regreso en {n} s", "{n} sn sonra dönüş", "Retorno em {n} s"], "Начать забег": ["Start the run", "Почати забіг", "Iniciar carrera", "Koşuyu başlat", "Iniciar corrida"], "Группа в сборе — начинайте забег": ["The group is ready — start the run", "Група в зборі — починайте забіг", "Grupo listo: empezad la carrera", "Grup hazır — koşuyu başlatın", "Grupo pronto — iniciem a corrida"], "Группа в сборе — забег начинает лидер": ["The group is ready — the leader starts the run", "Група в зборі — забіг починає лідер", "Grupo listo: el líder inicia la carrera", "Grup hazır — koşuyu lider başlatır", "Grupo pronto — o líder inicia a corrida"], "В пати {n} пилота — нужно ровно {m}": ["{n} pilots in the party — exactly {m} needed", "У паті {n} пілоти — потрібно рівно {m}", "Hay {n} pilotos en el grupo: se necesitan exactamente {m}", "Partide {n} pilot var — tam {m} gerekli", "{n} pilotos no grupo — são necessários exatamente {m}"], "Ждём напарника · {n}/{m}": ["Waiting for a partner · {n}/{m}", "Чекаємо напарника · {n}/{m}", "Esperando compañero · {n}/{m}", "Ortak bekleniyor · {n}/{m}", "Aguardando parceiro · {n}/{m}"], "нет попытки": ["no attempt", "немає спроби", "sin intento", "hak yok", "sem tentativa"], "Не все готовы: нужен {n} уровень, попытка и быть в сети": ["Not everyone is ready: level {n}, an attempt and being online are required", "Не всі готові: потрібен {n} рівень, спроба й бути в мережі", "No todos están listos: hace falta nivel {n}, un intento y estar en línea", "Herkes hazır değil: {n}. seviye, hak ve çevrimiçi olmak gerekli", "Nem todos estão prontos: precisa do nível {n}, uma tentativa e estar online"], "Создайте группу или войдите в чужую — начать забег может только лидер группы": ["Create a group or join someone else's — only the group leader can start the run", "Створіть групу або увійдіть до чужої — почати забіг може лише лідер групи", "Crea un grupo o únete a otro: solo el líder del grupo puede iniciar la carrera", "Grup kur ya da başkasınınkine katıl — koşuyu yalnızca grup lideri başlatabilir", "Crie um grupo ou entre em outro — só o líder do grupo pode iniciar a corrida"], "Одна попытка в день, тратится при входе": ["One attempt per day, spent on entry", "Одна спроба на день, витрачається при вході", "Un intento al día, se gasta al entrar", "Günde bir hak, girişte harcanır", "Uma tentativa por dia, gasta ao entrar"], "{n} этапов по {m} монстров, уровень растёт:": ["{n} stages of {m} monsters, the level grows:", "{n} етапів по {m} монстрів, рівень зростає:", "{n} etapas de {m} monstruos, el nivel sube:", "{m} canavarlı {n} aşama, seviye artıyor:", "{n} etapas de {m} monstros, o nível sobe:"], "Монстры общие на двоих: следующий этап открывается, только когда вы вдвоём зачистите текущий": ["Monsters are shared by both of you: the next stage opens only when the two of you clear the current one", "Монстри спільні на двох: наступний етап відкривається, лише коли ви вдвох зачистите поточний", "Los monstruos son comunes a los dos: la siguiente etapa se abre solo cuando los dos limpiéis la actual", "Canavarlar ikinize ortak: sonraki aşama ancak ikiniz mevcut aşamayı temizleyince açılır", "Os monstros são comuns aos dois: a próxima etapa só abre quando vocês dois limparem a atual"], "В конце — общий босс {n} уровня: {m} титановая сфера (безопасная заточка) и {k} энергоядер одному случайному пилоту": ["At the end — a shared level {n} boss: {m} titanium sphere (safe enchanting) and {k} energy cores to one random pilot", "Наприкінці — спільний бос {n} рівня: {m} титанова сфера (безпечне заточування) і {k} енергоядер одному випадковому пілоту", "Al final, un jefe común de nivel {n}: {m} esfera de titanio (mejora segura) y {k} núcleos de energía para un piloto al azar", "Sonunda — ortak {n}. seviye patron: rastgele bir pilota {m} titanyum küre (güvenli güçlendirme) ve {k} enerji çekirdeği", "No fim — um chefe comum de nível {n}: {m} esfera de titânio (refino seguro) e {k} núcleos de energia para um piloto aleatório"], "Смерть любого из двоих завершает забег для обоих": ["The death of either of you ends the run for both", "Смерть будь-кого з двох завершує забіг для обох", "La muerte de cualquiera de los dos termina la carrera para ambos", "İkinizden birinin ölümü koşuyu ikiniz için de bitirir", "A morte de qualquer um dos dois encerra a corrida para ambos"], "Если вход сорвался или связь оборвалась до первого этапа — попытка вернётся": ["If entry failed or the connection dropped before the first stage, the attempt is returned", "Якщо вхід зірвався або зв'язок обірвався до першого етапу — спроба повернеться", "Si la entrada falló o la conexión se cortó antes de la primera etapa, se devuelve el intento", "Giriş başarısız olursa ya da bağlantı ilk aşamadan önce koparsa hak geri verilir", "Se a entrada falhar ou a conexão cair antes da primeira etapa, a tentativa é devolvida"], "На забег — {n} минут": ["{n} minutes per run", "На забіг — {n} хвилин", "{n} minutos por carrera", "Koşu için {n} dakika", "{n} minutos por corrida"], "Награда за босса": ["Boss reward", "Нагорода за боса", "Premio del jefe", "Patron ödülü", "Prêmio do chefe"], "награда за босса": ["boss reward", "нагорода за боса", "premio del jefe", "patron ödülü", "prêmio do chefe"], "Достаётся одному из двоих по жребию — в итогах забега видно, кому и что выдано": ["Goes to one of the two by lot — the run results show who got what", "Дістається одному з двох за жеребом — у підсумках забігу видно, кому й що видано", "Se lo lleva uno de los dos por sorteo: en los resultados se ve quién recibió qué", "Kurayla ikinizden birine gider — koşu sonuçlarında kimin ne aldığı görünür", "Vai para um dos dois por sorteio — o resultado mostra quem recebeu o quê"], "Опыт и добыча с каждого монстра — тому из двоих, кто нанёс ему больше урона. Монстр сильнее тебя на {n}+ уровней опыта и добычи не даёт.": ["XP and loot from each monster go to whichever of you dealt it more damage. A monster {n}+ levels above you gives no XP or loot.", "Досвід і здобич з кожного монстра — тому з двох, хто завдав йому більше шкоди. Монстр, сильніший за тебе на {n}+ рівнів, не дає досвіду й здобичі.", "La experiencia y el botín de cada monstruo son para quien de los dos le hizo más daño. Un monstruo {n}+ niveles por encima de ti no da experiencia ni botín.", "Her canavarın deneyimi ve ganimeti, ona daha çok hasar verene gider. Senden {n}+ seviye yüksek canavar deneyim ve ganimet vermez.", "XP e saque de cada monstro vão para quem dos dois causou mais dano. Um monstro {n}+ níveis acima de você não dá XP nem saque."], "В зал «Сотрудничества» группу заводит лидер: События → Сотрудничество": ["The leader brings the group into the Cooperation hall: Events → Cooperation", "До зали «Співпраці» групу заводить лідер: Події → Співпраця", "El líder lleva al grupo a la sala de Cooperación: Eventos → Cooperación", "Grubu İş birliği salonuna lider götürür: Etkinlikler → İş birliği", "O líder leva o grupo ao salão da Cooperação: Eventos → Cooperação"], "В зал «Сотрудничества» группу заводит лидер": ["The leader brings the group into the Cooperation hall", "До зали «Співпраці» групу заводить лідер", "El líder lleva al grupo a la sala de Cooperación", "Grubu İş birliği salonuna lider götürür", "O líder leva o grupo ao salão da Cooperação"], "Лидер ведёт группу в зал «Сотрудничества»": ["The leader is taking the group into the Cooperation hall", "Лідер веде групу до зали «Співпраці»", "El líder lleva al grupo a la sala de Cooperación", "Lider grubu İş birliği salonuna götürüyor", "O líder está levando o grupo ao salão da Cooperação"], "Выход из зала": ["Leave the hall", "Вихід із зали", "Salir de la sala", "Salondan çıkış", "Sair do salão"], "Забег окончен — можно возвращаться в ангар.": ["The run is over — you can return to the hangar.", "Забіг закінчено — можна повертатися в ангар.", "La carrera terminó: puedes volver al hangar.", "Koşu bitti — hangara dönebilirsin.", "A corrida acabou — você pode voltar ao hangar."], "Забег ещё не начался: если уйти сейчас, попытка вернётся обоим.": ["The run hasn't started yet: if you leave now, both of you get the attempt back.", "Забіг ще не почався: якщо піти зараз, спроба повернеться обом.", "La carrera aún no ha empezado: si sales ahora, ambos recuperáis el intento.", "Koşu henüz başlamadı: şimdi çıkarsan ikinize de hak geri verilir.", "A corrida ainda não começou: se sair agora, os dois recuperam a tentativa."], "Забег закончится для обоих, а попытка не вернётся.": ["The run will end for both of you, and the attempt won't be returned.", "Забіг закінчиться для обох, а спроба не повернеться.", "La carrera terminará para ambos y el intento no se devolverá.", "Koşu ikiniz için de biter ve hak geri verilmez.", "A corrida termina para os dois e a tentativa não volta."], "Покинуть забег": ["Leave the run", "Покинути забіг", "Abandonar la carrera", "Koşudan ayrıl", "Sair da corrida"], "Попытка возвращена — можно попробовать ещё раз сегодня.": ["Attempt returned — you can try again today.", "Спробу повернуто — можна спробувати ще раз сьогодні.", "Intento devuelto: puedes volver a intentarlo hoy.", "Hak geri verildi — bugün tekrar deneyebilirsin.", "Tentativa devolvida — dá para tentar de novo hoje."], "Барьер откроется, когда начнётся забег": ["The barrier opens when the run starts", "Бар'єр відкриється, коли почнеться забіг", "La barrera se abrirá cuando empiece la carrera", "Bariyer koşu başlayınca açılacak", "A barreira abre quando a corrida começar"], "Барьер к боссу откроется после этапа {n}": ["The boss barrier opens after stage {n}", "Бар'єр до боса відкриється після етапу {n}", "La barrera del jefe se abrirá tras la etapa {n}", "Patron bariyeri {n}. aşamadan sonra açılacak", "A barreira do chefe abre após a etapa {n}"], "Барьер откроется, когда вы вдвоём зачистите этап {n}": ["The barrier opens when the two of you clear stage {n}", "Бар'єр відкриється, коли ви вдвох зачистите етап {n}", "La barrera se abrirá cuando los dos limpiéis la etapa {n}", "Bariyer, ikiniz {n}. aşamayı temizleyince açılacak", "A barreira abre quando vocês dois limparem a etapa {n}"], "сильнее тебя на {n}+ ур.: без награды": ["{n}+ levels above you: no reward", "сильніший за тебе на {n}+ рів.: без нагороди", "{n}+ niveles por encima: sin recompensa", "senden {n}+ sv. yüksek: ödül yok", "{n}+ níveis acima: sem recompensa"], "забег окончен для обоих · возврат в ангар…": ["run over for both · returning to the hangar…", "забіг закінчено для обох · повернення в ангар…", "carrera terminada para ambos · volviendo al hangar…", "koşu ikiniz için bitti · hangara dönülüyor…", "corrida encerrada para os dois · voltando ao hangar…"], "Сейсмический удар!": ["Seismic strike!", "Сейсмічний удар!", "¡Golpe sísmico!", "Sismik darbe!", "Golpe sísmico!"], "ярость": ["rage", "лють", "furia", "öfke", "fúria"], "Ты уже в забеге": ["You're already in a run", "Ти вже в забігу", "Ya estás en una carrera", "Zaten bir koşudasın", "Você já está em uma corrida"], "«Сотрудничество» открывается с {n} уровня": ["Cooperation opens at level {n}", "«Співпраця» відкривається з {n} рівня", "Cooperación se abre desde el nivel {n}", "İş birliği {n}. seviyede açılır", "A Cooperação abre no nível {n}"], "Попытка на сегодня уже использована": ["Today's attempt has already been used", "Спробу на сьогодні вже використано", "El intento de hoy ya se ha usado", "Bugünkü hak zaten kullanıldı", "A tentativa de hoje já foi usada"], "попытка на сегодня уже использована": ["today's attempt has already been used", "спробу на сьогодні вже використано", "el intento de hoy ya se ha usado", "bugünkü hak zaten kullanıldı", "a tentativa de hoje já foi usada"], "Сначала дождись возрождения": ["Wait for your respawn first", "Спершу дочекайся відродження", "Primero espera a reaparecer", "Önce yeniden doğmayı bekle", "Primeiro espere renascer"], "Сначала выйди из группы элитной зоны": ["Leave the elite zone group first", "Спершу вийди з групи елітної зони", "Primero sal del grupo de la zona élite", "Önce elit bölge grubundan çık", "Primeiro saia do grupo da zona de elite"], "В «Сотрудничество» идут вдвоём: в твоей пати больше {n} пилотов": ["Cooperation is for two: your party has more than {n} pilots", "У «Співпрацю» йдуть удвох: у твоєму паті більше {n} пілотів", "Cooperación es para dos: tu grupo tiene más de {n} pilotos", "İş birliği iki kişiliktir: partinde {n} pilottan fazla var", "A Cooperação é em dupla: seu grupo tem mais de {n} pilotos"], "В группе уже двое": ["The group already has two", "У групі вже двоє", "El grupo ya tiene dos", "Grupta zaten iki kişi var", "O grupo já tem dois"], "Начать забег может только лидер группы": ["Only the group leader can start the run", "Почати забіг може лише лідер групи", "Solo el líder del grupo puede iniciar la carrera", "Koşuyu yalnızca grup lideri başlatabilir", "Só o líder do grupo pode iniciar a corrida"], "Все залы «Сотрудничества» заняты — попробуйте через минуту": ["All Cooperation halls are busy — try again in a minute", "Усі зали «Співпраці» зайняті — спробуйте за хвилину", "Todas las salas de Cooperación están ocupadas: prueba en un minuto", "Tüm İş birliği salonları dolu — bir dakika sonra dene", "Todos os salões da Cooperação estão ocupados — tente em um minuto"], "Сначала выйди из группы «Сотрудничества»": ["Leave the Cooperation group first", "Спершу вийди з групи «Співпраці»", "Primero sal del grupo de Cooperación", "Önce İş birliği grubundan çık", "Primeiro saia do grupo da Cooperação"], "Нужна группа из {n} пилотов": ["A group of {n} pilots is needed", "Потрібна група з {n} пілотів", "Se necesita un grupo de {n} pilotos", "{n} pilotluk grup gerekli", "É preciso um grupo de {n} pilotos"], "сейчас в другом событии": ["is in another event right now", "зараз в іншій події", "está ahora en otro evento", "şu anda başka bir etkinlikte", "está em outro evento agora"], "уже в забеге": ["is already in a run", "вже в забігу", "ya está en una carrera", "zaten bir koşuda", "já está em uma corrida"], "погиб — забег окончен": ["died — the run is over", "загинув — забіг закінчено", "murió: la carrera terminó", "öldü — koşu bitti", "morreu — a corrida acabou"], "вышел — забег окончен": ["left — the run is over", "вийшов — забіг закінчено", "salió: la carrera terminó", "ayrıldı — koşu bitti", "saiu — a corrida acabou"], "Напарник": ["Partner", "Напарник", "Compañero", "Ortak", "Parceiro"], "Время забега вышло": ["Run time is up", "Час забігу вийшов", "Se acabó el tiempo de la carrera", "Koşu süresi doldu", "O tempo da corrida acabou"], "Напарник не пришёл — попытка возвращена": ["Your partner didn't arrive — attempt returned", "Напарник не прийшов — спробу повернуто", "Tu compañero no llegó: intento devuelto", "Ortağın gelmedi — hak geri verildi", "O parceiro não veio — tentativa devolvida"], "Забег окончен — возврат в ангар": ["Run over — returning to the hangar", "Забіг закінчено — повернення в ангар", "Carrera terminada: regreso al hangar", "Koşu bitti — hangara dönüş", "Corrida encerrada — voltando ao hangar"], "не поместилась — освободи место в сумке или на складе, награда придёт при следующем входе": ["didn't fit — free up space in the bag or storage, the reward will arrive on your next login", "не помістилася — звільни місце в сумці або на складі, нагорода прийде під час наступного входу", "no cabe: libera espacio en la mochila o el almacén, el premio llegará en tu próxima entrada", "sığmadı — çantada veya depoda yer aç, ödül bir sonraki girişte gelecek", "não coube — libere espaço na bolsa ou no armazém, o prêmio chega no próximo login"]});   // «Сотрудничество»: окно, зал, итоги, сообщения сервера (coop.py)
+// самоцветы и Кодекс самоцветов
+Object.assign(I18N, {"Изумрудная линза": ["Emerald Lens", "Смарагдова лінза", "Lente de esmeralda", "Zümrüt Mercek", "Lente de Esmeralda"], "Рубиновый конденсатор": ["Ruby Capacitor", "Рубіновий конденсатор", "Condensador de rubí", "Yakut Kondansatör", "Capacitor de Rubi"], "Кристалл бездны": ["Abyss Crystal", "Кристал безодні", "Cristal del abismo", "Uçurum Kristali", "Cristal do Abismo"], "Нефритовый резонатор": ["Jade Resonator", "Нефритовий резонатор", "Resonador de jade", "Yeşim Rezonatör", "Ressonador de Jade"], "Линза из прицела древнего разведчика: сквозь неё видны слабые узлы брони": ["A lens from an ancient scout's sight: it reveals weak spots in armor", "Лінза з прицілу давнього розвідника: крізь неї видно слабкі вузли броні", "Una lente de la mira de un antiguo explorador: revela los puntos débiles de la armadura", "Eski bir keşif robotunun nişangâhından mercek: zırhın zayıf noktalarını gösterir", "Uma lente da mira de um antigo batedor: revela os pontos fracos da armadura"], "Кристалл держит заряд дольше любой батареи и отдаёт его одним ударом": ["The crystal holds a charge longer than any battery and releases it in a single strike", "Кристал тримає заряд довше за будь-яку батарею і віддає його одним ударом", "El cristal guarda la carga más que cualquier batería y la libera de un solo golpe", "Kristal, şarjı her bataryadan uzun tutar ve tek vuruşta boşaltır", "O cristal guarda a carga por mais tempo que qualquer bateria e a libera num só golpe"], "Поднят из самых глубоких цехов, внутри гудит чужая энергия": ["Recovered from the deepest workshops, alien energy hums inside", "Піднятий із найглибших цехів, усередині гуде чужа енергія", "Rescatado de los talleres más profundos, en su interior zumba una energía ajena", "En derin atölyelerden çıkarıldı, içinde yabancı bir enerji uğulduyor", "Resgatado das oficinas mais profundas, uma energia estranha vibra em seu interior"], "Гасит вибрацию брони и разгоняет приводы до предела": ["Dampens armor vibration and pushes actuators to the limit", "Гасить вібрацію броні й розганяє приводи до межі", "Amortigua la vibración del blindaje y lleva los actuadores al límite", "Zırh titreşimini söndürür ve sürücüleri sınırına kadar hızlandırır", "Amortece a vibração da blindagem e leva os atuadores ao limite"], "Сдаётся в Кодекс → «Самоцветы» за вечный бонус": ["Turn it in at Codex → “Gems” for a permanent bonus", "Здається в Кодекс → «Самоцвіти» за вічний бонус", "Se entrega en Códice → «Gemas» a cambio de un bono permanente", "Kodeks → «Mücevherler» bölümüne verilir, kalıcı bonus kazandırır", "Entregue no Códex → «Gemas» por um bônus permanente"], "продаётся на маркете за GRAM": ["sold on the market for GRAM", "продається на маркеті за GRAM", "se vende en el mercado por GRAM", "pazarda GRAM karşılığında satılır", "vendido no mercado por GRAM"], "Наборы": ["Sets", "Набори", "Conjuntos", "Setler", "Conjuntos"], "Самоцветы": ["Gems", "Самоцвіти", "Gemas", "Mücevherler", "Gemas"], "Самоцвет": ["Gem", "Самоцвіт", "Gema", "Mücevher", "Gema"], "Частый · шанс как у медной сферы": ["Common · same chance as a copper sphere", "Частий · шанс як у мідної сфери", "Común · misma probabilidad que una esfera de cobre", "Yaygın · bakır küre ile aynı şans", "Comum · mesma chance de uma esfera de cobre"], "Редкий · шанс как у титановой сферы": ["Rare · same chance as a titanium sphere", "Рідкісний · шанс як у титанової сфери", "Raro · misma probabilidad que una esfera de titanio", "Nadir · titanyum küre ile aynı şans", "Raro · mesma chance de uma esfera de titânio"], "из {n}": ["of {n}", "з {n}", "de {n}", "/{n}", "de {n}"], "До порога {n}: ещё {m}": ["To threshold {n}: {m} more", "До порогу {n}: ще {m}", "Hasta el umbral {n}: faltan {m}", "{n} eşiğine: {m} kaldı", "Até o limiar {n}: faltam {m}"], "Все пороги собраны": ["All thresholds reached", "Усі пороги зібрано", "Todos los umbrales alcanzados", "Tüm eşiklere ulaşıldı", "Todos os limiares alcançados"], "СКОР. АТАКИ": ["ATK SPD", "ШВ. АТАКИ", "VEL. ATQ", "SAL. HIZI", "VEL. ATQ"], "В сумке и на складе: {n}": ["In bag and storage: {n}", "У сумці та на складі: {n}", "En la bolsa y el almacén: {n}", "Çantada ve depoda: {n}", "Na bolsa e no armazém: {n}"], "Нет в сумке и на складе": ["None in bag or storage", "Немає в сумці та на складі", "No hay en la bolsa ni en el almacén", "Çantada ve depoda yok", "Nada na bolsa nem no armazém"], "не учтено сервером: {n}": ["not registered by the server: {n}", "не враховано сервером: {n}", "no registradas por el servidor: {n}", "sunucuda kayıtlı değil: {n}", "não registradas pelo servidor: {n}"], "Сдать 1": ["Turn in 1", "Здати 1", "Entregar 1", "1 ver", "Entregar 1"], "Сдать все": ["Turn in all", "Здати всі", "Entregar todas", "Hepsini ver", "Entregar todas"], "Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне и Сезонной зоне. Каждый вид собирается отдельно, до {n} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.": ["Gems drop from enemies in the Lower Works, Deep Workshops, Farm zone and Season zone. Each kind is collected separately, up to {n}. Threshold bonuses stack and stay forever; turned-in gems are gone.", "Самоцвіти падають з ворогів у Нижніх і Глибинних цехах, Фарм-зоні та Сезонній зоні. Кожен вид збирається окремо, до {n} штук. Бонуси порогів складаються й лишаються назавжди, здані камені зникають.", "Las gemas caen de los enemigos en los Talleres inferiores, los Talleres profundos, la Zona de farmeo y la Zona de temporada. Cada tipo se reúne por separado, hasta {n}. Los bonos de umbral se suman y son permanentes; las gemas entregadas desaparecen.", "Mücevherler Alt atölyelerde, Derin Atölyelerde, Kasma bölgesinde ve Sezon bölgesinde düşmanlardan düşer. Her tür ayrı toplanır, en fazla {n} adet. Eşik bonusları toplanır ve kalıcıdır; verilen taşlar yok olur.", "Gemas caem de inimigos nas Oficinas inferiores, Oficinas profundas, Zona de farm e Zona da temporada. Cada tipo é coletado separadamente, até {n}. Os bônus de limiar se somam e são permanentes; as gemas entregues desaparecem."], "Бонус самоцветов": ["Gem bonus", "Бонус самоцвітів", "Bono de gemas", "Mücevher bonusu", "Bônus de gemas"], "Самоцветы можно продавать и покупать на маркете — не дешевле {n} GRAM за штуку.": ["Gems can be bought and sold on the market — at least {n} GRAM each.", "Самоцвіти можна продавати й купувати на маркеті — не дешевше {n} GRAM за штуку.", "Las gemas se compran y venden en el mercado, a partir de {n} GRAM cada una.", "Mücevherler pazarda alınıp satılabilir — tanesi en az {n} GRAM.", "Gemas podem ser compradas e vendidas no mercado — a partir de {n} GRAM cada."], "Самоцветы — не дешевле {n} GRAM за штуку": ["Gems — at least {n} GRAM each", "Самоцвіти — не дешевше {n} GRAM за штуку", "Gemas: mínimo {n} GRAM cada una", "Mücevherler — tanesi en az {n} GRAM", "Gemas — mínimo de {n} GRAM cada"], "за лот от {n} GRAM": ["from {n} GRAM per lot", "за лот від {n} GRAM", "desde {n} GRAM por lote", "lot başına en az {n} GRAM", "a partir de {n} GRAM por lote"], "Собрано максимум: {n}": ["Maximum collected: {n}", "Зібрано максимум: {n}", "Máximo reunido: {n}", "En fazla toplandı: {n}", "Máximo coletado: {n}"], "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете": ["Only server-registered gems can be turned in: ones dropped by enemies or bought on the market", "Здати можна лише самоцвіти, враховані сервером: ті, що випали з ворогів або куплені на маркеті", "Solo se pueden entregar gemas registradas por el servidor: las que sueltan los enemigos o compradas en el mercado", "Yalnızca sunucuda kayıtlı mücevherler verilebilir: düşmanlardan düşenler veya pazardan alınanlar", "Só é possível entregar gemas registradas pelo servidor: as que caem de inimigos ou compradas no mercado"], "Порог {n}": ["Threshold {n}", "Поріг {n}", "Umbral {n}", "Eşik {n}", "Limiar {n}"], "Сдано в Кодекс": ["Turned in to the Codex", "Здано в Кодекс", "Entregado al Códice", "Kodeks'e verildi", "Entregue ao Códex"], "— сдай его в Кодекс": ["— turn it in to the Codex", "— здай його в Кодекс", "— entrégala en el Códice", "— onu Kodeks'e ver", "— entregue-a no Códex"], "Самоцветы для Кодекса": ["Gems for the Codex", "Самоцвіти для Кодексу", "Gemas para el Códice", "Kodeks için mücevherler", "Gemas para o Códex"], "сданные в Кодекс": ["turned in to the Codex", "здані в Кодекс", "entregadas al Códice", "Kodeks'e verilenler", "entregues ao Códex"], "Собрано полностью": ["Fully collected", "Зібрано повністю", "Completado", "Tamamen toplandı", "Coletado por completo"], "Это не самоцвет": ["That's not a gem", "Це не самоцвіт", "Eso no es una gema", "Bu bir mücevher değil", "Isso não é uma gema"], "Нет учтённых самоцветов: сдать можно только выпавшие с врагов или купленные на маркете": ["No registered gems: only ones dropped by enemies or bought on the market can be turned in", "Немає врахованих самоцвітів: здати можна лише ті, що випали з ворогів або куплені на маркеті", "No hay gemas registradas: solo se pueden entregar las que sueltan los enemigos o compradas en el mercado", "Kayıtlı mücevher yok: yalnızca düşmanlardan düşenler veya pazardan alınanlar verilebilir", "Sem gemas registradas: só é possível entregar as que caem de inimigos ou compradas no mercado"], "Самоцветы как раз изменились, попробуй ещё раз": ["The gems just changed, try again", "Самоцвіти якраз змінилися, спробуй ще раз", "Las gemas acaban de cambiar, inténtalo de nuevo", "Mücevherler az önce değişti, tekrar dene", "As gemas acabaram de mudar, tente de novo"], "Учтённых самоцветов только {n}: остальные нельзя продать за GRAM": ["Only {n} gems are registered: the rest can't be sold for GRAM", "Врахованих самоцвітів лише {n}: решту не можна продати за GRAM", "Solo hay {n} gemas registradas: el resto no se puede vender por GRAM", "Yalnızca {n} mücevher kayıtlı: kalanlar GRAM karşılığı satılamaz", "Só {n} gemas estão registradas: o resto não pode ser vendido por GRAM"], "За GRAM можно продавать только снаряжение, сферы, осколки и самоцветы с мобов, руны, дронов, артефакты, крылья и плащи": ["Only gear, spheres, shards and gems from monsters, runes, drones, artifacts, wings and cloaks can be sold for GRAM", "За GRAM можна продавати лише спорядження, сфери, уламки й самоцвіти з мобів, руни, дронів, артефакти, крила та плащі", "Por GRAM solo se pueden vender equipo, esferas, fragmentos y gemas de monstruos, runas, drones, artefactos, alas y capas", "GRAM karşılığında yalnızca ekipman, canavarlardan düşen küreler, parçalar ve mücevherler, rünler, dronlar, eserler, kanatlar ve pelerinler satılabilir", "Por GRAM só é possível vender equipamento, esferas, fragmentos e gemas de monstros, runas, drones, artefatos, asas e capas"]});
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
 // в тексте страницы, подсказках полей, уведомлениях и надписях на карте.

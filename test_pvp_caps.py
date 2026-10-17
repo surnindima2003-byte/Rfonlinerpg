@@ -44,6 +44,7 @@ class TablesMatchGame(unittest.TestCase):
         self.assertEqual([list(x) for x in pvpguard.HP_AB], d["hp"], msg)
         self.assertEqual([list(x) for x in pvpguard.DEF_AB], d["def"], msg)
         self.assertEqual(pvpguard.PACK_PTS, d["packPts"], msg)
+        self.assertEqual(list(pvpguard.GEM_K), d["gemK"], msg)          # множители бонуса самоцветов (прочность, броня)
         self.assertEqual((pvpguard.UP_MAX, pvpguard.CP_PER_POINT, pvpguard.PTS_PER_LEVEL), (d["upMax"], d["cpPer"], d["ptsPerLevel"]))
 
 

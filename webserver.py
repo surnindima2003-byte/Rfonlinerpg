@@ -422,7 +422,9 @@ async def api_save(request):
                 # уровень и боевая мощь для рейтинга — не выше того, что подтвердил сервер (админам без ограничений)
                 cap = 999 if user["admin"] else await progress.cap_of(s, user["id"])
                 row.lvl = max(1, min(cap, int(s_.get("level", 1))))
-                row.bm = max(0, min(10_000_000 if user["admin"] else progress.bm_cap(row.lvl), int(data.get("bm", 0))))
+                # сданные в Кодекс самоцветы честно поднимают БМ — их сервер знает сам (items._gem_cx)
+                bm_max = progress.bm_cap(row.lvl) + items.gem_bm(items._gem_cx.get(user["id"]))
+                row.bm = max(0, min(10_000_000 if user["admin"] else bm_max, int(data.get("bm", 0))))
             except (TypeError, ValueError, OverflowError):
                 pass
             new_nick = str(s_.get("name", "")).strip()[:16]
@@ -1211,6 +1213,10 @@ async def api_market(request):
             price = int(round(finite(body.get("price"), 0) * gram.NANO))
             if not item or price < gram.NANO // 100 or price > 100_000 * gram.NANO:
                 return web.json_response({"ok": False, "error": "Неверный лот"})
+            # самоцветы — не дешевле GEM_MIN_PRICE за штуку (как в LIBERTY): цена лота — за всю стопку
+            if item["id"] in items.GEMS and price < round(items.GEM_MIN_PRICE * gram.NANO) * item["n"]:
+                gmin = f"{items.GEM_MIN_PRICE:g}".replace(".", ",")
+                return web.json_response({"ok": False, "error": f"Самоцветы — не дешевле {gmin} GRAM за штуку"})
             if isinstance(body.get("item"), dict) and body["item"].get("uid"):
                 item["uid"] = str(body["item"]["uid"])[:24]
             # выставление лотов одного продавца — по очереди: раньше одновременные запросы все видели «меньше лимита»
@@ -2805,6 +2811,12 @@ async def ws_handler(request):
                         info["nick"] = public_name(nick)
                     if g:
                         info["gid"], info["gt"], info["gn"], info["gi"], info["gc"] = g
+                    # самоцветы Кодекса: пределы PvP и предел БМ в рейтинге. Отдельной сессией: их сбой не мешает остальному
+                    try:
+                        async with SessionLocal() as s_g:
+                            await items.load_gem_cx(s_g, user["id"])
+                    except Exception:
+                        log.exception("самоцветы: не удалось загрузить Кодекс uid=%s", user["id"])     # без них пределы прежние
                 except Exception:
                     # база медленная или недоступна — игрок всё равно входит, чат и мир работают
                     log.exception("не удалось загрузить карму/предел уровня uid=%s", user["id"])

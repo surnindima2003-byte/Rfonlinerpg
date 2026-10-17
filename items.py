@@ -128,8 +128,70 @@ CLOAKS = ("ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_nigh
 # осколки (как в game.html → SHARD): выпадают с мобов от 15 уровня по решению сервера, из них Кузнец собирает
 # уникальные сеты классов. Учитываются штуками, продаются на маркете за GRAM.
 SHARDS = ("sh_plasma", "sh_ion", "sh_solar", "sh_void", "sh_magma", "sh_cryo", "sh_toxin", "sh_blood")
-REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS + SHARDS      # всё, что учитывается штуками (без номера)
+# самоцветы (как в game.html → GEMS, «Кодекс самоцветов» LIBERTY): четыре вида, падают с врагов в Нижних и Глубинных
+# цехах, Фарм-зоне и Сезонной зоне по решению сервера (roll_gems) — только в живой игре. Учитываются штуками,
+# продаются на маркете за GRAM (не дешевле GEM_MIN_PRICE за штуку — webserver.api_market). В Кодексе их сдают
+# до GEM_MAX штук каждого вида (op "gem"): сданные списываются с учёта игрока навсегда, а счётчик сданных лежит
+# в той же таблице балансов под «cx:<id>» (влезает в 12 символов столбца) — его не нарисовать на телефоне.
+GEMS = ("gm_emer", "gm_ruby", "gm_abys", "gm_jade")
+GEMS_COMMON = ("gm_emer", "gm_ruby")            # шанс как у медной сферы (обычная заточка)
+GEMS_RARE = ("gm_abys", "gm_jade")              # шанс как у титановой сферы (безопасная заточка)
+GEM_LOCS = ("sector1", "sector2", "farm1", "season1")
+GEM_MAX = 500
+GEM_MIN_PRICE = 0.4                             # GRAM за штуку на маркете (как GEM_MIN_PRICE в игре)
+GEM_CX = "cx:"
+# пороги Кодекса: (сколько сдать, бонус) — зеркало game.html → GEM_STEPS (сверяет test_gems.py). «c» — частые, «r» — редкие
+GEM_STEPS = {
+    "c": [(1, {"atk": 5}), (10, {"atk": 5, "def": 5}), (20, {"atk": 5, "def": 5}), (50, {"atk": 10}), (100, {"atk": 10, "def": 10}),
+          (300, {"atk": 30, "def": 30, "hp": 3000}), (500, {"atk": 50, "def": 50, "rate": 0.2})],
+    "r": [(1, {"atk": 10}), (10, {"atk": 10, "def": 10}), (30, {"atk": 20}), (60, {"atk": 20, "def": 20}), (100, {"atk": 30}),
+          (150, {"atk": 30, "def": 30}), (300, {"atk": 50, "def": 50, "hp": 5000}), (500, {"atk": 100, "def": 100, "rate": 0.2})],
+}
+_gem_cx = {}                                    # uid -> {самоцвет: сдано} игроков в сети (заполняют op "state" и "gem")
+REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS + SHARDS + GEMS      # всё, что учитывается штуками (без номера)
 SOCKET_PREFIX = "s:"            # учёт рун, вставленных в вещи (строка «s:r_fortune» влезает в 12 символов столбца)
+
+
+def gem_bonus(cx):
+    """Бонус сданных самоцветов {atk, def, hp, rate}: на каждый вид действуют все пороги до сданного числа."""
+    out = {"atk": 0, "def": 0, "hp": 0, "rate": 0.0}
+    for gid in GEMS:
+        n = (cx or {}).get(gid, 0) or 0
+        for need, bon in GEM_STEPS["c" if gid in GEMS_COMMON else "r"]:
+            if n >= need:
+                for k, v in bon.items():
+                    out[k] += v
+    out["rate"] = round(out["rate"], 2)
+    return out
+
+
+def gem_bm(cx):
+    """Сколько боевой мощи могут дать самоцветы (формула combatPower в игре) — с запасом ×2: их атаку и прочность
+    дальше умножают руны, дрон, зелья и пассивки. Добавляется к пределу БМ в рейтинге (webserver.save)."""
+    b = gem_bonus(cx)
+    return int(2 * (b["atk"] * 12 + b["def"] * 10 + b["hp"] * 1.5 + b["rate"] * 500))
+
+
+def remember_gems(uid, cx):
+    """Запомнить сданные самоцветы игрока: из них пределы PvP (прочность и броня) и предел БМ в рейтинге."""
+    import pvpguard
+    _gem_cx[uid] = cx
+    b = gem_bonus(cx)
+    pvpguard.set_gems(uid, b["hp"], b["def"])
+
+
+async def load_gem_cx(s, uid):
+    """Сколько самоцветов игрок сдал в Кодекс — при входе в мир (рядом с купленными очками для пределов PvP)."""
+    rows = (await s.execute(select(SphereBal.item, SphereBal.n).where(
+        SphereBal.owner == uid, SphereBal.item.in_([GEM_CX + g for g in GEMS])))).all()
+    got = {}
+    for item, n in rows:
+        g = str(item)[len(GEM_CX):]
+        got[g] = got.get(g, 0) + (n or 0)                 # дубли строк (старая гонка) складываются, как в sph_row
+    cx = {g: min(GEM_MAX, got.get(g, 0)) for g in GEMS}
+    remember_gems(uid, cx)
+    return cx
+
 
 # Крафт рун и дронов идёт на сервере: id -> (минимальный уровень, что нужно).
 # Зеркало game.html → RUNES/DRONES (src "craft"); совпадение проверяет test_craft_contract.py.
@@ -329,6 +391,26 @@ def roll(lv, mult=1, shard_mult=None):
     return out
 
 
+def roll_gems(lv, mult=1):
+    """Самоцветы за одного убитого моба (вызывается только в GEM_LOCS). Каждый вид бросается отдельно:
+    частые — с шансом медной сферы, редкие — титановой; mult — те же множители, что у сфер (главарь, VIP, билет)."""
+    s, out = lv - 1, []
+    chance = {"c": P(0.0033 + 0.000036 * s), "r": P(0.00033 + 0.0000036 * s)}
+    for gid in GEMS:
+        if random.random() < min(0.9, chance["c" if gid in GEMS_COMMON else "r"] * mult):
+            out.append({"kind": "sph", "id": gid, "n": 1})
+    return out
+
+
+def gem_give_amount(want, given, bal):
+    """Сколько самоцветов принять в Кодекс: просили want, уже сдано given, учтено у игрока bal."""
+    try:
+        want = int(want)
+    except (TypeError, ValueError, OverflowError):
+        want = 1
+    return max(0, min(max(1, want), GEM_MAX - max(0, int(given or 0)), max(0, int(bal or 0))))
+
+
 def new_uid():
     return "i" + secrets.token_hex(8)
 
@@ -459,8 +541,41 @@ async def api_items(request):
         if op == "state":
             items = (await s.execute(select(ItemInst).where(ItemInst.owner == uid, ItemInst.status == "inv"))).scalars().all()
             sph = {r.item: r.n for r in (await s.execute(select(SphereBal).where(SphereBal.owner == uid))).scalars().all()}
+            gemcx = {k: min(GEM_MAX, sph.get(GEM_CX + k, 0) or 0) for k in GEMS}
+            remember_gems(uid, gemcx)
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
-                                      "sph": {k: sph.get(k, 0) for k in REG_IDS}})
+                                      "sph": {k: sph.get(k, 0) for k in REG_IDS}, "gemcx": gemcx})
+
+        if op == "gem":
+            # Кодекс → «Самоцветы»: сданные камни списываются с учёта игрока и навсегда прибавляются к счётчику (до GEM_MAX).
+            # Принимаются только учтённые сервером (выпавшие с врагов или купленные на маркете), как и на маркете.
+            gid = str(body.get("id", ""))
+            if gid not in GEMS:
+                return web.json_response({"ok": False, "error": "Это не самоцвет"})
+            cx = await sph_row(s, uid, GEM_CX + gid)
+            bal = await sph_row(s, uid, gid)
+            k = gem_give_amount(body.get("n", 1), cx.n, bal.n)
+            if k <= 0:
+                given, have = min(GEM_MAX, cx.n or 0), bal.n or 0          # прочитать до отката: он сбрасывает объекты сессии
+                await s.rollback()
+                return web.json_response({"ok": False, "cx": given, "sph": have,
+                                          "error": f"Собрано максимум: {GEM_MAX}" if given >= GEM_MAX else
+                                          "Нет учтённых самоцветов: сдать можно только выпавшие с врагов или купленные на маркете"})
+            ok, bal = await take_spheres(s, uid, gid, k)
+            if not ok:
+                await s.rollback()
+                return web.json_response({"ok": False, "error": "Самоцветы как раз изменились, попробуй ещё раз"})
+            # счётчик растёт, только если не перевалит за GEM_MAX: два одновременных запроса не сдадут лишнего
+            res = await s.execute(update(SphereBal).where(SphereBal.id == cx.id, SphereBal.n + k <= GEM_MAX).values(n=SphereBal.n + k)
+                                  .returning(SphereBal.n).execution_options(synchronize_session=False))
+            got = res.first()
+            if got is None:
+                await s.rollback()
+                return web.json_response({"ok": False, "error": "Самоцветы как раз изменились, попробуй ещё раз"})
+            await s.commit()
+            remember_gems(uid, {**_gem_cx.get(uid, {}), gid: got[0]})
+            metrics.inc("gem.codex", k)
+            return web.json_response({"ok": True, "id": gid, "given": k, "cx": got[0], "sph": bal.n or 0})
 
         if op == "craft":
             # руна или дрон собираются по последнему сохранению: ресурсы списываются там, вещь учитывается
@@ -653,10 +768,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
+            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "самоцветов" if item["id"] in GEMS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы и осколки с мобов, руны, дронов, артефакты, крылья и плащи"
+    return None, "За GRAM можно продавать только снаряжение, сферы, осколки и самоцветы с мобов, руны, дронов, артефакты, крылья и плащи"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -725,6 +840,11 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)
+        if loc in GEM_LOCS:                                             # самоцветы: цеха, Фарм-зона и Сезонная зона
+            for d in roll_gems(lv, base_mult):
+                item = await add_spheres(s, uid, d["id"], d["n"])
+                item["i"] = i
+                drops.append(item)
         metrics.inc("kill.ok")
         funnel.mark(uid, "kill1")
         if boss:
@@ -832,3 +952,5 @@ def cleanup(online_ids):
         _boss_t.pop(uid, None)
     for uid in [u for u in _bucket if u not in online_ids]:
         _bucket.pop(uid, None)
+    for uid in [u for u in _gem_cx if u not in online_ids]:          # при следующем входе их снова пришлёт op "state"
+        _gem_cx.pop(uid, None)

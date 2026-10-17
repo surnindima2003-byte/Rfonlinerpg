@@ -87,10 +87,20 @@ CP_PER_POINT = 200           # улучшение «CP»: +200 за очко (р
 PACK_PTS = {"p_std": 1, "p_elite": 5, "p_legend": 10, "p_epic": 20}   # очки навыка в паках магазина GRAM
 CAP_SLACK = 1.03            # запас на округления в формулах игры
 _pts = {}                   # uid -> очки, купленные паками (None/нет — ещё не загружены: предел по максимуму)
+# Самоцветы Кодекса в таблицы не входят: сколько их сдано, сервер знает у каждого игрока сам (items.GEM_CX).
+# Их плоский бонус к прочности и броне игра дальше умножает (класс, «Живучесть», руны, дрон, зелье) — наибольшие
+# множители считает tools/stat_caps.js (gemK). Без сданных самоцветов пределы прежние, даже на 1 уровне.
+GEM_K = (3.882, 2.683)
+_gem = {}                   # uid -> (прочность, броня) — плоский бонус сданных самоцветов (items.gem_bonus)
 
 
 def set_points(uid, n):
     _pts[uid] = max(0, int(n or 0))
+
+
+def set_gems(uid, hp, df):
+    """Бонус самоцветов игрока: загружается при входе в мир и меняется при сдаче в Кодекс."""
+    _gem[uid] = (max(0, int(hp or 0)), max(0, int(df or 0)))
 
 
 def add_pack(uid, pack):
@@ -106,15 +116,16 @@ def points(lvl, bought):
     return max(0, min(UP_MAX, PTS_PER_LEVEL * (max(1, lvl) - 1) + bought))
 
 
-def caps(lvl, bought=None):
-    """Наибольшие честные (прочность, CP, броня) на уровне lvl при bought купленных очках."""
+def caps(lvl, bought=None, gem=(0, 0)):
+    """Наибольшие честные (прочность, CP, броня) на уровне lvl при bought купленных очках и плоском бонусе
+    самоцветов gem = (прочность, броня)."""
     lvl = max(1, int(lvl or 1))
     L = min(len(HP_AB), lvl)                    # выше потолка уровней игры — как на последнем
     u = points(lvl, bought)
     a, b = HP_AB[L - 1]
     da, db = DEF_AB[L - 1]
-    max_hp = int((a + b * u) * CAP_SLACK) + 20
-    max_def = int((da + db * u) * CAP_SLACK) + 20
+    max_hp = int((a + b * u + GEM_K[0] * gem[0]) * CAP_SLACK) + 20
+    max_def = int((da + db * u + GEM_K[1] * gem[1]) * CAP_SLACK) + 20
     return max_hp, max_hp * 10 + CP_PER_POINT * u, max_def
 
 
@@ -123,7 +134,7 @@ def sanitize(info, lvl):
     if info.get("admin"):
         return
     bought = _pts.get(info.get("id"))
-    max_hp, max_cp, max_def = caps(lvl, bought)
+    max_hp, max_cp, max_def = caps(lvl, bought, _gem.get(info.get("id"), (0, 0)))
     cp_extra = CP_PER_POINT * points(lvl, bought)
     info["mhp"] = max(1, min(info.get("mhp", 1), max_hp))
     info["mcp"] = max(1, min(info.get("mcp", 1), max_cp, info["mhp"] * 10 + cp_extra))
