@@ -1227,6 +1227,43 @@ body.tut-top .toast{top:var(--tutToast,58%);padding:7px 14px;font-size:13px}
 .evcard .chev{color:var(--muted);font-size:20px}
 .evcard.soon{filter:saturate(.4);opacity:.75}.evcard.soon .ev-tx em{color:#93A0AC}
 .evdetail p{font-size:14px;line-height:1.45}
+.ev-live.off{background:#E0694A;color:#fff}
+/* ---- «Страх»: окно события (как в LIBERTY) — тёмные карточки в обеих темах, как .evcard ---- */
+.fr-head{display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,color-mix(in srgb,var(--c) 24%,#10161D),#10161D 78%);border:1px solid color-mix(in srgb,var(--c) 42%,#34414E);border-radius:16px;padding:12px 14px;margin-bottom:10px;color:#E4DED1;overflow:hidden}
+.fr-ic{flex:none;width:76px;height:76px;display:grid;place-items:center;border-radius:14px;background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--c) 34%,#151020),#0C0F14 75%)}
+.fr-ic svg{width:58px;height:58px}
+.fr-tx{min-width:0}.fr-tx b{display:block;font:22px 'Russo One',sans-serif;color:color-mix(in srgb,var(--c) 85%,#fff)}
+.fr-tx small{display:block;font-size:13px;color:#C9D1D8;margin:2px 0 7px;line-height:1.35}
+.fr-st{display:inline-flex;align-items:center;gap:6px;font:700 12px Rubik,sans-serif;font-style:normal;border-radius:999px;padding:3px 11px;border:1px solid}
+.fr-st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.fr-st.ok{color:#8FE07A;border-color:rgba(123,201,138,.55);background:rgba(123,201,138,.12)}
+.fr-st.no{color:#FF8A6B;border-color:rgba(224,105,74,.55);background:rgba(224,105,74,.12)}
+.fr-tries{text-align:center;background:#10161D;border:1px solid #2A3440;border-radius:16px;padding:12px 12px 13px;margin-bottom:10px;color:#E4DED1}
+.fr-tries small{display:block;font:700 11px Rubik,sans-serif;letter-spacing:.16em;color:#93A0AC;text-transform:uppercase}
+.fr-tries b{display:block;font:36px/1.15 'Russo One',sans-serif;color:#FFC46B;margin:3px 0 2px}
+.fr-tries span{font-size:13px;color:#C9D1D8}
+.fr-go{display:block;width:100%;padding:13px;border-radius:14px;border:1.5px solid #8E2E36;background:linear-gradient(180deg,#4A1A20,#2C1015);color:#FF9C8A;font:700 16px Rubik,sans-serif;margin-bottom:12px;box-shadow:inset 0 1px 0 rgba(255,160,140,.12)}
+.fr-go:active:not(:disabled){transform:scale(.985)}
+.fr-go:disabled{opacity:.45}
+.fr-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.fr-grid div{background:#10161D;border:1px solid #2A3440;border-radius:12px;padding:8px 12px;color:#E4DED1;min-width:0}
+.fr-grid small{display:block;font:700 10.5px Rubik,sans-serif;letter-spacing:.13em;color:#93A0AC;text-transform:uppercase}
+.fr-grid b{display:block;font-size:14px;margin-top:1px}
+.fr-how{font:700 15px Rubik,sans-serif;color:var(--amber);margin:0 0 9px}
+.fr-steps{list-style:none;margin:0 0 14px;padding:0;counter-reset:fr}
+.fr-steps li{counter-increment:fr;display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.4;margin-bottom:9px}
+.fr-steps li::before{content:counter(fr);flex:none;width:24px;height:24px;margin-top:-1px;border-radius:50%;display:grid;place-items:center;font:700 12px Rubik,sans-serif;color:color-mix(in srgb,#9B7BFF 62%,var(--text));background:rgba(155,123,255,.16);border:1px solid rgba(155,123,255,.5)}
+/* ---- «Страх»: отсчёт по центру и плашка «Волна N из 59» под карточкой пилота ---- */
+.fear-cd{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:4}
+.fear-cd[hidden],.fear-wave[hidden]{display:none}
+.fear-cd b{display:block;font:104px/1 'Russo One',sans-serif;color:#FFC46B;background:linear-gradient(180deg,#FFE7A8,#F6B04A 55%,#D9822A);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 3px 0 rgba(0,0,0,.55)) drop-shadow(0 0 16px rgba(242,169,59,.35))}
+.fear-cd.tick b{animation:fcd .9s ease-out}
+@keyframes fcd{0%{transform:scale(1.45);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.94);opacity:.92}}
+.fear-cd span{display:block;margin-top:8px;font:700 14px Rubik,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#F07A62;text-shadow:0 2px 6px rgba(0,0,0,.85);white-space:nowrap}
+.fear-wave{position:absolute;left:calc(50% - 27px);top:calc(var(--hb, 120px) + 2px);transform:translateX(-50%);max-width:calc(100% - 150px);overflow:hidden;text-overflow:ellipsis;z-index:4;pointer-events:none;background:linear-gradient(180deg,#231A30,#15101D);border:1.5px solid #8E5BFF;border-radius:11px;padding:5px 16px;font:700 15px Rubik,sans-serif;color:#F3EEFF;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 12px rgba(142,91,255,.28)}
+.fear-wave.won{border-color:#F2C14B;color:#FFE08A;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(242,193,75,.35)}
+body.fear-run .tframe{top:calc(var(--hb, 120px) + 24px)}
+@media (prefers-reduced-motion: reduce){.fear-cd.tick b{animation:none}}
 .cx-bonus{background:rgba(155,123,255,.12);border:1px solid rgba(155,123,255,.4);border-radius:12px;padding:10px;margin-bottom:10px}
 .cx-bonus b{display:block;color:#C8B6FF;font-size:13px}.cx-bonus span{font-size:12px;color:var(--ok)}
 .cx-list{margin-top:8px}
@@ -1555,6 +1592,8 @@ textarea.field{min-height:70px;resize:vertical}
     </div>
     <div class="pinvite" id="pinvite" hidden><span id="pinvText"></span><div><button type="button" data-pi="yes">Принять</button><button type="button" data-pi="no">Отклонить</button></div></div>
     <div class="zone-tag" id="zoneTag"></div>
+    <div class="fear-cd" id="fearCd" hidden><b id="fearCdN" data-notr>5</b><span>Монстры появятся через</span></div>
+    <div class="fear-wave" id="fearWave" hidden></div>
     <button class="talk" id="talkBtn" type="button" hidden>Поговорить</button>
     <div class="joy" id="joy" data-lay="joy" data-name="Джойстик">
       <div class="joy-ring"><i class="ja up"></i><i class="ja dn"></i><i class="ja lf"></i><i class="ja rt"></i><i class="jd" style="--a:45deg"></i><i class="jd" style="--a:135deg"></i><i class="jd" style="--a:225deg"></i><i class="jd" style="--a:315deg"></i></div>
@@ -1675,7 +1714,7 @@ const LOCS = {
   sector2:{name:"Глубинные цеха", min:20, dungeon:true, levels:"21–40", ground:"#0B1015", npcs:[], count:0},
   scrapfields:{name:"Ржавые поля", min:1, npcs:["scrap_crawler","rogue_drone"], count:14, ground:"#3A3129", ground2:"#433830", rock:"#5A5048"},
   reactor_ruins:{name:"Руины реактора", min:3, npcs:["rogue_drone","sentry_bot"], count:15, ground:"#1E3136", ground2:"#243B40", rock:"#3E4B4E", cores:0.35},
-  arena_fear:{name:"Арена «Страх»", min:1, arena:true, npcs:[], count:0, ground:"#1A1418", ground2:"#221A1F", rock:"#3A2E35"},
+  arena_fear:{name:"Страх", min:10, arena:true, npcs:[], count:0, ground:"#231C1A", ground2:"#2B2321", rock:"#3A2E35"},   // подземелье «Страха»: buildArena
   iron_canyon:{name:"Железный каньон", min:6, npcs:["sentry_bot","war_walker"], count:14, ground:"#2B2A33", ground2:"#33313C", rock:"#4E4A57", cores:0.5}
 };
 
@@ -3342,10 +3381,10 @@ function drawEnemy(e, t){
     nameText("☠ " + T(k.name), e.x, y0 - 8, "#FF8A6A", "700 12px Rubik, sans-serif");
     nameText(T("Уровень") + " " + k.lvl, e.x, y0 - 22, "#93A0AC", "10px Rubik, sans-serif");
   }
-  else if(e.hp < e.max || p.target === e){
+  else if(e.hp < e.max || p.target === e || k.fear){
     const w = Math.max(24, rv*2 + 8);
     ctx.fillStyle = "#1B232C"; ctx.fillRect(e.x - w/2, e.y - rv - 14, w, 4);
-    ctx.fillStyle = "#E0694A"; ctx.fillRect(e.x - w/2, e.y - rv - 14, w*Math.max(0, e.hp/e.max), 4);
+    ctx.fillStyle = k.fear ? "#4FD65A" : "#E0694A"; ctx.fillRect(e.x - w/2, e.y - rv - 14, w*Math.max(0, e.hp/e.max), 4);
   }
   if(p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e)){
     ctx.strokeStyle = typeof lockedEnemy === "function" && lockedEnemy() === e ? "rgba(224,105,74,.95)" : "rgba(242,169,59,.8)"; ctx.lineWidth = 2; ctx.setLineDash([6,5]);
@@ -3353,7 +3392,7 @@ function drawEnemy(e, t){
     if(!k.dungeon) label(k.name, e.x, e.y - rv - 20, "#E4DED1");
   }
   // у мобов подземелья всегда видны уровень и имя; цвет — насколько он опасен для тебя
-  if(k.dungeon && !k.boss && ((LOCS[locKey] && LOCS[locKey].named) || p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
+  if(k.dungeon && !k.boss && ((LOCS[locKey] && LOCS[locKey].named) || k.fear || p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
     const col = S.level >= k.lvl ? "#E4DED1" : S.level + 3 >= k.lvl ? "#F2A93B" : "#E0694A";
     nameText(T(k.name), e.x, e.y - rv - 20, col, "600 11px Rubik, sans-serif");
     nameText(T("Уровень") + " " + k.lvl, e.x, e.y - rv - 33, "#93A0AC", "10px Rubik, sans-serif");
@@ -5312,7 +5351,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="nick">Сменить</button></div>
         <div class="set" style="margin-top:8px"><div class="tx">Бессмертие<small>Только для тебя, пока открыта игра</small></div><button class="sw" type="button" role="switch" data-adm="god" aria-checked="${NET.god}" aria-label="Бессмертие"></button></div>
         <div class="flabel" style="margin-top:6px">Телепорт без ограничений по уровню</div>
-        <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
+        <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).filter(([k]) => k !== "arena_fear").map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
         <p class="demo">GRAM выдавать нельзя: это настоящие деньги, их можно только пополнить.</p>
         <button class="btn wide" type="button" data-gramadm="1">💎 GRAM: выплаты и пополнения</button>
         <button class="btn wide" type="button" data-saleadm="1">🔥 Распродажа в магазине</button>
@@ -8901,7 +8940,7 @@ function openSeason(){
 // задаётся на сервере (CHIPWAR_SCHEDULE), поэтому её время берётся из присланного состояния — cwWhen().
 // soon — событие ещё в разработке: показываем без расписания и без кнопки, чтобы не обещать того, чего нет.
 const EVENTS = [
-  {id:"fear", name:"Страх", color:"#9B7BFF", desc:"Волны монстров на выживание", when:"Доступно всегда", play:true, mechs:["techno"], rules:"Отбивайся от волн. С каждой волной врагов больше и они сильнее. За каждую пройденную волну — лом и опыт, лучший результат сохраняется."},
+  {id:"fear", name:"Страх", color:"#9B7BFF", desc:"Волны монстров на выживание", when:"Доступно всегда", play:true, mechs:["techno"]},   // окно — renderFear
   {id:"tower", name:"Кровавая башня", color:"#E0463A", desc:"Забег через коридоры с монстрами", when:"Ежедневно в 20:30 МСК", mechs:["guard"], rules:"Запись 5 минут, затем общий старт. Две линии монстров с барьерами и общий босс: побеждает тот, кто нанёс ему больше урона."},
   {id:"boss", name:"Мировой босс", color:"#F2A93B", desc:"Общий рейд на мирового босса", when:"Пн, Ср, Пт, Вс в 20:00 МСК", mechs:["guard", "techno"], rules:"Босс появляется в Центральном ангаре, драться может каждый. Добыча падает на пол для всех: кто успел, тот забрал."},
   {id:"chipwar", name:"Chip War", color:"#6E96F0", desc:"Битва фракций за чип в Железном каньоне", mechs:["sniper", "reaper"]},
@@ -8917,7 +8956,7 @@ function openEvents(){
     body().innerHTML = EVENTS.map(ev => `<button type="button" class="evcard${ev.soon ? " soon" : ""}" data-ev="${ev.id}" style="--c:${ev.color}">
       <div class="ev-art">${ev.mechs.map((m, i) => `<span style="left:${10 + i*38}px">${mechImg(m, i % 2 ? "core" : "vex", {weapon:3}, 46)}</span>`).join("")}</div>
       <div class="ev-tx"><b>${ev.name}</b><small>${ev.desc}</small><em>${evWhen(ev)}</em></div><span class="chev">›</span>
-      ${ev.play ? `<i class="ev-live">Открыто</i>` : ""}</button>`).join("");
+      ${ev.play ? fearPill() : ""}</button>`).join("");
   });
 }
 function openEvent(id){
@@ -8931,41 +8970,289 @@ function openEvent(id){
   });
 }
 
-// ---- арена «Страх»: волны ----
-const ARENA = {wave:0, next:0, active:false, fighting:false};
+// ===================== «СТРАХ»: ВОЛНЫ МОНСТРОВ НА ВЫЖИВАНИЕ (как в LIBERTY) =====================
+// Соло-подземелье: с 10 уровня, 2 попытки в сутки по Москве, попытка тратится при входе. Сначала отсчёт
+// «Монстры появятся через 5…1», затем волны по 20 монстров; уровень монстров = номер волны (1…59).
+// Следующая волна приходит, как только от прошлых осталось FEAR.NEXT_AT монстров. Дойти до конца — зачистить
+// волну 59. Смерть — конец забега и возврат в Центральный ангар. Войти можно только из «События → Страх»:
+// ни портал, ни админский телепорт туда не ведут. Монстры «Страха» — свои типы fw1…fw59: их прочность и
+// уровень знает сервер (mobguard.py, ledger.py), попытки считает fear.py.
+const FEAR = {TRIES:2, MIN:10, WAVES:59, PER:20, NEXT_AT:6, COUNT:5, ATK_CD:1.7, pass:0,
+  W:1300, H:1300, room:{x0:150, y0:200, x1:1150, y1:1200}, spawn:{x:650, y:470}};
+const FEAR_ADJ = DG_PREFIX.slice(1).concat(["Неистовый", "Багровый", "Обсидиановый", "Ртутный", "Звёздный", "Инфернальный", "Безумный",
+  "Неудержимый", "Коварный", "Безжалостный", "Колоссальный", "Мрачный", "Роковой", "Сумеречный", "Громадный", "Безликий", "Испепеляющий",
+  "Неумолимый", "Предвечный", "Непобедимый"]);                                              // 59 ступеней: «Слабый» … «Непобедимый»
+const FEAR_NOUN = [["scrap_crawler", "Краулер"], ["rogue_drone", "Дрон"], ["war_walker", "Шагоход"]];
+const FEAR_RANK = ["страж", "воин", "охотник", "рубака", "ветеран", "громила", "берсерк", "палач", "чемпион", "гладиатор",
+  "каратель", "разрушитель", "истребитель", "опустошитель", "вожак", "лорд", "тиран", "повелитель", "владыка", "титан"];   // ранг меняется раз в 3 волны
+// монстры «Страха» вдвое слабее монстра подземелья того же уровня: их много и они идут толпой (формула — как mob_hp на сервере)
+const fearHp = w => Math.round((20 + 14*w + 0.25*w*w)*0.5);
+for(let w = 1; w <= FEAR.WAVES; w++){
+  const [base, noun] = FEAR_NOUN[(w - 1) % 3], b = NPCS[base], k = w - 1;
+  NPCS["fw" + w] = {name:FEAR_ADJ[w - 1] + " " + noun + " " + FEAR_RANK[Math.floor(k/3)], lvl:w, base, dungeon:true, fear:true,
+    hp:fearHp(w), atk:Math.max(1, Math.round((4 + 1.2*w + 0.01*w*w)*0.5)), def:Math.floor(w/3),
+    exp:Math.max(1, Math.round((5 + 3*k + 0.2*k*k)*0.5)), scrap:[w + 1, 2*w + 4],
+    color:b.color, r:b.r, speed:b.speed + 20 + Math.min(40, Math.floor(k/2)), range:40, ranged:false,      // все бегут в ближний бой
+    loot:Object.fromEntries(Object.entries(b.loot).map(([id, c]) => [id, +(c*0.6).toFixed(3)]))};
+}
+// попытки: сутки по Москве, как у сервера (fear.py)
+const fearDay = () => new Date(Date.now() + 3*3600e3).toISOString().slice(0, 10);
+const fearUsed = () => { const f = S.fearTries; return f && f.day === fearDay() ? Math.max(0, Math.min(FEAR.TRIES, f.used | 0)) : 0; };
+const fearLeft = () => FEAR.TRIES - fearUsed();
+const fearLvOk = () => !!window.NET_ADMIN || S.level >= FEAR.MIN;
+const fearCan = () => fearLvOk() && (fearLeft() > 0 || !!window.NET_ADMIN);
+const FEAR_ICON = `<svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 57,17.5 57,46.5 32,61 7,46.5 7,17.5" fill="#1B1430" stroke="#9B7BFF" stroke-width="2.6" stroke-linejoin="round"/>
+  <polygon points="32,10 51,21 51,43 32,54 13,43 13,21" fill="none" stroke="#9B7BFF" stroke-opacity=".35" stroke-width="1.2"/>
+  <path d="M21.5 45V29.5a10.5 10.5 0 0 1 21 0V45l-3.5-2.8-3.5 2.8-3.5-2.8-3.5 2.8-3.5-2.8z" fill="#B49BFF"/>
+  <circle cx="27.6" cy="30.5" r="2.4" fill="#1B1430"/><circle cx="36.4" cy="30.5" r="2.4" fill="#1B1430"/></svg>`;
+
+// ---- окно события ----
+function renderFear(){
+  const ev = EVENTS.find(e => e.id === "fear"), left = fearLeft(), lv = fearLvOk(), can = fearCan();
+  const pill = !lv ? `<i class="fr-st no">С ${FEAR.MIN} уровня</i>` : can ? `<i class="fr-st ok">Можно начать</i>` : `<i class="fr-st no">Попытки закончились</i>`;
+  const sub = !lv ? `Доступно с ${FEAR.MIN} уровня` : left ? "Войдите, чтобы начать" : "Новые попытки — в 00:00 МСК";
+  body().innerHTML = `<section class="fr" style="--c:${ev.color}">
+    <div class="fr-head"><div class="fr-ic">${FEAR_ICON}</div><div class="fr-tx"><b>${ev.name}</b><small>${ev.desc}</small>${pill}</div></div>
+    <div class="fr-tries"><small>Попыток на сегодня</small><b>${left}/${FEAR.TRIES}</b><span>${sub}</span></div>
+    <button class="fr-go" type="button" data-evgo="fear" ${can ? "" : "disabled"}>Войти</button>
+    <div class="fr-grid"><div><small>Уровень</small><b>${FEAR.MIN}+</b></div><div><small>Когда</small><b>${ev.when}</b></div>
+      <div><small>Игроки</small><b>Соло</b></div><div><small>Попытки</small><b>${left}/${FEAR.TRIES}</b></div></div>
+    <h4 class="fr-how">Как это работает</h4>
+    <ol class="fr-steps"><li>Только с ${FEAR.MIN} уровня</li><li>${FEAR.TRIES} попытки в день, тратится при входе</li>
+      <li>Монстры приходят волнами по ${FEAR.PER}, уровень волны растёт с каждой</li><li>Дойдите до волны ${FEAR.WAVES}, чтобы пройти испытание целиком</li>
+      <li>Смерть выбрасывает из подземелья в центральный ангар</li></ol></section>
+    <button class="btn wide" type="button" data-evback="1">← Все события</button>`;
+}
+function openFear(){ openSheet("События", "Регулярные активности", renderFear); }
+{ const _openEventF = openEvent; openEvent = function(id){ return id === "fear" ? openFear() : _openEventF(id); }; }
+// плашка на карточке в списке событий
+const fearPill = () => fearCan() ? `<i class="ev-live">Можно начать</i>` : `<i class="ev-live off">${fearLvOk() ? "Нет попыток" : "С " + FEAR.MIN + " ур."}</i>`;
+function fearEnter(){
+  if(!fearLvOk()){ toast("«Страх» открывается с " + FEAR.MIN + " уровня"); return; }
+  if(!fearCan()){ toast("Попытки на сегодня закончились"); if(sheetRender === renderFear) renderFear(); return; }
+  if(locKey === "arena_fear" || !p || p.dead) return;
+  FEAR.pass = performance.now(); closeSheet(); showTab("game"); travel("arena_fear");
+}
+// в «Страх» — только кнопкой «Войти» (портал и телепорт туда не ведут)
+{ const _travelF = travel;
+  travel = function(key){
+    if(key === "arena_fear" && locKey !== "arena_fear" && !(FEAR.pass && performance.now() - FEAR.pass < 5000)){ toast("В «Страх» входят через События"); return; }
+    return _travelF(key);
+  }; }
+
+// ---- подземелье ----
+const ARENA = {wave:0, active:false, phase:"", cdEnd:0, puffs:[], hideTag:false};
 function buildArena(){
-  W = 1300; H = 1300;
-  rocks = [{x:360, y:360, r:34}, {x:940, y:360, r:34}, {x:360, y:940, r:34}, {x:940, y:940, r:34}, {x:650, y:300, r:22}, {x:650, y:1000, r:22}];
-  npcs = [{kind:"back", x:650, y:1180}];
-  Object.assign(ARENA, {wave:0, next:now + 3, active:true, fighting:false});
-  $("locName").textContent = "Страх · приготовься";
-  return {x:650, y:1080};
+  const R = FEAR.room;
+  W = FEAR.W; H = FEAR.H;
+  // стены зала — препятствия по краям (рисует их fearDraw)
+  rocks = [{rx:0, ry:0, rw:W, rh:R.y0, deco:true}, {rx:0, ry:R.y1, rw:W, rh:H - R.y1, deco:true},
+           {rx:0, ry:0, rw:R.x0, rh:H, deco:true}, {rx:R.x1, ry:0, rw:W - R.x1, rh:H, deco:true}];
+  // npcs[0] общая логика считает «точкой спавна» (безопасный круг, мобы к ней не подходят) — уносим её за карту, иначе
+  // у выхода был бы безопасный пятачок. Настоящий выход — портал внизу зала.
+  npcs = [{kind:"back", x:-4000, y:-4000, ghost:true}, {kind:"back", x:(R.x0 + R.x1)/2, y:R.y1 - 70}];
+  if(FEAR.pass && performance.now() - FEAR.pass < 5000) S.fearTries = {day:fearDay(), used:fearUsed() + 1};   // попытка тратится при входе
+  FEAR.pass = 0;
+  Object.assign(ARENA, {wave:0, active:true, phase:"count", cdEnd:now + FEAR.COUNT, puffs:[], hideTag:true});
+  fearUi(); save();
+  return {x:FEAR.spawn.x, y:FEAR.spawn.y};
 }
 function arenaTick(dt){
-  if(locKey !== "arena_fear" || !ARENA.active) return;
-  if(p.dead){ ARENA.active = false; S.fearBest = Math.max(S.fearBest || 0, ARENA.wave - 1); save(); toast("Арена: пройдено волн " + Math.max(0, ARENA.wave - 1) + " · лучший результат " + S.fearBest); return; }
-  if(ARENA.fighting){
-    if(enemies.some(e => !e.dead)) return;
-    // волна зачищена: награда и пауза перед следующей
-    const w = ARENA.wave, scrap = 15*w + 3*S.level*w, exp = 10*w + 4*S.level;
-    S.scrap += scrap; S.exp += exp; if(levelUps()) toast("Новый уровень: " + S.level + "!");
-    S.fearBest = Math.max(S.fearBest || 0, w); save();
-    toast("Волна " + w + " пройдена: +" + scrap + " лома, +" + exp + " опыта"); Sfx.play("level");
-    ARENA.fighting = false; ARENA.next = now + 4; enemies = [];
-    $("locName").textContent = "Страх · волна " + (w + 1) + " через 4 с";
-    return;
-  }
-  if(now < ARENA.next) return;
-  const w = ++ARENA.wave, lv = Math.max(1, Math.min(40, S.level - 1 + Math.floor(w/3))), n = Math.min(22, 3 + w*2);
-  for(let i = 0; i < n; i++){
-    const a = Math.random()*Math.PI*2, r = 520 + Math.random()*60, type = "dg" + lv, k = NPCS[type];
-    const x = 650 + Math.cos(a)*r, y = 650 + Math.sin(a)*r*0.9;
-    enemies.push({type, x, y, hx:650, hy:650, tx:650, ty:650, hp:k.hp, max:k.hp, cd:1, ang:a + Math.PI, chase:true, dead:false, respawn:Infinity, flash:0, wanderT:0, lunge:0, arena:true});
-  }
-  ARENA.fighting = true;
-  $("locName").textContent = "Страх · волна " + w;
-  toast("Волна " + w + ": врагов " + n); Sfx.play("portal");
+  if(!ARENA.active) return;
+  if(locKey !== "arena_fear"){ ARENA.active = false; ARENA.phase = ""; ARENA.puffs = []; fearUi(); return; }   // вышли: портал, смерть, сервер
+  if(ARENA.hideTag){ ARENA.hideTag = false; $("zoneTag").classList.remove("show"); }     // вместо названия локации — отсчёт
+  for(const f of ARENA.puffs) f.life -= dt; ARENA.puffs = ARENA.puffs.filter(f => f.life > 0);
+  if(p.dead){ if(ARENA.phase !== "dead") fearDied(); return; }
+  if(ARENA.phase === "count"){ if(now >= ARENA.cdEnd){ ARENA.phase = "fight"; fearWave(); } else fearUi(); return; }
+  if(ARENA.phase !== "fight") return;
+  // монстры «Страха» не разбредаются: отставшие идут к пилоту, даже если он уехал далеко
+  let alive = 0;
+  for(const e of enemies){ if(e.dead) continue; alive++; if(!e.chase){ e.hx = e.tx = p.x; e.hy = e.ty = p.y; e.wanderT = 1; } }
+  if(alive > FEAR.NEXT_AT) return;
+  if(ARENA.wave < FEAR.WAVES) fearWave();
+  else if(!alive) fearWin();
 }
+function fearWave(){
+  const w = ++ARENA.wave, type = "fw" + w, k = NPCS[type], R = FEAR.room, m = 45;
+  S.fearBest = Math.max(S.fearBest || 0, w - 1);
+  enemies = enemies.filter(e => !e.dead);                     // убитые не возрождаются — убираем их из списка
+  const a0 = Math.random()*Math.PI*2;
+  for(let i = 0; i < FEAR.PER; i++){
+    const a = a0 + i/FEAR.PER*Math.PI*2 + (Math.random() - .5)*0.25, r = 170 + Math.random()*150;
+    const x = Math.max(R.x0 + m, Math.min(R.x1 - m, p.x + Math.cos(a)*r)), y = Math.max(R.y0 + m, Math.min(R.y1 - m, p.y + Math.sin(a)*r*0.85));
+    enemies.push({type, x, y, hx:x, hy:y, tx:x, ty:y, hp:k.hp, max:k.hp, cd:0.6 + Math.random()*0.6, ang:Math.atan2(p.y - y, p.x - x), chase:true,
+      dead:false, respawn:Infinity, flash:0, wanderT:1, lunge:0, fear:true});
+    ARENA.puffs.push({x, y, life:.45, max:.45});
+  }
+  fearUi(); Sfx.play("portal");
+}
+function fearWin(){
+  ARENA.phase = "won"; ARENA.wave = FEAR.WAVES + 1; S.fearBest = FEAR.WAVES; save();
+  fearUi(); Sfx.play("level"); toast("👑 Испытание «Страх» пройдено: все " + FEAR.WAVES + " волн!");
+  setTimeout(() => { if(locKey === "arena_fear" && ARENA.phase === "won") travel("lobby"); }, 6000);
+}
+function fearDied(){
+  ARENA.phase = "dead";
+  const passed = Math.max(0, ARENA.wave - 1); S.fearBest = Math.max(S.fearBest || 0, passed); save();
+  const box = $("death").querySelector(".death-box");
+  if(box) box.innerHTML = `Робот уничтожен<small>Пройдено волн: ${passed} из ${FEAR.WAVES}</small><small>возврат в ангар…</small>`;
+  fearUi();
+}
+// отсчёт по центру и плашка «Волна N из 59» под карточкой пилота
+function fearUi(){
+  const on = ARENA.active && locKey === "arena_fear";
+  document.body.classList.toggle("fear-run", on);
+  const cd = $("fearCd"), wv = $("fearWave"), counting = on && ARENA.phase === "count";
+  cd.hidden = !counting;
+  if(counting){ const n = String(Math.max(1, Math.ceil(ARENA.cdEnd - now)));
+    if(cd._n !== n){ cd._n = n; $("fearCdN").textContent = n; cd.classList.remove("tick"); void cd.offsetWidth; cd.classList.add("tick"); } }
+  else cd._n = "";
+  const won = on && ARENA.phase === "won";
+  wv.hidden = !(won || (on && ARENA.wave > 0 && ARENA.phase === "fight"));
+  const txt = won ? "Испытание пройдено!" : "Волна " + ARENA.wave + " из " + FEAR.WAVES;
+  if(wv._t !== txt){ wv._t = txt; wv.textContent = txt; wv.classList.toggle("won", won); }
+}
+// выход через портал: забег заканчивается, попытка не возвращается
+{ const _openBackF = openBackPortal;
+  openBackPortal = function(){
+    if(locKey !== "arena_fear") return _openBackF();
+    openSheet("Выход из подземелья", "Страх", () => {
+      $("shBody").innerHTML = `<p class="hint">Забег закончится, а попытка не вернётся.</p><button class="btn pri wide" type="button" data-go="lobby">Покинуть подземелье</button>`;
+    });
+  }; }
+// убитые монстры «Страха» не возрождаются; «точку спавна» за картой не рисуем
+{ const _killEnemyF = killEnemy; killEnemy = function(e){ const r = _killEnemyF(e); if(e && e.fear) e.respawn = Infinity; return r; }; }
+// разница уровней: монстр ниже пилота бьёт слабее (на 8% за уровень, не меньше 10%; дробный урон — шансом),
+// выше пилота — сильнее (+4% за уровень, до +50%). Как в эталоне: первые волны сильному пилоту не страшны, стена — у своего уровня
+const fearDmgK = lv => { const d = S.level - lv; return d >= 0 ? Math.max(0.1, 1 - 0.08*d) : Math.min(1.5, 1 - 0.04*d); };
+{ const _hurtF = hurtPlayer;
+  hurtPlayer = function(dmg, by, src){
+    if(src && src.fear && NPCS[src.type]){ const v = dmg*fearDmgK(NPCS[src.type].lvl); dmg = Math.floor(v) + (Math.random() < v % 1 ? 1 : 0); if(dmg <= 0) return; }
+    return _hurtF(dmg, by, src);
+  }; }
+// толпа бьёт реже обычного моба: после удара перезарядка ×FEAR.ATK_CD (иначе 20 монстров по 1 урона за удар сносили новичка)
+{ const _updEnF = updateEnemies;
+  updateEnemies = function(dt, st){
+    const r = _updEnF(dt, st);
+    if(locKey === "arena_fear") for(const e of enemies) if(e.fear && !e.dead){ if(e.cd > (e._cd ?? 0) + 0.5) e.cd *= FEAR.ATK_CD; e._cd = e.cd; }
+    return r;
+  }; }
+{ const _drawNpcF = drawNpc; drawNpc = function(n, t){ if(n && n.ghost) return; return _drawNpcF(n, t); }; }
+// «Соло»: в подземелье «Страха» других пилотов не видно и их нельзя взять в цель — у каждого своё подземелье
+const fearSolo = fn => function(...a){
+  if(locKey !== "arena_fear" || !NET.others || !NET.others.size) return fn.apply(this, a);
+  const o = NET.others; NET.others = new Map();
+  try{ return fn.apply(this, a); } finally { NET.others = o; }
+};
+drawOthers = fearSolo(drawOthers); drawPvpUnder = fearSolo(drawPvpUnder); drawMinimap = fearSolo(drawMinimap); tryTarget = fearSolo(tryTarget);
+// сервер сообщает, сколько попыток уже потрачено сегодня (и не пускает без попыток)
+{ const _onNetF = onNetExtra;
+  onNetExtra = function(d){
+    if(d && d.t === "fear"){ S.fearTries = {day:fearDay(), used:Math.max(fearUsed(), Math.min(FEAR.TRIES, +d.used || 0))}; save();
+      if(sheetRender === renderFear) renderFear(); return; }
+    return _onNetF(d);
+  }; }
+
+// ---- вид подземелья: кирпичные стены, каменные плиты с лавой в трещинах, факелы ----
+// Пол и стены рисуются один раз в холст размером с карту, лава — отдельным слоем свечения вдвое меньше
+// (он размытый), который мягко «дышит». Каждый кадр — только копия видимой части.
+const FEARGFX = {floor:null, glow:null, torches:[]};
+function fearFloor(){
+  if(FEARGFX.floor) return FEARGFX;
+  const R = FEAR.room, rnd = seedRnd("fear-room");
+  const mk = s => { const c = document.createElement("canvas"); c.width = Math.ceil(FEAR.W*s); c.height = Math.ceil(FEAR.H*s); const g = c.getContext("2d"); g.scale(s, s); return [c, g]; };
+  const [fc, g] = mk(1), [gc, gg] = mk(0.5);
+  const bricks = (x0, y0, x1, y1, bw, bh, cols, mortar) => {
+    g.fillStyle = mortar; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    for(let y = y0, row = 0; y < y1; y += bh, row++) for(let x = x0 - (row % 2 ? bw/2 : 0); x < x1; x += bw){
+      const bx = Math.max(x0, x + 2), ex = Math.min(x1, x + bw - 2); if(ex <= bx) continue;
+      g.fillStyle = cols[Math.floor(rnd()*cols.length)]; g.fillRect(bx, y + 2, ex - bx, Math.min(bh - 4, y1 - y - 2));
+      g.fillStyle = "rgba(255,220,190,.07)"; g.fillRect(bx, y + 2, ex - bx, 2);                    // светлая грань сверху
+    }
+  };
+  // верх стен вокруг зала — тёмная кладка
+  bricks(0, 0, FEAR.W, FEAR.H, 56, 26, ["#2C1915", "#311C17", "#281613", "#341E18"], "#140B09");
+  // пол: тёмный камень, плиты неправильной формы
+  g.fillStyle = "#231C1A"; g.fillRect(R.x0, R.y0, R.x1 - R.x0, R.y1 - R.y0);
+  const sp = 118, nx = Math.ceil((R.x1 - R.x0)/sp), ny = Math.ceil((R.y1 - R.y0)/sp), pts = [];
+  for(let j = 0; j <= ny; j++){ pts.push([]); for(let i = 0; i <= nx; i++){
+    const ex = i === 0 || i === nx, ey = j === 0 || j === ny;
+    pts[j].push([R.x0 + (R.x1 - R.x0)*i/nx + (ex ? 0 : (rnd() - .5)*60), R.y0 + (R.y1 - R.y0)*j/ny + (ey ? 0 : (rnd() - .5)*60)]); } }
+  const shades = ["#2B2321", "#2F2624", "#262020", "#33292A", "#2C2422", "#30272A"], polys = [], edges = [];
+  for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
+    const a = pts[j][i], b = pts[j][i + 1], c = pts[j + 1][i + 1], d = pts[j + 1][i];
+    if(rnd() < .45){ if(rnd() < .5){ polys.push([a, b, c], [a, c, d]); edges.push([a, c]); } else { polys.push([a, b, d], [b, c, d]); edges.push([b, d]); } }
+    else polys.push([a, b, c, d]);
+    if(j > 0) edges.push([a, b]); if(i > 0) edges.push([a, d]);                                     // по краям зала трещин нет
+  }
+  for(const pl of polys){
+    g.fillStyle = shades[Math.floor(rnd()*shades.length)];
+    g.beginPath(); pl.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill();
+    const [cx0, cy0] = pl.reduce((q, [x, y]) => [q[0] + x/pl.length, q[1] + y/pl.length], [0, 0]);   // выщербины на плите
+    for(let k = 0; k < 7; k++){ g.fillStyle = rnd() < .5 ? "rgba(0,0,0,.22)" : "rgba(255,230,210,.05)"; g.fillRect(cx0 + (rnd() - .5)*60, cy0 + (rnd() - .5)*60, 4, 4); }
+  }
+  // трещины: ломаная по стыку плит — тёмный шов, раскалённая лава и светящийся ореол на отдельном слое
+  const wob = ([x1, y1], [x2, y2]) => { const out = [[x1, y1]], n = 4;
+    for(let k = 1; k < n; k++){ const t = k/n, ox = -(y2 - y1), oy = x2 - x1, L = Math.hypot(ox, oy) || 1, w = (rnd() - .5)*14;
+      out.push([x1 + (x2 - x1)*t + ox/L*w, y1 + (y2 - y1)*t + oy/L*w]); }
+    out.push([x2, y2]); return out; };
+  const cracks = edges.map(e => wob(e[0], e[1]));
+  const stroke = (G, col, lw) => { G.strokeStyle = col; G.lineWidth = lw; G.lineCap = "round"; G.lineJoin = "round";
+    for(const c of cracks){ G.beginPath(); c.forEach(([x, y], k) => k ? G.lineTo(x, y) : G.moveTo(x, y)); G.stroke(); } };
+  stroke(g, "#130907", 5); stroke(g, "#7A240F", 3); stroke(g, "#D8461A", 1.7); stroke(g, "#FF9A48", .7);
+  gg.shadowColor = "#FF4A16"; gg.shadowBlur = 10; stroke(gg, "rgba(255,80,26,.42)", 6);
+  // мелкие камешки и синие кристаллы у стен
+  for(let k = 0; k < 90; k++){ const x = R.x0 + 20 + rnd()*(R.x1 - R.x0 - 40), y = R.y0 + 20 + rnd()*(R.y1 - R.y0 - 40);
+    g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x + 2, y + 2, 6, 4); g.fillStyle = ["#4A3E3A", "#3E3431", "#57493F"][k % 3]; g.fillRect(x, y, 6, 4); }
+  for(const [x, y] of [[R.x0 + 70, R.y0 + 160], [R.x1 - 90, R.y0 + 330], [R.x0 + 120, R.y1 - 180], [R.x1 - 150, R.y1 - 120], [R.x0 + 480, R.y0 + 40]]){
+    for(const [dx, dy, h] of [[0, 0, 22], [9, 6, 15], [-8, 7, 13]]){
+      g.fillStyle = "#1D5A86"; g.fillRect(x + dx - 4, y + dy - h, 8, h); g.fillStyle = "#4FB4F0"; g.fillRect(x + dx - 4, y + dy - h, 4, h); g.fillStyle = "#C9F0FF"; g.fillRect(x + dx - 2, y + dy - h, 2, 4); }
+    gg.shadowBlur = 0; gg.fillStyle = "rgba(80,180,255,.18)"; gg.beginPath(); gg.arc(x, y - 8, 26, 0, Math.PI*2); gg.fill();
+  }
+  // тень от стен на полу
+  const shade = (x, y, w, h, x2, y2) => { const gr = g.createLinearGradient(x, y, x2, y2); gr.addColorStop(0, "rgba(0,0,0,.55)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x, y, w, h); };
+  shade(R.x0, R.y0, R.x1 - R.x0, 70, R.x0, R.y0 + 70); shade(R.x0, R.y0, 40, R.y1 - R.y0, R.x0 + 40, R.y0); shade(R.x1 - 40, R.y0, 40, R.y1 - R.y0, R.x1, R.y0);
+  // лицевая стена над залом: красный кирпич, карниз и тёмный цоколь
+  const fy = R.y0 - 130;
+  bricks(R.x0 - 40, fy, R.x1 + 40, R.y0, 52, 26, ["#6E3A2C", "#7A4231", "#633326", "#5A2E23", "#70392A"], "#2A1511");
+  const gr = g.createLinearGradient(0, fy, 0, R.y0); gr.addColorStop(0, "rgba(0,0,0,.45)"); gr.addColorStop(.5, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(0,0,0,.25)");
+  g.fillStyle = gr; g.fillRect(R.x0 - 40, fy, R.x1 - R.x0 + 80, R.y0 - fy);
+  g.fillStyle = "#3A2620"; g.fillRect(R.x0 - 40, fy - 10, R.x1 - R.x0 + 80, 10); g.fillStyle = "#4E342A"; g.fillRect(R.x0 - 40, fy - 10, R.x1 - R.x0 + 80, 3);
+  g.fillStyle = "#1A0F0C"; g.fillRect(R.x0 - 40, R.y0 - 8, R.x1 - R.x0 + 80, 8);
+  // держатели факелов
+  FEARGFX.torches = [];
+  for(let x = R.x0 + 100; x < R.x1; x += 200){ const y = fy + 62; FEARGFX.torches.push([x, y]);
+    g.fillStyle = "#2A2420"; g.fillRect(x - 3, y, 6, 22); g.fillStyle = "#4A4038"; g.fillRect(x - 8, y - 4, 16, 6); g.fillStyle = "#6A5A4A"; g.fillRect(x - 8, y - 4, 16, 2); }
+  FEARGFX.floor = fc; FEARGFX.glow = gc;
+  return FEARGFX;
+}
+function fearDraw(cx, cy){
+  const F = fearFloor(), t = performance.now()/1000;
+  const sx = Math.max(0, Math.floor(cx)), sy = Math.max(0, Math.floor(cy));
+  const sw = Math.min(F.floor.width - sx, Math.ceil(vw) + 2), sh = Math.min(F.floor.height - sy, Math.ceil(vh) + 2);
+  if(sw > 0 && sh > 0){
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(F.floor, sx, sy, sw, sh, sx, sy, sw, sh);
+    if(GFX.fx && !(S.settings && S.settings.lowfx)){                                       // лава «дышит»
+      const hx = Math.floor(sx/2), hy = Math.floor(sy/2), hw = Math.min(F.glow.width - hx, Math.ceil(sw/2) + 2), hh = Math.min(F.glow.height - hy, Math.ceil(sh/2) + 2);
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = .4 + .18*Math.sin(t*1.7);
+      ctx.imageSmoothingEnabled = true; if(hw > 0 && hh > 0) ctx.drawImage(F.glow, hx, hy, hw, hh, hx*2, hy*2, hw*2, hh*2); ctx.restore();
+    }
+  }
+  for(const [x, y] of F.torches){
+    if(x < cx - 80 || x > cx + vw + 80 || y < cy - 80 || y > cy + vh + 80) continue;
+    const fl = .8 + Math.sin(t*9 + x)*.12 + Math.sin(t*23 + x*3)*.08;
+    ctx.globalAlpha = Math.min(1, fl); ctx.drawImage(lampGlow(), x - 70, y - 30); ctx.globalAlpha = 1;
+    ctx.fillStyle = "#C2381A"; ctx.fillRect(x - 5, y - 12 - fl*3, 10, 10);
+    ctx.fillStyle = "#FF8A2A"; ctx.fillRect(x - 3, y - 14 - fl*4, 6, 10);
+    ctx.fillStyle = "#FFE08A"; ctx.fillRect(x - 1.5, y - 10 - fl*3, 3, 5);
+  }
+  // вспышки, из которых выходят монстры
+  ctx.lineWidth = 3;
+  for(const f of ARENA.puffs){ const k = 1 - f.life/f.max, r = 10 + k*28;
+    ctx.globalAlpha = (1 - k)*.85; ctx.strokeStyle = "#B07CFF"; ctx.beginPath(); ctx.ellipse(f.x, f.y + 8, r, r*.45, 0, 0, Math.PI*2); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+}
+{ const _drawFieldF = drawField; drawField = function(cx, cy){ return locKey === "arena_fear" ? fearDraw(cx, cy) : _drawFieldF(cx, cy); }; }
 
 // ===================== КОДЕКС =====================
 // ~1300 наборов: 48 прежних (прогресс игроков сохраняется) и новые — по грейду, тиру и классу.
@@ -9294,7 +9581,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.ev === "chipwar" && typeof openChipWar === "function") openChipWar();
   else if(d.ev) openEvent(d.ev);
   else if(d.evback) openEvents();
-  else if(d.evgo){ closeSheet(); showTab("game"); travel("arena_fear"); }
+  else if(d.evgo) fearEnter();
   else if(d.cx){ cxTab = d.cx; cxShow = 40; renderCodex(); }
   else if(d.cxs){ const [cid, i] = d.cxs.split(":"); codexSlot(cid, +i); }
   else if(d.mktab){ mkTab = d.mktab; renderMarket(); }
@@ -10654,7 +10941,8 @@ const AMB = {
   sector2:{tint:"rgba(80,170,255,.07)", kind:"mist", n:14, c:["#BFE8FF", "#7FC8FF"]},
   scrapfields:{tint:"rgba(200,150,90,.06)", kind:"dust", n:46, c:["#C9A27A", "#9A7A58"]},
   reactor_ruins:{tint:"rgba(110,255,140,.06)", kind:"rad", n:36, c:["#9CFF9C", "#5AE07A"]},
-  iron_canyon:{tint:"rgba(255,170,90,.05)", kind:"wind", n:44, c:["#E8C79A", "#FF9A4A"]}
+  iron_canyon:{tint:"rgba(255,170,90,.05)", kind:"wind", n:44, c:["#E8C79A", "#FF9A4A"]},
+  arena_fear:{tint:"rgba(255,80,30,.05)", kind:"ember", n:30, c:["#FFB070", "#FF5A2A"]}
 };
 const AMBP = {key:"", list:[]};
 // мягкий спрайт пара: радиальный градиент рисуется один раз на цвет, дальше только drawImage
@@ -14206,6 +14494,8 @@ Object.assign(I18N, {"Распродажа": ["Sale", "Розпродаж", "Reb
 Object.assign(I18N, {"Танк · ближний бой": ["Tank · melee", "Танк · ближній бій", "Tanque · cuerpo a cuerpo", "Tank · yakın dövüş", "Tanque · corpo a corpo"], "Боец · ближний бой": ["Fighter · melee", "Боєць · ближній бій", "Luchador · cuerpo a cuerpo", "Dövüşçü · yakın dövüş", "Lutador · corpo a corpo"], "Стрелок · дальний бой": ["Marksman · ranged", "Стрілець · далекий бій", "Tirador · a distancia", "Nişancı · uzak dövüş", "Atirador · à distância"], "Маг · дальний бой": ["Mage · ranged", "Маг · далекий бій", "Mago · a distancia", "Büyücü · uzak dövüş", "Mago · à distância"], "Убийца · ближний бой": ["Assassin · melee", "Вбивця · ближній бій", "Asesino · cuerpo a cuerpo", "Suikastçı · yakın dövüş", "Assassino · corpo a corpo"], "Контроль · ближний бой": ["Control · melee", "Контроль · ближній бій", "Control · cuerpo a cuerpo", "Kontrol · yakın dövüş", "Controle · corpo a corpo"], "×2,5 урона по цели и оглушение на 2,5 сек (пилота — на 0,8 сек)": ["×2.5 damage to the target and a 2.5 s stun (0.8 s on pilots)", "×2,5 шкоди по цілі та оглушення на 2,5 с (пілота — на 0,8 с)", "×2,5 de daño al objetivo y aturdimiento de 2,5 s (a pilotos, 0,8 s)", "Hedefe ×2,5 hasar ve 2,5 sn sersemletme (pilotlara 0,8 sn)", "×2,5 de dano no alvo e atordoamento de 2,5 s (em pilotos, 0,8 s)"], "Урон всем врагам в радиусе 120 и замедление на 30% на 3 сек": ["Damage to all enemies within 120 and a 30% slow for 3 s", "Шкода всім ворогам у радіусі 120 і сповільнення на 30% на 3 с", "Daño a todos los enemigos en radio 120 y ralentización del 30% durante 3 s", "120 yarıçapta tüm düşmanlara hasar ve 3 sn boyunca %30 yavaşlatma", "Dano a todos os inimigos num raio de 120 e lentidão de 30% por 3 s"], "+60% брони на 8 сек; в бою с пилотами — −25% входящего урона": ["+60% armor for 8 s; vs pilots, −25% damage taken", "+60% броні на 8 с; у бою з пілотами — −25% вхідної шкоди", "+60% de blindaje durante 8 s; contra pilotos, −25% de daño recibido", "8 sn boyunca +%60 zırh; pilotlara karşı −%25 gelen hasar", "+60% de blindagem por 8 s; contra pilotos, −25% de dano recebido"], "Прыжок к цели с уроном и оглушением на 1 сек (пилота — на 0,4 сек)": ["Leap to the target, dealing damage and a 1 s stun (0.4 s on pilots)", "Стрибок до цілі зі шкодою та оглушенням на 1 с (пілота — на 0,4 с)", "Salta al objetivo, hace daño y aturde 1 s (a pilotos, 0,4 s)", "Hedefe atlayıp hasar verir ve 1 sn sersemletir (pilotları 0,4 sn)", "Salta até o alvo causando dano e atordoamento de 1 s (em pilotos, 0,4 s)"], "8 сек: 18% нанесённого урона чинит корпус, в том числе в бою с пилотами": ["8 s: 18% of damage dealt repairs your hull, including against pilots", "8 с: 18% завданої шкоди лагодить корпус, зокрема в бою з пілотами", "8 s: el 18% del daño causado repara tu casco, también contra pilotos", "8 sn: verilen hasarın %18'i gövdeni onarır, pilotlara karşı da", "8 s: 18% do dano causado repara o casco, inclusive contra pilotos"], "Урон всем врагам в радиусе 115; каждый задетый враг чинит 2% прочности": ["Damage to all enemies within 115; each enemy hit repairs 2% hull", "Шкода всім ворогам у радіусі 115; кожен зачеплений ворог лагодить 2% міцності", "Daño a todos los enemigos en radio 115; cada enemigo alcanzado repara un 2% de integridad", "115 yarıçapta tüm düşmanlara hasar; vurulan her düşman %2 dayanıklılık onarır", "Dano a todos os inimigos num raio de 115; cada inimigo atingido repara 2% de integridade"], "+25% атаки и +15% скорости атаки на 6 сек": ["+25% attack and +15% attack speed for 6 s", "+25% атаки та +15% швидкості атаки на 6 с", "+25% de ataque y +15% de velocidad de ataque durante 6 s", "6 sn boyunca +%25 saldırı ve +%15 saldırı hızı", "+25% de ataque e +15% de velocidade de ataque por 6 s"], "Прыжок к цели с уроном и замедлением на 40% на 3 сек": ["Leap to the target, dealing damage and a 40% slow for 3 s", "Стрибок до цілі зі шкодою та сповільненням на 40% на 3 с", "Salta al objetivo, hace daño y lo ralentiza un 40% durante 3 s", "Hedefe atlayıp hasar verir ve 3 sn boyunca %40 yavaşlatır", "Salta até o alvo causando dano e deixa-o 40% mais lento por 3 s"], "Рывок на 180 вперёд": ["Dash 180 forward", "Ривок на 180 вперед", "Impulso de 180 hacia delante", "180 ileri atılma", "Arrancada de 180 à frente"], "+40% скорости атаки на 5 сек": ["+40% attack speed for 5 s", "+40% швидкості атаки на 5 с", "+40% de velocidad de ataque durante 5 s", "5 sn boyunca +%40 saldırı hızı", "+40% de velocidade de ataque por 5 s"], "Снаряд с ×2,1 урона": ["Projectile with ×2.1 damage", "Снаряд із ×2,1 шкоди", "Proyectil con ×2,1 de daño", "×2,1 hasarlı mermi", "Projétil com ×2,1 de dano"], "Урон в радиусе 130, оглушение на 2 сек (пилота — на 0,6 сек) и −20% защиты на 5 сек": ["Damage in radius 130, a 2 s stun (0.6 s on pilots) and −20% defense for 5 s", "Шкода в радіусі 130, оглушення на 2 с (пілота — на 0,6 с) і −20% захисту на 5 с", "Daño en un radio de 130, aturdimiento de 2 s (a pilotos, 0,6 s) y −20% de defensa durante 5 s", "130 yarıçapta hasar, 2 sn sersemletme (pilotlara 0,6 sn) ve 5 sn −%20 savunma", "Dano num raio de 130, atordoamento de 2 s (em pilotos, 0,6 s) e −20% de defesa por 5 s"], "+40% брони и +30% атаки на 5 сек; в бою с пилотами — −20% входящего урона": ["+40% armor and +30% attack for 5 s; vs pilots, −20% damage taken", "+40% броні та +30% атаки на 5 с; у бою з пілотами — −20% вхідної шкоди", "+40% de blindaje y +30% de ataque durante 5 s; contra pilotos, −20% de daño recibido", "5 sn boyunca +%40 zırh ve +%30 saldırı; pilotlara karşı −%20 gelen hasar", "+40% de blindagem e +30% de ataque por 5 s; contra pilotos, −20% de dano recebido"], "Невидимость для мобов на 4 сек, +30% скорости; первый удар из тени — ×3 и крит (по пилоту — ×2,5 и крит)": ["Invisible to mobs for 4 s, +30% speed; the first strike from the shadows deals ×3 and crits (×2.5 and a crit vs pilots)", "Невидимість для мобів на 4 с, +30% швидкості; перший удар із тіні — ×3 і крит (по пілоту — ×2,5 і крит)", "Invisible para los monstruos durante 4 s, +30% de velocidad; el primer golpe desde las sombras hace ×3 y es crítico (a pilotos, ×2,5 y crítico)", "4 sn boyunca canavarlara görünmezlik, +%30 hız; gölgeden ilk vuruş ×3 ve kritik (pilotlara ×2,5 ve kritik)", "Invisível para monstros por 4 s, +30% de velocidade; o primeiro golpe das sombras causa ×3 e é crítico (em pilotos, ×2,5 e crítico)"], "Радиус 130: урон, −20% защиты на 5 сек, враги теряют цель и замедляются на 30% на 3 сек": ["Radius 130: damage, −20% defense for 5 s, enemies lose their target and are slowed by 30% for 3 s", "Радіус 130: шкода, −20% захисту на 5 с, вороги втрачають ціль і сповільнюються на 30% на 3 с", "Radio 130: daño, −20% de defensa durante 5 s; los enemigos pierden el objetivo y se ralentizan un 30% durante 3 s", "Yarıçap 130: hasar, 5 sn boyunca −%20 savunma; düşmanlar hedefini kaybeder ve 3 sn boyunca %30 yavaşlar", "Raio 130: dano, −20% de defesa por 5 s; os inimigos perdem o alvo e ficam 30% mais lentos por 3 s"], "Стягивает врагов в радиусе 150 к цели и через 0,6 сек взрывается с ×2 урона; пилота замедляет на 40% на 2 сек": ["Pulls enemies within radius 150 to the target and explodes after 0.6 s for ×2 damage; slows pilots by 40% for 2 s", "Стягує ворогів у радіусі 150 до цілі й через 0,6 с вибухає з ×2 шкоди; пілота сповільнює на 40% на 2 с", "Atrae a los enemigos en un radio de 150 hacia el objetivo y explota a los 0,6 s con ×2 de daño; ralentiza a los pilotos un 40% durante 2 s", "150 yarıçaptaki düşmanları hedefe çeker ve 0,6 sn sonra ×2 hasarla patlar; pilotları 2 sn boyunca %40 yavaşlatır", "Puxa os inimigos num raio de 150 até o alvo e explode após 0,6 s com ×2 de dano; deixa pilotos 40% mais lentos por 2 s"], "Разряд по 5 целям подряд, каждый прыжок +15% урона; если целей мало, до 2 разрядов возвращаются в первую цель с 50% силы": ["A discharge hits 5 targets in a row, each jump deals +15% damage; with few targets, up to 2 discharges return to the first target at 50% power", "Розряд по 5 цілях поспіль, кожен стрибок +15% шкоди; якщо цілей мало, до 2 розрядів повертаються в першу ціль із 50% сили", "Una descarga golpea a 5 objetivos seguidos, cada salto hace +15% de daño; si hay pocos objetivos, hasta 2 descargas vuelven al primero con el 50% de fuerza", "Art arda 5 hedefe deşarj, her sıçrama +%15 hasar; hedef azsa en fazla 2 deşarj ilk hedefe %50 güçle döner", "Uma descarga atinge 5 alvos em sequência, cada salto causa +15% de dano; com poucos alvos, até 2 descargas voltam ao primeiro alvo com 50% da força"], "5 сек: −35% урона от мобов, 40% их урона возвращается атакующему; в бою с пилотами — −25% входящего урона": ["5 s: −35% damage from mobs, 40% of their damage is returned to the attacker; vs pilots, −25% damage taken", "5 с: −35% шкоди від мобів, 40% їхньої шкоди повертається атакувальнику; у бою з пілотами — −25% вхідної шкоди", "5 s: −35% de daño de los monstruos y el 40% de su daño vuelve al atacante; contra pilotos, −25% de daño recibido", "5 sn: canavarlardan −%35 hasar, hasarlarının %40'ı saldırgana geri döner; pilotlara karşı −%25 gelen hasar", "5 s: −35% de dano de monstros e 40% do dano deles volta para o atacante; contra pilotos, −25% de dano recebido"], "Ставит руну на 10 сек; повторное нажатие — возврат к руне и +12% прочности": ["Places a rune for 10 s; press again to return to the rune and restore +12% hull", "Ставить руну на 10 с; повторне натискання — повернення до руни і +12% міцності", "Coloca una runa durante 10 s; pulsa otra vez para volver a ella y recuperar +12% de integridad", "10 sn için bir rün yerleştirir; tekrar basınca rüne dönersin ve +%12 dayanıklılık kazanırsın", "Coloca uma runa por 10 s; toque de novo para voltar a ela e recuperar +12% de integridade"], "Разряд по врагу ×2,5 урона; 50% нанесённого урона чинит самого раненого союзника рядом или тебя": ["Discharge at an enemy for ×2.5 damage; 50% of the damage dealt repairs the most wounded ally nearby or you", "Розряд по ворогу ×2,5 шкоди; 50% завданої шкоди лагодить найпораненішого союзника поруч або тебе", "Descarga contra un enemigo con ×2,5 de daño; el 50% del daño causado repara al aliado más herido cercano o a ti", "Düşmana ×2,5 hasarlı deşarj; verilen hasarın %50'si yakındaki en yaralı müttefiki ya da seni onarır", "Descarga num inimigo com ×2,5 de dano; 50% do dano causado repara o aliado mais ferido por perto ou você"], "+4% к силе лечения за уровень (в бою с пилотами — только союзников)": ["+4% healing power per level (vs pilots, allies only)", "+4% до сили лікування за рівень (у бою з пілотами — лише союзників)", "+4% de poder de curación por nivel (contra pilotos, solo a aliados)", "Seviye başına +%4 iyileştirme gücü (pilotlara karşı yalnızca müttefiklere)", "+4% de poder de cura por nível (contra pilotos, só aliados)"], "+6% лечения по целям с прочностью ниже 40% за уровень (в бою с пилотами — только союзников)": ["+6% healing on targets below 40% hull per level (vs pilots, allies only)", "+6% лікування по цілях з міцністю нижче 40% за рівень (у бою з пілотами — лише союзників)", "+6% de curación en objetivos con menos del 40% de integridad por nivel (contra pilotos, solo a aliados)", "Seviye başına dayanıklılığı %40'ın altındaki hedeflere +%6 iyileştirme (pilotlara karşı yalnızca müttefiklere)", "+6% de cura em alvos abaixo de 40% de integridade por nível (contra pilotos, só aliados)"], "+4% урона по целям с прочностью ниже 50% за уровень": ["+4% damage to targets below 50% hull per level", "+4% шкоди по цілях з міцністю нижче 50% за рівень", "+4% de daño a objetivos con menos del 50% de integridad por nivel", "Seviye başına dayanıklılığı %50'nin altındaki hedeflere +%4 hasar", "+4% de dano a alvos abaixo de 50% de integridade por nível"], "Тень": ["Shade", "Тінь", "Sombra", "Gölge", "Sombra"], "+2% уклонения от атак мобов, −1,5% урона от пилотов и +1,5% скорости бега за уровень": ["+2% dodge vs mob attacks, −1.5% damage from pilots and +1.5% run speed per level", "+2% ухилення від атак мобів, −1,5% шкоди від пілотів і +1,5% швидкості бігу за рівень", "+2% de esquiva contra ataques de monstruos, −1,5% de daño de pilotos y +1,5% de velocidad de carrera por nivel", "Seviye başına canavar saldırılarına karşı +%2 kaçınma, pilotlardan −%1,5 hasar ve +%1,5 koşu hızı", "+2% de esquiva contra ataques de monstros, −1,5% de dano de pilotos e +1,5% de velocidade de corrida por nível"], "Монолит": ["Monolith", "Моноліт", "Monolito", "Monolit", "Monólito"], "+2% брони и прочности за уровень": ["+2% armor and hull per level", "+2% броні та міцності за рівень", "+2% de blindaje e integridad por nivel", "Seviye başına +%2 zırh ve dayanıklılık", "+2% de blindagem e integridade por nível"], "Вязь глифов": ["Glyph Weave", "В'язь гліфів", "Trama de glifos", "Glif Örgüsü", "Trama de glifos"], "уклонение": ["dodge", "ухилення", "esquiva", "kaçınma", "esquiva"], "Оглушение: умения недоступны": ["Stunned: skills unavailable", "Оглушення: уміння недоступні", "Aturdido: habilidades no disponibles", "Sersemledin: yetenekler kullanılamaz", "Atordoado: habilidades indisponíveis"], "ИЗ ТЕНИ": ["FROM THE SHADOWS", "З ТІНІ", "DESDE LAS SOMBRAS", "GÖLGEDEN", "DAS SOMBRAS"], "Скрытность": ["Stealth", "Скритність", "Sigilo", "Gizlilik", "Furtividade"], "Перемещение · лечение": ["Mobility · healing", "Переміщення · лікування", "Movilidad · curación", "Hareket · iyileştirme", "Mobilidade · cura"], "Защита от мобов": ["Mob protection", "Захист від мобів", "Protección contra monstruos", "Canavar koruması", "Proteção contra monstros"], "(пилота — {n} сек)": ["({n} s on pilots)", "(пілота — {n} с)", "(a pilotos, {n} s)", "(pilotlara {n} sn)", "(em pilotos, {n} s)"], "оглушение {n} сек (пилота — {m} сек)": ["stun {n} s ({m} s on pilots)", "оглушення {n} с (пілота — {m} с)", "aturdimiento {n} s (a pilotos, {m} s)", "sersemletme {n} sn (pilotlara {m} sn)", "atordoamento {n} s (em pilotos, {m} s)"], "замедление {n}% на {m} сек": ["slow {n}% for {m} s", "сповільнення {n}% на {m} с", "ralentización {n}% durante {m} s", "{m} sn boyunca {n}% yavaşlatma", "lentidão {n}% por {m} s"], "−20% защиты на 5 сек": ["−20% defense for 5 s", "−20% захисту на 5 с", "−20% de defensa durante 5 s", "5 sn boyunca −%20 savunma", "−20% de defesa por 5 s"], "в бою с пилотами −{n}% урона": ["vs pilots −{n}% damage taken", "у бою з пілотами −{n}% шкоди", "contra pilotos −{n}% de daño recibido", "pilotlara karşı −{n}% gelen hasar", "contra pilotos −{n}% de dano recebido"], "+{n}% прочности за каждого врага": ["+{n}% hull per enemy hit", "+{n}% міцності за кожного ворога", "+{n}% de integridad por cada enemigo", "her düşman için +{n}% dayanıklılık", "+{n}% de integridade por inimigo"], "Урон от мобов −{n}%": ["Damage from mobs −{n}%", "Шкода від мобів −{n}%", "Daño de monstruos −{n}%", "Canavar hasarı −{n}%", "Dano de monstros −{n}%"], "{n}% отражается": ["{n}% reflected", "{n}% відбивається", "{n}% se refleja", "{n}% yansıtılır", "{n}% refletido"], "Проход сквозь цель (до {n}): {m}% атаки": ["Dash through the target (up to {n}): {m}% attack", "Прохід крізь ціль (до {n}): {m}% атаки", "Atraviesa el objetivo (hasta {n}): {m}% de ataque", "Hedefin içinden geçiş (en fazla {n}): {m}% saldırı", "Atravessa o alvo (até {n}): {m}% de ataque"], "по целям ниже 50% прочности — крит": ["crit on targets below 50% hull", "по цілях нижче 50% міцності — крит", "crítico a objetivos con menos del 50% de integridad", "dayanıklılığı %50'nin altındaki hedeflere kritik", "crítico em alvos abaixo de 50% de integridade"], "Двойник на {n} сек повторяет обычные удары: {m}% урона": ["A double repeats your basic attacks for {n} s: {m}% damage", "Двійник на {n} с повторює звичайні удари: {m}% шкоди", "Un doble repite tus ataques básicos durante {n} s: {m}% de daño", "İkiz {n} sn boyunca normal saldırılarını tekrarlar: {m}% hasar", "Um duplo repete seus ataques básicos por {n} s: {m}% de dano"], "Помехи в радиусе {n}: {m}% атаки": ["Jamming in radius {n}: {m}% attack", "Перешкоди в радіусі {n}: {m}% атаки", "Interferencia en radio {n}: {m}% de ataque", "{n} yarıçapta parazit: {m}% saldırı", "Interferência num raio de {n}: {m}% de ataque"], "мобы теряют цель": ["mobs lose their target", "моби втрачають ціль", "los monstruos pierden el objetivo", "canavarlar hedefini kaybeder", "os monstros perdem o alvo"], "Невидимость для мобов на {n} сек · +30% скорости · удар из тени ×3 и крит (по пилоту ×2,5)": ["Invisible to mobs for {n} s · +30% speed · strike from the shadows ×3 and crit (×2.5 vs pilots)", "Невидимість для мобів на {n} с · +30% швидкості · удар із тіні ×3 і крит (по пілоту ×2,5)", "Invisible para los monstruos durante {n} s · +30% de velocidad · golpe desde las sombras ×3 y crítico (a pilotos, ×2,5)", "{n} sn boyunca canavarlara görünmezlik · +%30 hız · gölgeden vuruş ×3 ve kritik (pilotlara ×2,5)", "Invisível para monstros por {n} s · +30% de velocidade · golpe das sombras ×3 e crítico (em pilotos, ×2,5)"], "Глиф (радиус {n}) стягивает врагов и взрывается: {m}% атаки": ["Glyph (radius {n}) pulls enemies in and explodes: {m}% attack", "Гліф (радіус {n}) стягує ворогів і вибухає: {m}% атаки", "Glifo (radio {n}) atrae a los enemigos y explota: {m}% de ataque", "Glif (yarıçap {n}) düşmanları çeker ve patlar: {m}% saldırı", "Glifo (raio {n}) puxa os inimigos e explode: {m}% de ataque"], "пилота замедляет на {n}% на {m} сек": ["slows pilots by {n}% for {m} s", "пілота сповільнює на {n}% на {m} с", "ralentiza a los pilotos un {n}% durante {m} s", "pilotları {m} sn boyunca {n}% yavaşlatır", "deixa pilotos {n}% mais lentos por {m} s"], "Разряд по {n} целям: {m}% атаки, +15% за прыжок": ["Discharge on {n} targets: {m}% attack, +15% per jump", "Розряд по {n} цілях: {m}% атаки, +15% за стрибок", "Descarga a {n} objetivos: {m}% de ataque, +15% por salto", "{n} hedefe deşarj: {m}% saldırı, sıçrama başına +%15", "Descarga em {n} alvos: {m}% de ataque, +15% por salto"], "до 2 возвратов в первую цель с 50% силы": ["up to 2 returns to the first target at 50% power", "до 2 повернень у першу ціль із 50% сили", "hasta 2 regresos al primer objetivo con el 50% de fuerza", "ilk hedefe %50 güçle en fazla 2 dönüş", "até 2 retornos ao primeiro alvo com 50% da força"], "Руна на 10 сек · возврат к ней и +{n}% прочности": ["Rune for 10 s · return to it and +{n}% hull", "Руна на 10 с · повернення до неї та +{n}% міцності", "Runa durante 10 s · vuelta a ella y +{n}% de integridad", "10 sn rün · rüne dönüş ve +{n}% dayanıklılık", "Runa por 10 s · retorno a ela e +{n}% de integridade"]});
 // кнопка «ЦЕЛЬ» (смена цели) и гибель, пока открыто окно или другая вкладка
 Object.assign(I18N, {"ЦЕЛЬ": ["TARGET", "ЦІЛЬ", "OBJ.", "HEDEF", "ALVO"], "Смена цели": ["Switch target", "Зміна цілі", "Cambiar objetivo", "Hedef değiştir", "Trocar alvo"], "Нет целей рядом": ["No targets nearby", "Немає цілей поруч", "No hay objetivos cerca", "Yakında hedef yok", "Nenhum alvo por perto"], "Других целей рядом нет": ["No other targets nearby", "Інших цілей поруч немає", "No hay otros objetivos cerca", "Yakında başka hedef yok", "Nenhum outro alvo por perto"], "Твой робот уничтожен — возврат в ангар": ["Your robot was destroyed — returning to the hangar", "Твого робота знищено — повернення в ангар", "Tu robot fue destruido — volviendo al hangar", "Robotun yok edildi — hangara dönülüyor", "Seu robô foi destruído — voltando ao hangar"]});
+// «Страх»: окно события, отсчёт, волны, выход из подземелья, имена монстров fw1…fw59
+Object.assign(I18N, {"Попыток на сегодня": ["Attempts today", "Спроб на сьогодні", "Intentos de hoy", "Bugünkü haklar", "Tentativas de hoje"], "Войдите, чтобы начать": ["Enter to begin", "Увійдіть, щоб почати", "Entra para empezar", "Başlamak için gir", "Entre para começar"], "Новые попытки — в 00:00 МСК": ["New attempts at 00:00 MSK", "Нові спроби — о 00:00 МСК", "Nuevos intentos a las 00:00 MSK", "Yeni haklar 00:00 MSK'da", "Novas tentativas às 00:00 MSK"], "Когда": ["When", "Коли", "Cuándo", "Ne zaman", "Quando"], "Соло": ["Solo", "Соло", "Solo", "Solo", "Solo"], "Попытки": ["Attempts", "Спроби", "Intentos", "Haklar", "Tentativas"], "Можно начать": ["Ready to start", "Можна почати", "Puedes empezar", "Başlayabilirsin", "Pode começar"], "Попытки закончились": ["No attempts left", "Спроби скінчилися", "Sin intentos", "Hak kalmadı", "Sem tentativas"], "Как это работает": ["How it works", "Як це працює", "Cómo funciona", "Nasıl çalışır", "Como funciona"], "{n} попытки в день, тратится при входе": ["{n} attempts a day, spent on entry", "{n} спроби на день, витрачається при вході", "{n} intentos al día, se gasta al entrar", "Günde {n} hak, girişte harcanır", "{n} tentativas por dia, gasta ao entrar"], "Монстры приходят волнами по {n}, уровень волны растёт с каждой": ["Monsters come in waves of {n}, the wave level rises every time", "Монстри приходять хвилями по {n}, рівень хвилі росте з кожною", "Los monstruos llegan en oleadas de {n}, el nivel sube con cada una", "Canavarlar {n}'lik dalgalarla gelir, seviye her dalgada artar", "Os monstros vêm em ondas de {n}, o nível sobe a cada onda"], "Дойдите до волны {n}, чтобы пройти испытание целиком": ["Reach wave {n} to clear the whole trial", "Дійдіть до хвилі {n}, щоб пройти випробування повністю", "Llega a la oleada {n} para superar toda la prueba", "Denemenin tamamı için {n}. dalgaya ulaş", "Chegue à onda {n} para concluir a prova inteira"], "Смерть выбрасывает из подземелья в центральный ангар": ["Death throws you out of the dungeon to the Central Hangar", "Смерть викидає з підземелля в центральний ангар", "La muerte te expulsa de la mazmorra al hangar central", "Ölüm seni zindandan merkez hangara atar", "A morte te expulsa da masmorra para o hangar central"], "Нет попыток": ["No attempts", "Немає спроб", "Sin intentos", "Hak yok", "Sem tentativas"], "Монстры появятся через": ["Monsters arrive in", "Монстри з'являться через", "Los monstruos llegan en", "Canavarlar geliyor", "Os monstros chegam em"], "Испытание пройдено!": ["Trial cleared!", "Випробування пройдено!", "¡Prueba superada!", "Deneme tamamlandı!", "Prova concluída!"], "Испытание «Страх» пройдено: все {n} волн!": ["Fear trial cleared: all {n} waves!", "Випробування «Страх» пройдено: усі {n} хвиль!", "Prueba «Miedo» superada: ¡las {n} oleadas!", "Korku denemesi tamamlandı: {n} dalganın hepsi!", "Prova «Medo» concluída: todas as {n} ondas!"], "Пройдено волн: {n} из {m}": ["Waves cleared: {n} of {m}", "Пройдено хвиль: {n} з {m}", "Oleadas superadas: {n} de {m}", "Geçilen dalga: {n}/{m}", "Ondas concluídas: {n} de {m}"], "В «Страх» входят через События": ["Fear is entered from Events", "У «Страх» входять через Події", "A «Miedo» se entra desde Eventos", "Korku'ya Etkinlikler'den girilir", "Entra-se no «Medo» pelos Eventos"], "«Страх» открывается с {n} уровня": ["Fear unlocks at level {n}", "«Страх» відкривається з {n} рівня", "«Miedo» se abre en el nivel {n}", "Korku {n}. seviyede açılır", "«Medo» abre no nível {n}"], "Попытки на сегодня закончились": ["No attempts left for today", "Спроби на сьогодні скінчилися", "No quedan intentos por hoy", "Bugünlük hak kalmadı", "Acabaram as tentativas de hoje"], "попытки на сегодня закончились": ["no attempts left for today", "спроби на сьогодні скінчилися", "no quedan intentos por hoy", "bugünlük hak kalmadı", "acabaram as tentativas de hoje"], "Выход из подземелья": ["Dungeon exit", "Вихід із підземелля", "Salida de la mazmorra", "Zindan çıkışı", "Saída da masmorra"], "Забег закончится, а попытка не вернётся.": ["The run will end and the attempt won't come back.", "Забіг закінчиться, а спроба не повернеться.", "La partida terminará y el intento no se devuelve.", "Koşu biter ve hak geri gelmez.", "A corrida termina e a tentativa não volta."], "Покинуть подземелье": ["Leave the dungeon", "Покинути підземелля", "Salir de la mazmorra", "Zindandan çık", "Sair da masmorra"], "Неистовый": ["Frenzied", "Шалений", "Frenético", "Çılgın", "Frenético"], "Багровый": ["Crimson", "Багряний", "Carmesí", "Kızıl", "Carmesim"], "Обсидиановый": ["Obsidian", "Обсидіановий", "Obsidiano", "Obsidyen", "Obsidiano"], "Ртутный": ["Mercurial", "Ртутний", "Mercurial", "Cıva", "Mercurial"], "Инфернальный": ["Hellish", "Інфернальний", "Infernal", "Cehennemî", "Infernal"], "Безумный": ["Mad", "Божевільний", "Loco", "Deli", "Louco"], "Неудержимый": ["Unstoppable", "Нестримний", "Imparable", "Durdurulamaz", "Imparável"], "Коварный": ["Treacherous", "Підступний", "Traicionero", "Hain", "Traiçoeiro"], "Безжалостный": ["Ruthless", "Нещадний", "Despiadado", "Acımasız", "Impiedoso"], "Колоссальный": ["Colossal", "Колосальний", "Colosal", "Devasa", "Colossal"], "Мрачный": ["Grim", "Похмурий", "Sombrío", "Kasvetli", "Sombrio"], "Роковой": ["Doom", "Фатальний", "Fatal", "Uğursuz", "Fatídico"], "Сумеречный": ["Twilight", "Сутінковий", "Crepuscular", "Alacakaranlık", "Crepuscular"], "Громадный": ["Massive", "Величезний", "Enorme", "Koca", "Enorme"], "Безликий": ["Faceless", "Безликий", "Sin rostro", "Yüzsüz", "Sem rosto"], "Испепеляющий": ["Incinerating", "Спопеляючий", "Incinerador", "Kül eden", "Incinerador"], "Неумолимый": ["Relentless", "Невблаганний", "Implacable", "Amansız", "Implacável"], "Предвечный": ["Primeval", "Предвічний", "Primigenio", "Ezeli", "Primevo"], "Непобедимый": ["Invincible", "Непереможний", "Invencible", "Yenilmez", "Invencível"], "страж": ["guard", "вартовий", "guardián", "muhafız", "guardião"], "воин": ["warrior", "воїн", "guerrero", "savaşçı", "guerreiro"], "охотник": ["hunter", "мисливець", "cazador", "avcı", "caçador"], "рубака": ["slasher", "рубака", "tajador", "kesici", "retalhador"], "ветеран": ["veteran", "ветеран", "veterano", "kıdemli", "veterano"], "громила": ["brute", "громило", "bruto", "zorba", "brutamontes"], "берсерк": ["berserker", "берсерк", "berserker", "berserker", "berserker"], "палач": ["executioner", "кат", "verdugo", "cellat", "carrasco"], "чемпион": ["champion", "чемпіон", "campeón", "şampiyon", "campeão"], "гладиатор": ["gladiator", "гладіатор", "gladiador", "gladyatör", "gladiador"], "каратель": ["punisher", "каратель", "castigador", "cezalandırıcı", "punidor"], "разрушитель": ["destroyer", "руйнівник", "destructor", "yıkıcı", "destruidor"], "истребитель": ["exterminator", "винищувач", "exterminador", "imha edici", "exterminador"], "опустошитель": ["ravager", "спустошувач", "devastador", "harap edici", "devastador"], "вожак": ["alpha", "ватажок", "cabecilla", "elebaşı", "líder"], "лорд": ["lord", "лорд", "señor", "lord", "lorde"], "тиран": ["tyrant", "тиран", "tirano", "tiran", "tirano"], "повелитель": ["overlord", "володар", "soberano", "hükümdar", "soberano"], "владыка": ["sovereign", "владика", "monarca", "efendi", "monarca"], "титан": ["titan", "титан", "titán", "titan", "titã"]});
 
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:

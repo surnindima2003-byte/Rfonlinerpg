@@ -39,6 +39,7 @@ NPCS = {   # id: (lvl, [лом мин, макс], {материал: вес})
     "war_walker": (7, (10, 20), {"plate": .5, "chip": .3}),
 }
 DG_BASE = ("scrap_crawler", "rogue_drone", "sentry_bot", "war_walker")
+FEAR_BASE, FEAR_WAVES = ("scrap_crawler", "rogue_drone", "war_walker"), 59   # монстры «Страха» fw1…fw59 (NPCS["fw" + w] в игре)
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6}
 LOC_CORES = {"reactor_ruins", "iron_canyon"}   # локации с флагом cores в LOCS
 TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
@@ -61,6 +62,12 @@ def mob_info(mob):
             if pre == "db":
                 scrap = (scrap[0] * 10, scrap[1] * 10)
             return L, scrap, loot, pre == "db"
+    if mob.startswith("fw") and mob[2:].isdigit():             # «Страх»: лом и материалы как у монстра подземелья того же уровня
+        L = int(mob[2:])
+        if not 1 <= L <= FEAR_WAVES:
+            return None
+        loot = {k: round(v * 0.6, 3) for k, v in NPCS[FEAR_BASE[(L - 1) % 3]][2].items()}
+        return L, (L + 1, 2 * L + 4), loot, False
     return None
 
 

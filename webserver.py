@@ -39,6 +39,7 @@ import seasonpts
 import skillfx
 import worldboss
 import tower
+import fear
 import vip
 import ledger
 from config import WEBAPP_URL
@@ -1814,6 +1815,16 @@ def finite(v, default):
     return f if math.isfinite(f) else default
 
 
+def fear_lvl(d, info):
+    """Уровень для входа в «Страх»: как в clean_pos — присланный телефоном, но не выше серверного предела."""
+    try:
+        sent = int(d.get("lvl", 1))
+    except (TypeError, ValueError):
+        sent = 1
+    cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1
+    return max(info.get("lvl") or 1, min(cap, sent))
+
+
 def clean_pos(d, info):
     """Берём из сообщения только допустимые поля, чтобы нельзя было прислать мусор другим игрокам."""
     try:
@@ -2472,7 +2483,23 @@ async def handle_ws_message(d, t, info, conn):
                 if time.time() - info.get("sz_warn", 0) > 10:
                     info["sz_warn"] = time.time()
                     conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
+        if d.get("loc") == fear.LOC and old_loc != fear.LOC:
+            # «Страх»: с 10 уровня и 2 попытки в сутки (fear.py) — без попытки в подземелье не пускаем
+            ok, why = fear.enter(info["id"], fear_lvl(d, info), bool(info.get("admin")))
+            if ok:
+                conn.push(realtime.encode({"t": "fear", "used": fear.used(info["id"]), "tries": fear.TRIES}))
+            else:
+                d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+                metrics.inc("fear.denied")
+                if time.time() - info.get("fear_warn", 0) > 2:
+                    info["fear_warn"] = time.time()
+                    conn.push(realtime.encode({"t": "fear", "used": fear.used(info["id"]), "tries": fear.TRIES}))
+                    conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"], "text": why}))
         clean_pos(d, info)
+        if info["loc"] == fear.LOC:
+            fear.seen_inside(info["id"])
+        elif old_loc == fear.LOC:
+            fear.left(info["id"])                            # вышел из подземелья — следующий вход будет новой попыткой
         if info["loc"] != old_loc:
             hub.moved(conn, old_loc)
             conn.push(realtime.encode(mobworld.state(info["loc"])))   # общие мобы: кто убит, кто ранен
@@ -2728,6 +2755,7 @@ async def cleanup_loop():
             vip.cleanup()
             worldboss.cleanup()
             tower.cleanup()
+            fear.cleanup()
             special_quests.cleanup()
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
                                         "parties": len(parties), "pvp_pairs": len(pvp._pair_t), "pvp_hits": len(pvp._hits)})

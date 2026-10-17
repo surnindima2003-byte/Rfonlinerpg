@@ -37,10 +37,16 @@ BASE_MOBS = {"scrap_crawler", "rogue_drone", "sentry_bot", "war_walker"}
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1, "sector2": 21, "arena_fear": 1, "farm1": 21, "season1": 21}
 # фарм-зона и сезонная зона: мобы 21–30 вперемешку (как DUNGEONS в игре)
 DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40), "farm1": (21, 30), "season1": (21, 30)}
+# «Страх» (fear.py): свои монстры fw1…fw59 — уровень монстра равен номеру волны, водятся только в arena_fear
+FEAR_LOC, FEAR_WAVES = "arena_fear", 59
 
 
 def mob_level(mob, loc):
     """Уровень моба в этой локации или None — такого моба здесь не бывает."""
+    m = re.fullmatch(r"fw(\d{1,2})", mob or "")
+    if m:
+        lv = int(m.group(1))
+        return lv if loc == FEAR_LOC and 1 <= lv <= FEAR_WAVES else None
     m = re.fullmatch(r"d[gb](\d{1,2})", mob or "")
     if m:
         lv = int(m.group(1))
@@ -66,6 +72,9 @@ def mob_hp(mob):
     """Прочность моба — зеркало NPCS из игры. None — такого моба нет."""
     if mob in BASE_HP:
         return BASE_HP[mob]
+    if len(mob) >= 3 and mob[:2] == "fw" and mob[2:].isdigit():
+        lv = int(mob[2:])                                 # монстр «Страха»: вдвое слабее монстра подземелья (fearHp в игре)
+        return _js_round((20 + 14 * lv + 0.25 * lv * lv) * 0.5) if 1 <= lv <= FEAR_WAVES else None
     if len(mob) >= 3 and mob[:2] in ("dg", "db") and mob[2:].isdigit():
         lv = int(mob[2:])
         if not 1 <= lv <= 40:
