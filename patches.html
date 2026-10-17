@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#161D25">
+<meta name="description" content="Обновления MetalWar: что нового в игре.">
+<title>MetalWar — обновления</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<!--
+  Страница обновлений MetalWar. Игра открывает её в окне «Обновления» (Меню → Обновления) с ?embed=1.
+  Новый патч добавляй ПЕРВЫМ блоком section с классом patch, атрибутом data-patch (дата латиницей и цифрами, например
+  2026-11-02) и data-title (заголовок). По первому такому блоку сервер (GET /api/patches) говорит игре, что вышло новое,
+  и у кнопки загорается красная точка. Ссылку на патч добавь и в список «Все обновления».
+-->
+<style>
+:root{--bg:#161D25;--panel:#202A34;--panel2:#1A232C;--line:#34414E;--text:#E4DED1;--muted:#93A0AC;--amber:#F2A93B;--cyan:#5FD4E8;--ok:#7BC98A;--plate:#141B22;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 Rubik,system-ui,sans-serif;overscroll-behavior-y:contain}
+a{color:var(--cyan)}
+h1,h2,h3{font-family:'Russo One',sans-serif;font-weight:400;margin:0}
+.wrap{width:min(760px,100% - 32px);margin:0 auto}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:6px}
+/* шапка сайта (во встроенном окне игры скрыта: там своя) */
+.top{position:sticky;top:0;z-index:5;background:rgba(22,29,37,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:18px;height:54px}
+.brand{font:17px 'Russo One',sans-serif;color:var(--text);text-decoration:none;letter-spacing:.5px}
+.brand span{color:var(--amber)}
+.nav .l{color:var(--muted);text-decoration:none;font-size:14px}
+.nav .l[aria-current]{color:var(--text)}
+.nav .play{margin-left:auto;background:var(--amber);color:#1B232C;font-weight:700;text-decoration:none;padding:7px 14px;border-radius:10px;font-size:14px}
+.embed .top{display:none}
+/* свежий патч */
+.hero{position:relative;padding:30px 0 26px;background:linear-gradient(180deg,#1C2631,var(--bg));border-bottom:1px solid var(--line)}
+.hero:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--amber)}
+.embed .hero{padding-top:22px}
+.date{color:var(--amber);font-weight:500;font-size:14px}
+.hero h1{font-size:clamp(36px,10vw,52px);line-height:1.02;margin:6px 0 12px}
+.lead{max-width:54ch;margin:0;color:#CDD2D6;font-size:16px}
+.gems{display:flex;gap:10px;margin:22px 0 24px;flex-wrap:wrap}
+.gem{--gc:var(--amber);width:70px;height:70px;flex:none;border-radius:18px;background:var(--plate);border:1.5px solid color-mix(in srgb,var(--gc) 60%,transparent);display:grid;place-items:center;box-shadow:0 0 24px color-mix(in srgb,var(--gc) 24%,transparent)}
+.gem svg{width:50px;height:50px}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px}
+.btn.pri{background:var(--amber);color:#1B232C}
+.btn.sec{border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+/* список всех патчей */
+.index{margin:26px 0 0}
+.index h2{font-size:15px;color:var(--muted);font-family:Rubik,sans-serif;font-weight:500;margin-bottom:8px}
+.index ol{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel2)}
+.index li + li{border-top:1px solid var(--line)}
+.index a{display:flex;gap:14px;align-items:baseline;padding:12px 14px;text-decoration:none;color:var(--text)}
+.index time{color:var(--muted);font-size:13px;min-width:112px;flex:none}
+/* патч */
+.patch{padding:34px 0 10px}
+.patch + .patch{border-top:1px solid var(--line)}
+.patch > time{color:var(--muted);font-size:14px}
+.patch h2{font-size:27px;line-height:1.15;margin:4px 0 12px}
+.patch h3{font-size:18px;margin:28px 0 10px}
+.patch p{margin:0 0 10px;max-width:62ch}
+.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:8px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:32px 1fr;gap:12px;align-items:start;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
+.steps li:before{content:counter(s);font:16px/32px 'Russo One',sans-serif;text-align:center;width:32px;height:32px;border-radius:10px;background:var(--plate);color:var(--amber);border:1px solid #5A4520}
+.steps b{display:block;margin-bottom:2px}
+.kind{border:1px solid var(--line);border-radius:16px;background:var(--panel2);padding:14px;margin-bottom:12px}
+.kind-h{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.kind-h .gem{width:48px;height:48px;border-radius:13px;box-shadow:none}
+.kind-h .gem svg{width:34px;height:34px}
+.kind-h p{margin:0;font-size:14px;color:var(--muted);flex:1;min-width:200px}
+.kind-h p b{color:var(--text)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:13px;padding:0 10px 6px 0}
+td{padding:8px 10px 8px 0;border-top:1px solid var(--line);vertical-align:baseline}
+.th td:first-child{font:15px 'Russo One',sans-serif;width:72px}
+tr.total td{color:var(--ok);font-weight:700;border-top:1px solid color-mix(in srgb,var(--ok) 45%,var(--line))}
+tr.total td:first-child{font:700 13px Rubik,sans-serif}
+.note{background:color-mix(in srgb,var(--cyan) 8%,var(--panel2));border:1px solid color-mix(in srgb,var(--cyan) 32%,var(--line));border-radius:12px;padding:12px 14px;font-size:14px;margin:12px 0}
+.note p{margin:0}
+.changes{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.changes li{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:baseline}
+.tag{justify-self:start;font-size:12px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+.tag.new{color:#0E2A30;background:var(--cyan)}
+.tag.chg{color:#2A1E08;background:var(--amber)}
+.tag.fix{color:#10301A;background:var(--ok)}
+.cls{display:grid;gap:8px}
+.cls div{--c:var(--amber);border-left:3px solid var(--c);background:var(--panel2);border-radius:0 12px 12px 0;padding:10px 12px}
+.cls b{display:block;color:var(--c);font-weight:700;margin-bottom:2px}
+.tasks td:last-child{text-align:right;font:15px 'Russo One',sans-serif;color:var(--amber);white-space:nowrap;padding-right:0}
+.tasks tr.grp td{text-align:left;color:var(--muted);font:500 13px Rubik,sans-serif;border-top:0;padding-top:16px}
+.tasks tr.grp:first-child td{padding-top:0}
+.perks{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0}
+.perks li{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:6px 11px;font-size:14px}
+.ups td:nth-child(2){color:var(--ok);font-weight:700;white-space:nowrap}
+.ups td:last-child{color:var(--muted);white-space:nowrap;text-align:right;padding-right:0}
+footer{border-top:1px solid var(--line);margin-top:34px;padding:20px 0 calc(34px + env(safe-area-inset-bottom,0px));color:var(--muted);font-size:13px}
+footer a{color:var(--muted)}
+@media (max-width:420px){.changes li{grid-template-columns:1fr;gap:4px}.index a{flex-direction:column;gap:2px}.index time{min-width:0}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header class="top">
+  <nav class="nav wrap" aria-label="Разделы">
+    <a class="brand" href="/">METAL<span>WAR</span></a>
+    <a class="l" href="/guide.html">Гайд</a>
+    <a class="l" href="/patches.html" aria-current="page">Обновления</a>
+    <a class="play" href="/">Играть</a>
+  </nav>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <div class="date">Обновление 18 октября 2026</div>
+      <h1>Самоцветы</h1>
+      <p class="lead">Четыре камня для Кодекса. Собирайте их с врагов, сдавайте в Кодекс — и бонусы к атаке, броне, прочности и скорости атаки остаются навсегда.</p>
+      <div class="gems" role="list" aria-label="Самоцветы">
+        <span class="gem" role="listitem" style="--gc:#3FE08A" title="Изумрудная линза"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi101" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#DAFFE8"/><stop offset=".45" stop-color="#3FE08A"/><stop offset="1" stop-color="#0E6A3A"/></linearGradient> <radialGradient id="gmi101t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#DAFFE8"/><stop offset="1" stop-color="#3FE08A"/></radialGradient> <radialGradient id="gmi101r"><stop offset="0" stop-color="#3FE08A" stop-opacity=".7"/><stop offset="1" stop-color="#3FE08A" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi101r)"></circle><polygon points="10,5 22,5 27,10 27,22 22,27 10,27 5,22 5,10" fill="url(#gmi101)" stroke="#0E6A3A" stroke-width="1.1"/> <polygon points="12.5,10 19.5,10 22,12.5 22,19.5 19.5,22 12.5,22 10,19.5 10,12.5" fill="url(#gmi101t)" stroke="#0E6A3A" stroke-width=".6" opacity=".95"/> <path d="M10 5 12.5 10M22 5 19.5 10M27 10 22 12.5M27 22 22 19.5M22 27 19.5 22M10 27 12.5 22M5 22 10 19.5M5 10 10 12.5" stroke="#0E6A3A" stroke-width=".6" opacity=".7"/> <circle cx="16" cy="16" r="13.5" fill="none" stroke="#B9C3CD" stroke-width="1.2" stroke-dasharray="3 2.2" opacity=".75"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <span class="gem" role="listitem" style="--gc:#FF4D5E" title="Рубиновый конденсатор"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi102" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD9DE"/><stop offset=".45" stop-color="#FF4D5E"/><stop offset="1" stop-color="#7A0E1E"/></linearGradient> <radialGradient id="gmi102t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFD9DE"/><stop offset="1" stop-color="#FF4D5E"/></radialGradient> <radialGradient id="gmi102r"><stop offset="0" stop-color="#FF4D5E" stop-opacity=".7"/><stop offset="1" stop-color="#FF4D5E" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi102r)"></circle><rect x="11.4" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/><rect x="18.8" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/> <circle cx="16" cy="14" r="11" fill="url(#gmi102)" stroke="#7A0E1E" stroke-width="1.1"/> <polygon points="16,8.5 19.9,10.1 21.5,14 19.9,17.9 16,19.5 12.1,17.9 10.5,14 12.1,10.1" fill="url(#gmi102t)" stroke="#7A0E1E" stroke-width=".6"/> <path d="M16 3V8.5M23.8 6.2 19.9 10.1M27 14H21.5M23.8 21.8 19.9 17.9M16 25V19.5M8.2 21.8 12.1 17.9M5 14H10.5M8.2 6.2 12.1 10.1" stroke="#7A0E1E" stroke-width=".6" opacity=".7"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <span class="gem" role="listitem" style="--gc:#A66BFF" title="Кристалл бездны"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi103" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EEE2FF"/><stop offset=".45" stop-color="#A66BFF"/><stop offset="1" stop-color="#35137A"/></linearGradient> <radialGradient id="gmi103t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#EEE2FF"/><stop offset="1" stop-color="#A66BFF"/></radialGradient> <radialGradient id="gmi103r"><stop offset="0" stop-color="#A66BFF" stop-opacity=".7"/><stop offset="1" stop-color="#A66BFF" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi103r)"></circle><polygon points="16,1.5 23.5,9 21,27 16,30.5 11,27 8.5,9" fill="url(#gmi103)" stroke="#35137A" stroke-width="1.1"/> <polygon points="16,1.5 8.5,9 11,27 16,30.5" fill="#35137A" opacity=".3"/><polygon points="16,1.5 16,30.5 21,27 23.5,9" fill="#FFFFFF" opacity=".12"/> <ellipse cx="16" cy="16" rx="3.6" ry="5.4" fill="#120726" stroke="#EEE2FF" stroke-width=".9"></ellipse> <ellipse cx="16" cy="16" rx="1.3" ry="2.6" fill="#A66BFF"></ellipse> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <span class="gem" role="listitem" style="--gc:#2FD6B5" title="Нефритовый резонатор"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi104" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6FFF5"/><stop offset=".45" stop-color="#2FD6B5"/><stop offset="1" stop-color="#0A5C4F"/></linearGradient> <radialGradient id="gmi104t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#D6FFF5"/><stop offset="1" stop-color="#2FD6B5"/></radialGradient> <radialGradient id="gmi104r"><stop offset="0" stop-color="#2FD6B5" stop-opacity=".7"/><stop offset="1" stop-color="#2FD6B5" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi104r)"></circle><polygon points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="url(#gmi104)" stroke="#0A5C4F" stroke-width="1.1"/> <circle cx="16" cy="16" r="7.6" fill="none" stroke="#D6FFF5" stroke-width="1.2" stroke-dasharray="2.6 1.6" opacity=".9"/> <circle cx="16" cy="16" r="4.4" fill="url(#gmi104t)" stroke="#0A5C4F" stroke-width=".7"/> <path d="M16 3V7M27 9.5 23.6 11.5M27 22.5 23.6 20.5M16 29V25M5 22.5 8.4 20.5M5 9.5 8.4 11.5" stroke="#0A5C4F" stroke-width="1" opacity=".55"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+      </div>
+      <div class="acts">
+        <a class="btn pri" href="#p-1018">Что нового</a>
+        <a class="btn sec" href="#p-season">Сезон и баланс</a>
+      </div>
+      <nav class="index" aria-label="Все обновления">
+        <h2>Все обновления</h2>
+        <ol>
+          <li><a href="#p-1018"><time datetime="2026-10-18">18 октября 2026</time><span>Самоцветы и Кодекс самоцветов</span></a></li>
+          <li><a href="#p-season"><time datetime="2026-10">Октябрь 2026</time><span>Сезон, рейтинг и баланс классов</span></a></li>
+        </ol>
+      </nav>
+    </div>
+  </div>
+
+  <section class="patch wrap" id="p-1018" data-patch="2026-10-18" data-title="Самоцветы и Кодекс самоцветов">
+    <time datetime="2026-10-18">18 октября 2026</time>
+    <h2>Самоцветы и Кодекс самоцветов</h2>
+    <p>В Кодексе появился второй раздел — «Самоцветы». Камни падают с врагов, а сданные в Кодекс дают вечный бонус. Каждый вид собирается отдельно, до 500 штук.</p>
+
+    <h3>Где падают</h3>
+    <p>В Нижних и Глубинных цехах, Фарм-зоне и Сезонной зоне. Самоцветы выдаёт сервер, поэтому каждый выпавший камень можно продать на маркете.</p>
+    <p>Изумрудная линза и Рубиновый конденсатор падают с тем же шансом, что медная сфера заточки. Кристалл бездны и Нефритовый резонатор — с шансом титановой, то есть в десять раз реже. Шанс повышают VIP, билет сезона и главари. Точные шансы для каждого монстра — во вкладке «Карта».</p>
+
+    <h3>Как собрать</h3>
+    <ol class="steps">
+      <li><div><b>Фармите</b>Бейте врагов в цехах, Фарм-зоне и Сезонной зоне.</div></li>
+      <li><div><b>Сдаёте в Кодекс</b>Меню → Кодекс → «Самоцветы» → «Сдать 1» или «Сдать все». Сдать можно камни из сумки и со склада.</div></li>
+      <li><div><b>Получаете бонус навсегда</b>Пороги складываются: на 20 камнях действуют пороги 1, 10 и 20 сразу. Сданные камни исчезают.</div></li>
+    </ol>
+
+    <h3>Частые камни</h3>
+    <div class="kind">
+      <div class="kind-h">
+        <span class="gem" style="--gc:#3FE08A"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi105" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#DAFFE8"/><stop offset=".45" stop-color="#3FE08A"/><stop offset="1" stop-color="#0E6A3A"/></linearGradient> <radialGradient id="gmi105t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#DAFFE8"/><stop offset="1" stop-color="#3FE08A"/></radialGradient> <radialGradient id="gmi105r"><stop offset="0" stop-color="#3FE08A" stop-opacity=".7"/><stop offset="1" stop-color="#3FE08A" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi105r)"></circle><polygon points="10,5 22,5 27,10 27,22 22,27 10,27 5,22 5,10" fill="url(#gmi105)" stroke="#0E6A3A" stroke-width="1.1"/> <polygon points="12.5,10 19.5,10 22,12.5 22,19.5 19.5,22 12.5,22 10,19.5 10,12.5" fill="url(#gmi105t)" stroke="#0E6A3A" stroke-width=".6" opacity=".95"/> <path d="M10 5 12.5 10M22 5 19.5 10M27 10 22 12.5M27 22 22 19.5M22 27 19.5 22M10 27 12.5 22M5 22 10 19.5M5 10 10 12.5" stroke="#0E6A3A" stroke-width=".6" opacity=".7"/> <circle cx="16" cy="16" r="13.5" fill="none" stroke="#B9C3CD" stroke-width="1.2" stroke-dasharray="3 2.2" opacity=".75"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <span class="gem" style="--gc:#FF4D5E"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi106" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD9DE"/><stop offset=".45" stop-color="#FF4D5E"/><stop offset="1" stop-color="#7A0E1E"/></linearGradient> <radialGradient id="gmi106t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFD9DE"/><stop offset="1" stop-color="#FF4D5E"/></radialGradient> <radialGradient id="gmi106r"><stop offset="0" stop-color="#FF4D5E" stop-opacity=".7"/><stop offset="1" stop-color="#FF4D5E" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi106r)"></circle><rect x="11.4" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/><rect x="18.8" y="23" width="1.8" height="7" rx=".7" fill="#C9D1D8" stroke="#56616C" stroke-width=".5"/> <circle cx="16" cy="14" r="11" fill="url(#gmi106)" stroke="#7A0E1E" stroke-width="1.1"/> <polygon points="16,8.5 19.9,10.1 21.5,14 19.9,17.9 16,19.5 12.1,17.9 10.5,14 12.1,10.1" fill="url(#gmi106t)" stroke="#7A0E1E" stroke-width=".6"/> <path d="M16 3V8.5M23.8 6.2 19.9 10.1M27 14H21.5M23.8 21.8 19.9 17.9M16 25V19.5M8.2 21.8 12.1 17.9M5 14H10.5M8.2 6.2 12.1 10.1" stroke="#7A0E1E" stroke-width=".6" opacity=".7"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <p><b>Изумрудная линза и Рубиновый конденсатор.</b> Таблица — для каждого из двух видов.</p>
+      </div>
+      <table class="th">
+        <thead><tr><th scope="col">Сдано</th><th scope="col">Бонус</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>+5 атаки</td></tr>
+          <tr><td>10</td><td>+5 атаки, +5 брони</td></tr>
+          <tr><td>20</td><td>+5 атаки, +5 брони</td></tr>
+          <tr><td>50</td><td>+10 атаки</td></tr>
+          <tr><td>100</td><td>+10 атаки, +10 брони</td></tr>
+          <tr><td>300</td><td>+30 атаки, +30 брони, +3 000 прочности</td></tr>
+          <tr><td>500</td><td>+50 атаки, +50 брони, +20% скорости атаки</td></tr>
+          <tr class="total"><td>Всего</td><td>+115 атаки, +100 брони, +3 000 прочности, +20% скорости атаки</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Редкие камни</h3>
+    <div class="kind">
+      <div class="kind-h">
+        <span class="gem" style="--gc:#A66BFF"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi107" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EEE2FF"/><stop offset=".45" stop-color="#A66BFF"/><stop offset="1" stop-color="#35137A"/></linearGradient> <radialGradient id="gmi107t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#EEE2FF"/><stop offset="1" stop-color="#A66BFF"/></radialGradient> <radialGradient id="gmi107r"><stop offset="0" stop-color="#A66BFF" stop-opacity=".7"/><stop offset="1" stop-color="#A66BFF" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi107r)"></circle><polygon points="16,1.5 23.5,9 21,27 16,30.5 11,27 8.5,9" fill="url(#gmi107)" stroke="#35137A" stroke-width="1.1"/> <polygon points="16,1.5 8.5,9 11,27 16,30.5" fill="#35137A" opacity=".3"/><polygon points="16,1.5 16,30.5 21,27 23.5,9" fill="#FFFFFF" opacity=".12"/> <ellipse cx="16" cy="16" rx="3.6" ry="5.4" fill="#120726" stroke="#EEE2FF" stroke-width=".9"></ellipse> <ellipse cx="16" cy="16" rx="1.3" ry="2.6" fill="#A66BFF"></ellipse> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <span class="gem" style="--gc:#2FD6B5"><svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible"> <defs><linearGradient id="gmi108" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6FFF5"/><stop offset=".45" stop-color="#2FD6B5"/><stop offset="1" stop-color="#0A5C4F"/></linearGradient> <radialGradient id="gmi108t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#D6FFF5"/><stop offset="1" stop-color="#2FD6B5"/></radialGradient> <radialGradient id="gmi108r"><stop offset="0" stop-color="#2FD6B5" stop-opacity=".7"/><stop offset="1" stop-color="#2FD6B5" stop-opacity="0"/></radialGradient></defs> <circle cx="16" cy="16" r="16" fill="url(#gmi108r)"></circle><polygon points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="url(#gmi108)" stroke="#0A5C4F" stroke-width="1.1"/> <circle cx="16" cy="16" r="7.6" fill="none" stroke="#D6FFF5" stroke-width="1.2" stroke-dasharray="2.6 1.6" opacity=".9"/> <circle cx="16" cy="16" r="4.4" fill="url(#gmi108t)" stroke="#0A5C4F" stroke-width=".7"/> <path d="M16 3V7M27 9.5 23.6 11.5M27 22.5 23.6 20.5M16 29V25M5 22.5 8.4 20.5M5 9.5 8.4 11.5" stroke="#0A5C4F" stroke-width="1" opacity=".55"/> <path d="M11 8.5 13.5 7 12.5 12 Z" fill="#FFFFFF" opacity=".8"/> <g transform="translate(25 6)"><path d="M0 -3.6 L.9 -.9 L3.6 0 L.9 .9 L0 3.6 L-.9 .9 L-3.6 0 L-.9 -.9 Z" fill="#FFFFFF"></path></g> </svg></span>
+        <p><b>Кристалл бездны и Нефритовый резонатор.</b> Таблица — для каждого из двух видов.</p>
+      </div>
+      <table class="th">
+        <thead><tr><th scope="col">Сдано</th><th scope="col">Бонус</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>+10 атаки</td></tr>
+          <tr><td>10</td><td>+10 атаки, +10 брони</td></tr>
+          <tr><td>30</td><td>+20 атаки</td></tr>
+          <tr><td>60</td><td>+20 атаки, +20 брони</td></tr>
+          <tr><td>100</td><td>+30 атаки</td></tr>
+          <tr><td>150</td><td>+30 атаки, +30 брони</td></tr>
+          <tr><td>300</td><td>+50 атаки, +50 брони, +5 000 прочности</td></tr>
+          <tr><td>500</td><td>+100 атаки, +100 брони, +20% скорости атаки</td></tr>
+          <tr class="total"><td>Всего</td><td>+270 атаки, +210 брони, +5 000 прочности, +20% скорости атаки</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>Все четыре вида по 500 штук: +770 атаки, +620 брони, +16 000 прочности и +80% скорости атаки. Атака, броня и прочность добавляются до множителей класса.</p></div>
+
+    <h3>Маркет</h3>
+    <p>Самоцветы продаются и покупаются в разделе «Самоцветы» — не дешевле 0,4 GRAM за штуку. Цена лота — за всю стопку: три камня стоят от 1,2 GRAM.</p>
+
+    <h3>Ещё</h3>
+    <ul class="changes">
+      <li><span class="tag new">Новое</span><span>Кнопка «Обновления» в меню: здесь все патчи. Красная точка у кнопки — вышло новое.</span></li>
+      <li><span class="tag new">Новое</span><span>Во вкладке «Карта» у монстров видны шансы самоцветов.</span></li>
+      <li><span class="tag chg">Изменено</span><span>Персонаж → Улучшения → «Все бонусы» показывает и бонус самоцветов.</span></li>
+    </ul>
+  </section>
+
+  <section class="patch wrap" id="p-season">
+    <time datetime="2026-10">Октябрь 2026</time>
+    <h2>Сезон, рейтинг и баланс классов</h2>
+    <p>Сезон длится месяц: с 1-го числа в 18:00 МСК до 1-го числа следующего месяца. Окно сезона — Меню → Сезон: задания, рейтинг и пропуск.</p>
+
+    <h3>Задания сезона</h3>
+    <p>Очки начисляются сами, как только задание выполнено — нажимать ничего не нужно.</p>
+    <table class="tasks">
+      <tbody>
+        <tr class="grp"><td colspan="2">Постоянно</td></tr>
+        <tr><td>Покупка на маркете, за каждый GRAM</td><td>+10</td></tr>
+        <tr class="grp"><td colspan="2">Каждый день, сброс в 00:00 МСК</td></tr>
+        <tr><td>Отправить 10 сообщений в игровой чат</td><td>+30</td></tr>
+        <tr><td>Купить на маркете на 3 GRAM</td><td>+100</td></tr>
+        <tr><td>Продать на маркете на 3 GRAM</td><td>+100</td></tr>
+        <tr class="grp"><td colspan="2">Каждую неделю, сброс в понедельник</td></tr>
+        <tr><td>Убить 100 000 монстров в Нижних цехах</td><td>+300</td></tr>
+        <tr><td>Убить 100 000 монстров в Глубинных цехах</td><td>+300</td></tr>
+        <tr><td>Убить 100 000 монстров в полях и фарм-зонах</td><td>+300</td></tr>
+        <tr><td>Выпить зелье силы 10 раз</td><td>+50</td></tr>
+        <tr><td>Участвовать в Кровавой башне 3 раза</td><td>+200</td></tr>
+        <tr><td>Ударить мирового босса 3 раза</td><td>+200</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Рейтинг и призы</h3>
+    <p>Двадцать лучших по очкам сезона получают призы в USDT: 1 место — 100, 2 и 3 места — по 50, с 4 по 10 — по 10, с 11 по 20 — по 5. После конца сезона и подтверждения администратором приз забирается в GRAM кнопкой «Забрать» во вкладке «Рейтинг».</p>
+
+    <h3>Билет сезона за 15 GRAM</h3>
+    <ul class="perks">
+      <li>×2 опыта</li>
+      <li>+60% к дропу</li>
+      <li>×2 энергоядер</li>
+      <li>Вход в Сезонную зону</li>
+      <li>Премиум-награды пропуска</li>
+    </ul>
+    <p style="margin-top:10px">Сезонная зона — портал «Сезон» в Фарм-зоне: ×1,5 опыта и +50% к дропу. Билет действует до конца сезона.</p>
+
+    <h3>Баланс классов</h3>
+    <div class="cls">
+      <div style="--c:#E08A4E"><b>Страж</b>Обычный удар замедляет цель на 10% (до 50%) на 10 секунд.</div>
+      <div style="--c:#9B7BFF"><b>Жнец</b>То же замедление и шанс 20% оглушить цель на 0,3 секунды.</div>
+      <div style="--c:#5FD4E8"><b>Техномант</b>ЭМИ-волна снимает с врагов 20% защиты на 5 секунд, Силовое поле даёт ещё и +30% атаки.</div>
+      <div style="--c:#7BC98A"><b>Снайпер</b>Залп снимает 20% защиты на 5 секунд.</div>
+      <div style="--c:#FF5FA2"><b>Призрак</b>Сирена помех снимает 20% защиты на 5 секунд.</div>
+      <div style="--c:#6EE7A8"><b>Лечение у всех классов</b>Восстанавливает и CP — в 10 раз больше, чем прочности; запас CP тоже в 10 раз больше прочности. Своё лечение в бою с пилотами возвращает столько CP, сколько прочности.</div>
+    </div>
+
+    <h3>Новые классы</h3>
+    <p>Призрак — убийца ближнего боя с критами и невидимостью. Глифоносец — контроль в ближнем бою: стягивает врагов глифами и отражает удары. Первая смена класса бесплатная.</p>
+
+    <h3>Развитие</h3>
+    <p>Умения качаются до 10 уровня: каждый уровень — 2 книги и шанс 30%, при неудаче книги сгорают. Неудачная заточка титановой сферой снижает заточку на 1, но не ниже +0.</p>
+    <table class="ups">
+      <thead><tr><th scope="col">Улучшение</th><th scope="col">За уровень</th><th scope="col">Предел</th></tr></thead>
+      <tbody>
+        <tr><td>Атака</td><td>+3</td><td>300 ур.</td></tr>
+        <tr><td>Броня</td><td>+3</td><td>300 ур.</td></tr>
+        <tr><td>Прочность</td><td>+30</td><td>300 ур.</td></tr>
+        <tr><td>Скорость атаки</td><td>+1%</td><td>120 ур.</td></tr>
+        <tr><td>Шанс крита</td><td>+0,3%</td><td>100 ур.</td></tr>
+        <tr><td>Сила крита</td><td>+0,3%</td><td>100 ур.</td></tr>
+        <tr><td>Регенерация</td><td>+1 в секунду</td><td>300 ур.</td></tr>
+        <tr><td>CP</td><td>+200</td><td>300 ур.</td></tr>
+        <tr><td>Бонус к опыту</td><td>+0,1%</td><td>300 ур.</td></tr>
+        <tr><td>Бонус к дропу</td><td>+0,1%</td><td>300 ур.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Новый город</h3>
+    <p>Центральный ангар стал ночным городом: площадь с реактором, фонари, дома с горящими окнами. Склад — наверху, Кузнец — справа, Торговец — слева, портал — внизу.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap"><p style="margin:0 0 8px">Если что-то из списка не появилось — перезайдите в игру, чтобы загрузилась новая версия.</p><a href="/guide.html">Гайд</a>&emsp;<a href="/">Играть</a></div>
+</footer>
+
+<script>
+// Встроенный режим (окно «Обновления» в игре, ?embed=1): шапка сайта скрыта — у окна свой крестик и вкладки.
+// Ссылки-якоря листают только эту страницу: переход по #… и scrollIntoView внутри окна сдвигали и игру под ним
+// (пропадал крестик). «Играть» и «Гайд» во встроенном окне не открывают страницу внутри него, а просят игру
+// закрыть окно или переключить вкладку.
+(function(){
+  var embed = /[?&]embed=1/.test(location.search);
+  if(embed) document.documentElement.classList.add("embed");
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.addEventListener("click", function(e){
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null; if(!a) return;
+    var href = a.getAttribute("href") || "";
+    if(href.charAt(0) === "#"){
+      e.preventDefault();
+      var el = href.length > 1 ? document.getElementById(href.slice(1)) : null;
+      var top = el ? el.getBoundingClientRect().top + window.pageYOffset - (embed ? 12 : 66) : 0;
+      window.scrollTo({top: Math.max(0, top), behavior: reduce ? "auto" : "smooth"});
+      return;
+    }
+    if(embed && window.parent !== window){
+      var msg = href === "/" ? {act:"close"} : href.indexOf("guide") >= 0 ? {act:"tab", tab:"guide"} : href.indexOf("patches") >= 0 ? {act:"tab", tab:"patches"} : null;
+      if(msg){ e.preventDefault(); msg.mw = "news"; window.parent.postMessage(msg, "*"); }
+    }
+  });
+})();
+</script>
+</body>
+</html>

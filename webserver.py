@@ -5,6 +5,7 @@ import logging
 import math
 import time
 from collections import deque
+from html import unescape as html_unescape
 from pathlib import Path
 
 from aiohttp import web, WSMsgType
@@ -260,6 +261,44 @@ async def guide_page(request):
         GUIDE_FILE,
         headers={"Cache-Control": "public, max-age=300"},
     )
+
+
+# ---------- страница обновлений ----------
+# Игра открывает её в окне «Обновления» (Меню → Обновления). Новый патч — первым блоком data-patch на странице:
+# по нему /api/patches говорит игре, что вышло новое (у кнопки красная точка, пока игрок не откроет окно).
+PATCHES_FILE = Path(__file__).parent / "patches.html"
+_patches = {"mtime": None, "latest": "", "title": ""}
+def parse_latest_patch(text):
+    """(id, заголовок) первого тега <section data-patch="…">. Комментарии пропускаются (в них бывают примеры),
+    id — только латиница, цифры, точка, дефис и подчёркивание."""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    tag = re.search(r'<section\b[^>]*\bdata-patch="[0-9A-Za-z._-]{1,32}"[^>]*>', text)
+    if not tag:
+        return "", ""
+    pid = re.search(r'\bdata-patch="([0-9A-Za-z._-]{1,32})"', tag.group(0)).group(1)
+    title = re.search(r'\bdata-title="([^"<>]{0,200})"', tag.group(0))
+    return pid, html_unescape(title.group(1)) if title else ""
+
+
+def patches_latest():
+    """Свежий патч для красной точки в игре (файл перечитывается, только когда он изменился)."""
+    try:
+        mtime = PATCHES_FILE.stat().st_mtime
+    except OSError:
+        return {"latest": "", "title": ""}
+    if mtime != _patches["mtime"]:
+        pid, title = parse_latest_patch(PATCHES_FILE.read_text(encoding="utf-8"))
+        _patches.update(mtime=mtime, latest=pid, title=title)
+    return {"latest": _patches["latest"], "title": _patches["title"]}
+
+
+async def patches_page(request):
+    """Обновления игры — публичная страница, как гайд. Без кэша: новый патч виден сразу после выкладки."""
+    return web.FileResponse(PATCHES_FILE, headers={"Cache-Control": "no-cache"})
+
+
+async def api_patches(request):
+    return web.json_response({"ok": True, **patches_latest()}, headers={"Cache-Control": "no-cache"})
 
 
 async def health(request):
@@ -3199,6 +3238,9 @@ async def start_web(port: int):
     app.router.add_get("/", game_page)
     app.router.add_get("/guide.html", guide_page)
     app.router.add_get("/guide", guide_page)
+    app.router.add_get("/patches.html", patches_page)
+    app.router.add_get("/patches", patches_page)
+    app.router.add_get("/api/patches", api_patches)
     app.router.add_get("/health", health)
     app.router.add_get("/live", live)
     app.router.add_get("/ready", ready)
