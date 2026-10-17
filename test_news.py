@@ -38,7 +38,13 @@ class Server(unittest.TestCase):
             self.assertIn(route, WEB)
 
     def test_latest_patch_is_found(self):
-        self.assertEqual(parse_latest_patch()(PATCHES), ("2026-10-18", "Самоцветы и Кодекс самоцветов"))
+        # сервер берёт первый блок section с data-patch (комментарии не в счёт) — с каждым новым патчем он другой
+        from html import unescape
+        tag = re.search(r"<section\b[^>]*\bdata-patch=[^>]*>", re.sub(r"<!--.*?-->", "", PATCHES, flags=re.S)).group(0)
+        want = (re.search(r'data-patch="([^"]+)"', tag).group(1), unescape(re.search(r'data-title="([^"]*)"', tag).group(1)))
+        self.assertEqual(parse_latest_patch()(PATCHES), want)
+        self.assertRegex(want[0], r"^\d{4}-\d{2}-\d{2}(-\d)?$")       # дата; второй патч за день — с номером
+        self.assertTrue(want[1])
 
     def test_newest_patch_goes_first(self):
         clean = re.sub(r"<!--.*?-->", "", PATCHES, flags=re.S)
