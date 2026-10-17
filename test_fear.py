@@ -102,7 +102,7 @@ class GameMirror(unittest.TestCase):
 
     def test_no_teleport_into_fear(self):
         # в «Страх» — только кнопкой «Войти» в Событиях: ни портал, ни админский телепорт туда не ведут
-        self.assertIn('Object.entries(LOCS).filter(([k]) => k !== "arena_fear").map(([k, L]) => `<button type="button" data-adm="tp"', GAME)
+        self.assertIn('Object.entries(LOCS).filter(([k, L]) => k !== "arena_fear" && !L.elite).map(([k, L]) => `<button type="button" data-adm="tp"', GAME)
         self.assertIn('if(key === "arena_fear" && locKey !== "arena_fear" && !(FEAR.pass', GAME)
         portal = GAME[GAME.index("function renderPortal(){"):GAME.index("\n}\n", GAME.index("function renderPortal(){"))]
         self.assertIn("L.arena", portal)

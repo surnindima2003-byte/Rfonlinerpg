@@ -304,11 +304,14 @@ SHARD_MIN_LVL = 15
 SHARD_BASE = env_float("SHARD_BASE_PCT", 4.0)          # шанс осколка за моба 15 ур., %
 SHARD_STEP = env_float("SHARD_STEP_PCT", 0.1)          # прибавка за каждый уровень моба выше 15, %
 BOSS_LOOT, BOSS_GAP = 150, 40                   # главарь: шансы ×150, не чаще одного на игрока раз в 40 с
+ELITE_LOOT = 2                                   # элитный моб (el…): ценный дроп ×2, кроме осколков (ELITE.LOOT в игре)
 _boss_t = {}
 
 
-def roll(lv, mult=1):
-    """Бросок ценного лута за одного убитого моба (mult > 1 — главарь)."""
+def roll(lv, mult=1, shard_mult=None):
+    """Бросок ценного лута за одного убитого моба (mult > 1 — главарь). shard_mult — свой множитель осколков
+    (у элитных мобов осколки не умножаются), по умолчанию тот же mult."""
+    sm = mult if shard_mult is None else shard_mult
     out, s = [], lv - 1
     pool = [g for g, need in GEAR if lv - 10 <= need <= lv + 2]
     for grade, per in enumerate(gear_per(lv)):
@@ -320,7 +323,7 @@ def roll(lv, mult=1):
     if random.random() < min(0.9, P(0.00033 + 0.0000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_ti", "n": 1})
     # осколки: с 15 уровня мобов, 4% на 15-м и +0,1% за каждый уровень выше; главарь — пачка побольше
-    if lv >= SHARD_MIN_LVL and random.random() < min(0.6, P(SHARD_BASE + SHARD_STEP * (lv - SHARD_MIN_LVL)) * mult):
+    if lv >= SHARD_MIN_LVL and random.random() < min(0.6, P(SHARD_BASE + SHARD_STEP * (lv - SHARD_MIN_LVL)) * sm):
         n = random.randint(4, 9) if mult >= BOSS_LOOT else 1 + (random.random() < 0.35) + (random.random() < 0.1)
         out.append({"kind": "sph", "id": random.choice(SHARDS), "n": n})
     return out
@@ -716,7 +719,9 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         vrow = vip.LEVELS[vip_lv - 1] if vip_lv else (0, 0, 0, 0)
         ledger.add(uid, ledger.kill_income(mob, loc, vip_scrap=vrow[2],
                                            drop_bonus=vrow[3] + (0.6 if ticket else 0) + (0.5 if loc == "season1" else 0)))
-        for d in roll(lv, mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)):   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
+        base_mult = mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
+        em = ELITE_LOOT if mob.startswith("el") else 1                  # элитная зона: ценный дроп ×2 (осколки — как обычно)
+        for d in roll(lv, base_mult * em, shard_mult=base_mult):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)

@@ -169,7 +169,7 @@ async def add_trade(buyer, seller, amount):
 
 
 def kill_counter(loc):
-    return "kill_f1" if loc == "sector1" else "kill_f2" if loc == "sector2" else "kill_farm" if loc in FIELDS else None
+    return "kill_f1" if loc == "sector1" else "kill_f2" if loc == "sector2" else "kill_farm" if loc in FIELDS or str(loc).startswith("elite") else None
 
 
 _flush_lock = asyncio.Lock()

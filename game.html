@@ -1258,6 +1258,37 @@ body.tut-top .toast{top:var(--tutToast,58%);padding:7px 14px;font-size:13px}
 .fr-steps{list-style:none;margin:0 0 14px;padding:0;counter-reset:fr}
 .fr-steps li{counter-increment:fr;display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.4;margin-bottom:9px}
 .fr-steps li::before{content:counter(fr);flex:none;width:24px;height:24px;margin-top:-1px;border-radius:50%;display:grid;place-items:center;font:700 12px Rubik,sans-serif;color:color-mix(in srgb,#9B7BFF 62%,var(--text));background:rgba(155,123,255,.16);border:1px solid rgba(155,123,255,.5)}
+.fr-go.gold{border-color:#B9862E;background:linear-gradient(180deg,#5A3E10,#33230A);color:#FFE08A}
+/* ---- элитная фарм-зона: окно события ---- */
+.fr.el .fr-tries{background:linear-gradient(180deg,rgba(242,193,75,.1),rgba(16,22,29,.96));border-color:rgba(185,134,46,.55)}
+.fr.el .fr-tries b{font-size:32px}
+.el-sec{font:700 11px Rubik,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#93A0AC;margin:4px 2px 8px;display:flex;gap:8px;align-items:baseline}
+.el-sec em{font-style:normal;letter-spacing:0;text-transform:none;color:#F2C14B;font-size:12px}
+.el-mine{display:grid;gap:6px;margin-bottom:8px}
+.el-m{display:flex;align-items:center;gap:8px;background:#10161D;border:1px solid #2A3440;border-radius:11px;padding:8px 12px;color:#E4DED1;min-width:0}
+.el-m.empty{border-style:dashed;color:#5C6B78;justify-content:center;font-size:13px}
+.el-mn{font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.el-ml{font-size:12px;color:#93A0AC;white-space:nowrap}.el-ml.bad{color:#FF8A6B}
+.el-leave{margin-bottom:14px}
+.el-open{margin-bottom:14px}
+.el-g{display:flex;align-items:center;gap:10px;background:#10161D;border:1px solid rgba(185,134,46,.45);border-radius:12px;padding:8px 10px 8px 12px;margin-bottom:6px;color:#E4DED1}
+.el-gt{flex:1;min-width:0}.el-gt b{display:block;font-size:14px;color:#FFE08A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.el-gt small{display:flex;align-items:center;gap:4px;font-size:12px;color:#93A0AC}.el-gt small i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.el-gn{font:15px 'Russo One',sans-serif;color:#F2C14B}
+.el-none{text-align:center;color:#4EA8F5;font-size:14px;margin:14px 0 18px}
+.el-dh{margin:-4px 0 8px}
+.el-drops{background:#10161D;border:1px solid #2A3440;border-radius:14px;padding:4px 12px;margin-bottom:14px}
+.el-drop{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13.5px}
+.el-drop:last-child{border-bottom:0}
+.el-di{flex:none;width:24px;height:24px;display:grid;place-items:center}.el-di svg,.el-di canvas,.el-di img{width:24px;height:24px}
+.el-di .el-scrap{font-style:normal;color:#A7B0B8;font-size:18px}
+.el-dn{flex:1;min-width:0;font-weight:600}
+.el-drop b{font:700 13px Rubik,sans-serif;white-space:nowrap}
+/* ---- элитная фарм-зона: плашка в зоне ---- */
+.fear-wave.el-pill{border-color:#B9862E;color:#FFE8A8;background:linear-gradient(180deg,#2A2110,#17120A);box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 12px rgba(242,193,75,.28)}
+.fear-wave.el-pill.low{border-color:#E0463A;color:#FFC0B4;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(224,70,58,.45)}
+.evcard:has(.ev-live) .ev-tx b{padding-right:100px}
+body.el-run .tframe{top:calc(var(--hb, 120px) + 24px)}
 /* ---- «Страх»: отсчёт по центру и плашка «Волна N из 59» под карточкой пилота ---- */
 .fear-cd{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:4}
 .fear-cd[hidden],.fear-wave[hidden]{display:none}
@@ -3226,7 +3257,7 @@ function drawNpc(n, t){
     ctx.lineWidth = 5; ctx.lineCap = "round";
     for(let i = 0; i < 3; i++){ ctx.strokeStyle = i % 2 ? c2 : c1; ctx.beginPath(); ctx.arc(0, 0, 40 - i*9, t*(2+i) + i*2, t*(2+i) + i*2 + Math.PI*1.1); ctx.stroke(); }
     ctx.restore();
-    const nm = n.kind === "back" && LOCS[locKey] && LOCS[locKey].named ? "Город" : NPC_INFO[n.kind].name;
+    const nm = n.kind === "back" && LOCS[locKey] && LOCS[locKey].elite ? "Выход из зоны" : n.kind === "back" && LOCS[locKey] && LOCS[locKey].named ? "Город" : NPC_INFO[n.kind].name;
     const lock = n.kind === "season" && !(typeof ticketActive === "function" && ticketActive()) && !window.NET_ADMIN;
     label((lock ? "🔒 " : "") + nm, n.x, n.y - 62*NPC_K, lock ? "#E0694A" : c1); return;
   }
@@ -3397,10 +3428,15 @@ function drawEnemy(e, t){
     if(!k.dungeon) label(k.name, e.x, e.y - rv - 20, "#E4DED1");
   }
   // у мобов подземелья всегда видны уровень и имя; цвет — насколько он опасен для тебя
-  if(k.dungeon && !k.boss && ((LOCS[locKey] && LOCS[locKey].named) || k.fear || p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e))){
+  // в элитной зоне пачка стоит плотно — имя и уровень подписываем один раз на пачку, над её верхним монстром, с числом «×4»
+  const pk = e.pack != null && LOCS[locKey] && LOCS[locKey].elite ? enemies.filter(o => o.pack === e.pack && !o.dead) : null;
+  const sel = p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e);
+  const top = pk && pk.length > 1 && !sel ? pk.reduce((a, o) => o.y < a.y ? o : a) : null;
+  if(k.dungeon && !k.boss && ((LOCS[locKey] && LOCS[locKey].named && (!pk || sel || top === e)) || k.fear || sel)){
     const col = S.level >= k.lvl ? "#E4DED1" : S.level + 3 >= k.lvl ? "#F2A93B" : "#E0694A";
-    nameText(T(k.name), e.x, e.y - rv - 20, col, "600 11px Rubik, sans-serif");
-    nameText(T("Уровень") + " " + k.lvl, e.x, e.y - rv - 33, "#93A0AC", "10px Rubik, sans-serif");
+    const lx = top && pk.every(o => Math.abs(o.x - e.x) < 120) ? pk.reduce((s, o) => s + o.x, 0)/pk.length : e.x;   // пачка разбежалась — подпись у самого монстра
+    nameText(T(k.name) + (top ? " ×" + pk.length : ""), lx, e.y - rv - 20, col, "600 11px Rubik, sans-serif");
+    nameText(T("Уровень") + " " + k.lvl, lx, e.y - rv - 33, "#93A0AC", "10px Rubik, sans-serif");
   }
 }
 
@@ -5358,7 +5394,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         <div class="chatin" style="margin-bottom:14px"><input class="field" id="admNick" maxlength="16" placeholder="Новый позывной" autocomplete="off" style="margin:0"><button class="act" type="button" data-adm="nick">Сменить</button></div>
         <div class="set" style="margin-top:8px"><div class="tx">Бессмертие<small>Только для тебя, пока открыта игра</small></div><button class="sw" type="button" role="switch" data-adm="god" aria-checked="${NET.god}" aria-label="Бессмертие"></button></div>
         <div class="flabel" style="margin-top:6px">Телепорт без ограничений по уровню</div>
-        <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).filter(([k]) => k !== "arena_fear").map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
+        <div class="seg" style="flex-wrap:wrap">${Object.entries(LOCS).filter(([k, L]) => k !== "arena_fear" && !L.elite).map(([k, L]) => `<button type="button" data-adm="tp" data-v="${k}">${L.name}</button>`).join("")}</div>
         <p class="demo">GRAM выдавать нельзя: это настоящие деньги, их можно только пополнить.</p>
         <button class="btn wide" type="button" data-gramadm="1">💎 GRAM: выплаты и пополнения</button>
         <button class="btn wide" type="button" data-saleadm="1">🔥 Распродажа в магазине</button>
@@ -5496,7 +5532,9 @@ function hitEnemy(e, dmg, kind){
   if(e.brkT > now) dmg *= 1.2;                                      // снятая защита: −20% брони (у мобов без брони — +20% урона)
   dmg = Math.max(1, Math.round(dmg));
   e.hp -= dmg; e.flash = 0.12; e.chase = true;
-  if(e.room && e.room.scatter){                                 // в фарм-зоне на удар отвечает только своя кучка (≤ 150 px)
+  if(e.pack != null){                                           // элитная зона: удар по одному будит всю его пачку
+    for(const o of enemies) if(o.pack === e.pack && !o.dead && !o.chase) o.chase = true;
+  } else if(e.room && e.room.scatter){                          // в фарм-зоне на удар отвечает только своя кучка (≤ 150 px)
     for(const o of enemies) if(o.room === e.room && !o.dead && !o.chase && Math.hypot(o.x - e.x, o.y - e.y) < 150) o.chase = true;
   } else if(e.room && !e.roomAggro){                            // в подземелье на удар отвечает вся комната
     for(const o of enemies) if(o.room === e.room && !o.dead){ o.chase = true; o.roomAggro = true; }
@@ -8306,6 +8344,58 @@ for(let L = 1; L <= 40; L++){
     scrap:[m.scrap[0]*10, m.scrap[1]*10], r:Math.round(m.r*BOSS_SCALE), speed:Math.round(m.speed*0.85)};
 }
 
+// ===================== ЭЛИТНАЯ ФАРМ-ЗОНА: МОНСТРЫ И КАРТА =====================
+// Отдельная локация на группу из 3 пилотов (как в LIBERTY): у каждой группы свой экземпляр зоны elite1…elite6 —
+// его выдаёт сервер (elite.py), когда лидер заводит группу. Входной зал с порталом и два зала по 50 монстров:
+// первый — 26–30 ур., второй — 31–36 ур. Монстры сильнее обычных и вдвое быстрее, стоят пачками по 4 (две пачки — по 3),
+// сами не нападают, но удар по одному будит всю пачку. Мобы общие для группы (как в фарм-зоне): урон и смерть считает сервер.
+const ELITE = {MIN:25, SIZE:3, LIMIT:120, SLOTS:6, LOOT:2, ROOM_N:50,
+  W:2600, H:1500, hall:{x:1100, y:1050, w:400, h:300}, spawn:{x:1300, y:1150}, portal:{x:1300, y:1290},
+  rooms:[{x:120, y:180, w:900, h:800, lo:26, hi:30, name:"Зал I"}, {x:1580, y:180, w:900, h:800, lo:31, hi:36, name:"Зал II"}]};
+const ELITE_TITLE = ["Элитный", "Гвардейский", "Штурмовой", "Карательный", "Ударный", "Тяжёлый", "Боевой", "Осадный", "Имперский", "Багряный", "Золотой"];
+// элитный моб = моб подземелья того же уровня: прочность ×2,5, атака ×1,5, броня ×1,5, скорость ×2, опыт ×3, лом ×2.
+// Прочность — как mob_hp("el…") на сервере (mobguard.py), лом и материалы — как ledger.mob_info.
+for(let L = 26; L <= 36; L++){
+  const m = NPCS["dg" + L], noun = DG_BASE[(L - 1) % 4][1];
+  NPCS["el" + L] = {...m, name:ELITE_TITLE[L - 26] + " " + noun, elite:true, hp:Math.round(m.hp*2.5), atk:Math.round(m.atk*1.5), def:Math.round(m.def*1.5),
+    speed:m.speed*2, exp:m.exp*3, scrap:[m.scrap[0]*2, m.scrap[1]*2]};
+}
+const eliteLoc = k => typeof k === "string" && /^elite[1-9]$/.test(k) && !!LOCS[k];
+for(let i = 1; i <= ELITE.SLOTS; i++){
+  LOCS["elite" + i] = {name:"Элитная зона", min:ELITE.MIN, dungeon:true, named:true, hidden:true, elite:true, nopvp:true, levels:"26–36", ground:"#0B1015", npcs:[], count:0};
+  DUNGEONS["elite" + i] = {shape:"elite"};
+}
+// карта: входной зал внизу по центру, от него коридоры налево — в Зал I и направо — в Зал II
+function eliteLayout(){
+  const h = ELITE.hall;
+  dgRects.push({x:h.x, y:h.y, w:h.w, h:h.h, hall:true});
+  dgRects.push({x:700, y:1150, w:410, h:110, corr:true}, {x:700, y:960, w:120, h:300, corr:true});      // к Залу I
+  dgRects.push({x:1490, y:1150, w:410, h:110, corr:true}, {x:1780, y:960, w:120, h:300, corr:true});    // к Залу II
+  ELITE.rooms.forEach((r, j) => {
+    const rm = {x:r.x, y:r.y, w:r.w, h:r.h, room:true, kind:"big", n:ELITE.ROOM_N, cx:r.x + r.w/2, cy:r.y + r.h/2, noBoss:true, elitePacks:true,
+      lo:r.lo, hi:r.hi, lv:r.lo + "–" + r.hi, name:r.name, door:{x:j ? 1840 : 760, y:r.y + r.h}};
+    dgRects.push(rm); dgRooms.push(rm);
+  });
+}
+// пачки: 11 по 4 и 2 по 3 = 50 монстров на зал; места одинаковы у всех игроков (своё зерно, не зависит от порядка LOCS)
+function elitePacks(rm, rng, packBase){
+  const sizes = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3], centers = [], out = [], pad = 90;
+  for(let t = 0; centers.length < sizes.length && t < 5000; t++){
+    const x = rm.x + pad + rng()*(rm.w - 2*pad), y = rm.y + pad + rng()*(rm.h - 2*pad);
+    if(Math.hypot(x - rm.door.x, y - rm.door.y) < 230) continue;                       // у входа в зал — свободно
+    if(centers.every(([a, b]) => Math.hypot(a - x, b - y) >= (t < 3000 ? 175 : 140))) centers.push([x, y]);
+  }
+  centers.sort((a, b) => Math.hypot(a[0] - rm.door.x, a[1] - rm.door.y) - Math.hypot(b[0] - rm.door.x, b[1] - rm.door.y));   // ближние к входу — слабее
+  centers.forEach(([cx, cy], j) => {
+    const lv = rm.lo + Math.min(rm.hi - rm.lo, Math.floor(j*(rm.hi - rm.lo + 1)/centers.length)), type = "el" + lv, n = sizes[j];
+    for(let q = 0; q < n; q++){
+      const a = q/n*Math.PI*2 + rng()*0.6, r = n === 1 ? 0 : 34 + rng()*12;
+      out.push({type, x:cx + Math.cos(a)*r, y:cy + Math.sin(a)*r*0.8, pack:packBase + j});
+    }
+  });
+  return out;
+}
+
 // ---- таблица дропа в духе Lineage: лом всегда, материалы часто, сферы и ядра редко,
 //      снаряжение и книги — очень редко. Одна функция и для выпадения, и для экрана карты ----
 // ---- таблица выпадения по образцу LIBERTY: лом 30%, всё остальное — сотые и тысячные доли процента ----
@@ -8336,6 +8426,9 @@ function mobDrops(type, loc){
   if(k.boss){                                            // главарь: шансы ценного лута ×150
     out.items.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
     out.gear.per = out.gear.per.map(v => Math.min(0.5, v*BOSS_LOOT));
+  } else if(k.elite){                                    // элитный моб: шансы ×ELITE.LOOT (как ELITE_LOOT на сервере)
+    out.items.forEach(it => it.chance = Math.min(0.9, it.chance*ELITE.LOOT));
+    out.gear.per = out.gear.per.map(v => Math.min(0.5, v*ELITE.LOOT));
   }
   return out;
 }
@@ -8383,6 +8476,7 @@ function dgLayout(key){
   const cfg = DUNGEONS[key] || DUNGEONS.sector1, {corrY, corrH, small, big} = DG;
   dgKey = key; dgRects = []; dgRooms = []; dgMarks = [];
   if(cfg.shape === "cross") return crossLayout(cfg);
+  if(cfg.shape === "elite") return eliteLayout();
   dgRects.push({x:60, y:corrY - 150, w:260, h:300, hall:true});                     // входной зал с порталом
   dgRects.push({x:280, y:corrY - corrH/2, w:DG.W - 360, h:corrH, corr:true});         // центральный коридор
   for(let i = 0; i < DG.cols; i++){
@@ -8501,11 +8595,17 @@ function slide(o, ox, oy, r){
 function buildDungeon(key){
   dgLayout(key);
   const rngD = seeded(Object.keys(LOCS).indexOf(key)*1319 + 71);     // разброс мобов в комнате одинаков у всех игроков
-  const cfg = DUNGEONS[key] || {}, cross = cfg.shape === "cross";
-  W = cross ? CROSS.W : DG.W; H = cross ? CROSS.H : DG.H; rocks = [];
-  // в кресте порталы стоят в центральном зале: «Город» слева, «Сезон» справа
-  npcs = cross ? cfg.portals.map((kind, j) => ({kind, x:CROSS.C + (j ? CROSS.portalDx : -CROSS.portalDx), y:CROSS.C - 50})) : [{kind:"back", x:150, y:DG.corrY - 40}];
+  const cfg = DUNGEONS[key] || {}, cross = cfg.shape === "cross", elite = cfg.shape === "elite";
+  W = elite ? ELITE.W : cross ? CROSS.W : DG.W; H = elite ? ELITE.H : cross ? CROSS.H : DG.H; rocks = [];
+  // в кресте порталы стоят в центральном зале: «Город» слева, «Сезон» справа; в элитной зоне портал — во входном зале
+  npcs = elite ? [{kind:"back", x:ELITE.portal.x, y:ELITE.portal.y}] : cross ? cfg.portals.map((kind, j) => ({kind, x:CROSS.C + (j ? CROSS.portalDx : -CROSS.portalDx), y:CROSS.C - 50})) : [{kind:"back", x:150, y:DG.corrY - 40}];
+  const rngE = seeded(7777); let packBase = 0;
   for(const rm of dgRooms){
+    if(rm.elitePacks){                                                            // элитная зона: пачки по 4, у пачки общий номер
+      for(const m of elitePacks(rm, rngE, packBase)){ const k = NPCS[m.type];
+        enemies.push({type:m.type, x:m.x, y:m.y, hx:m.x, hy:m.y, tx:m.x, ty:m.y, hp:k.hp, max:k.hp, cd:0, ang:rngE()*6.28, chase:false, dead:false, respawn:0, flash:0, wanderT:0, lunge:0, room:rm, pack:m.pack}); }
+      packBase += 100; continue;
+    }
     const cols = rm.cols || 3;
     // главарь стоит в самой дальней от коридора комнате прохода (левая из последней пары больших)
     const far = dgRooms.filter(r => r.lv === rm.lv && r.kind === "big").sort((a, b) => Math.abs(b.cy - DG.corrY) - Math.abs(a.cy - DG.corrY) || a.cx - b.cx)[0];
@@ -8524,7 +8624,7 @@ function buildDungeon(key){
     }
   }
   enemies.forEach((e, i) => e.idx = i);
-  return cross ? {x:CROSS.C, y:CROSS.C + 60} : {x:210, y:DG.corrY};
+  return elite ? {x:ELITE.spawn.x, y:ELITE.spawn.y} : cross ? {x:CROSS.C, y:CROSS.C + 60} : {x:210, y:DG.corrY};
 }
 // мобы фарм-зоны стоят кучками по 2–3 в разных местах зала (одинаково у всех игроков — зерно общее)
 function scatterSpots(rm, n, rng){
@@ -8954,7 +9054,7 @@ const EVENTS = [
   {id:"battle", soon:true, name:"Битва", color:"#E0694A", desc:"Схватка на выживание без союзников", mechs:["reaper", "guard"], rules:"Все против всех на закрывающейся арене. Побеждает последний выживший пилот."},
   {id:"3x3", soon:true, name:"3×3", color:"#4EA8F5", desc:"Командный бой 3 на 3", mechs:["sniper", "techno"], rules:"Две команды по три пилота. Команда, уничтожившая соперников, получает очки рейтинга."},
   {id:"coop", soon:true, name:"Сотрудничество", color:"#5FD4E8", desc:"Совместное прохождение вдвоём", mechs:["sniper", "guard"], rules:"Пройди подземелье вдвоём с напарником из пати: общий лут и бонус к опыту."},
-  {id:"elite", soon:true, name:"Элитная фарм-зона", color:"#F2C14B", desc:"Группа из 3 пилотов", mechs:["reaper"], rules:"Зона с усиленными мобами и повышенным дропом. Вход только группой из трёх."},
+  {id:"elite", name:"Элитная фарм-зона", color:"#F2C14B", desc:"Группа из 3", when:"Доступно всегда", mechs:["reaper", "medic"]},   // окно — renderElite
   {id:"tourney", soon:true, name:"Турнир", color:"#7BC98A", desc:"Турнир на 32 участника на вылет", mechs:["sniper"], rules:"Сетка на вылет из 32 пилотов, бои один на один."}
 ];
 const evWhen = ev => ev.soon ? "Скоро" : "🕘 " + (ev.id === "chipwar" && typeof cwWhen === "function" ? cwWhen() : ev.when);
@@ -8963,7 +9063,7 @@ function openEvents(){
     body().innerHTML = EVENTS.map(ev => `<button type="button" class="evcard${ev.soon ? " soon" : ""}" data-ev="${ev.id}" style="--c:${ev.color}">
       <div class="ev-art">${ev.mechs.map((m, i) => `<span style="left:${10 + i*38}px">${mechImg(m, i % 2 ? "core" : "vex", {weapon:3}, 46)}</span>`).join("")}</div>
       <div class="ev-tx"><b>${ev.name}</b><small>${ev.desc}</small><em>${evWhen(ev)}</em></div><span class="chev">›</span>
-      ${ev.play ? fearPill() : ""}</button>`).join("");
+      ${ev.play ? fearPill() : ev.id === "elite" ? elitePill() : ""}</button>`).join("");
   });
 }
 function openEvent(id){
@@ -9586,6 +9686,7 @@ $("shBody").addEventListener("click", e => {
   else if(d.ev === "boss" && typeof openWorldBoss === "function") openWorldBoss();
   else if(d.ev === "tower" && typeof openTower === "function") openTower();
   else if(d.ev === "chipwar" && typeof openChipWar === "function") openChipWar();
+  else if(d.ev === "elite" && typeof openElite === "function") openElite();
   else if(d.ev) openEvent(d.ev);
   else if(d.evback) openEvents();
   else if(d.evgo) fearEnter();
@@ -9921,7 +10022,7 @@ $("pBody").parentElement && document.addEventListener("click", e => { const t = 
 // ===================== PvP =====================
 // Ангар и арена «Страх» — всегда без PvP. В остальных локациях можно атаковать выбранного пилота.
 // Союзники по пати и гильдии защищены. Каждый удар проверяет сервер (дистанция, частота, предел урона).
-const pvpZone = () => !!(LOCS[locKey] && !LOCS[locKey].safe && !LOCS[locKey].arena);
+const pvpZone = () => !!(LOCS[locKey] && !LOCS[locKey].safe && !LOCS[locKey].arena && !LOCS[locKey].nopvp);   // nopvp — элитная зона группы
 // доля удара по пилоту, которая проходит сквозь его броню: K/(K + броня), K = PVP_DEF_K × (40 + 8 × уровень жертвы)
 const PVP_DEF_K = 4;
 const pvpDefMult = (def, lvl) => { const K = PVP_DEF_K*(40 + 8*Math.max(1, lvl || 1)); return K/(K + Math.max(0, def || 0)); };
@@ -11233,6 +11334,192 @@ function openWorldBoss(){ openSheet("Мировой босс", "Владыка �
     prevWB(d);
   };
 }
+// ===================== ЭЛИТНАЯ ФАРМ-ЗОНА: ГРУППА, ВХОД, ЛИМИТ (как в LIBERTY) =====================
+// Группа — это обычная пати (тот же лидер, состав, опыт и защита союзников). «Создать группу» открывает набор:
+// группа появляется в «Открытых группах», и любой пилот 25+ может вступить без приглашения. Войти может только лидер
+// полной группы из 3 — сервер выдаёт группе свой экземпляр зоны и затягивает туда всех троих (elite_go).
+// Сервер (elite.py) считает 120 минут в день на игрока и выводит всех, если в зоне осталось меньше 3 человек группы.
+// Погибший возрождается у входа в зону (иначе группа сразу бы распалась).
+const EL = {st:null, pass:0, sig:"", pollT:0, leftT:0, warn:0, inT:0};
+const elSend = o => netSend({t:"elite", ...o});
+const elNet = () => typeof NET !== "undefined" && NET.on && NET.ws && NET.ws.readyState === 1;
+const elLvOk = () => !!window.NET_ADMIN || S.level >= ELITE.MIN;
+// осталось секунд сегодня: сервер присылает число, между ответами считаем сами (в зоне — минус секунда в секунду)
+const elLeft = () => { if(!EL.st) return ELITE.LIMIT*60; const run = eliteLoc(locKey) ? (performance.now() - EL.leftT)/1000 : 0; return Math.max(0, EL.st.left - run); };
+const elMin = () => Math.ceil(elLeft()/60);
+const elParty = () => typeof NET !== "undefined" && NET.party ? NET.party : null;
+const ELITE_ICON = `<svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 57,17.5 57,46.5 32,61 7,46.5 7,17.5" fill="#241A0C" stroke="#F2C14B" stroke-width="2.6" stroke-linejoin="round"/>
+  <polygon points="32,10 51,21 51,43 32,54 13,43 13,21" fill="none" stroke="#F2C14B" stroke-opacity=".35" stroke-width="1.2"/>
+  <path d="M32 17.5l4.3 9.2 10 1.2-7.4 6.9 2 9.9L32 39.8l-8.9 4.9 2-9.9-7.4-6.9 10-1.2z" fill="none" stroke="#FFD66B" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
+const elitePill = () => !elLvOk() ? `<i class="ev-live off">С ${ELITE.MIN} ур.</i>` : EL.st && elLeft() < 60 ? `<i class="ev-live off">Лимит на сегодня</i>` : `<i class="ev-live">Можно начать</i>`;
+
+// ---- окно события ----
+// верх (статус, минуты, кнопка, группы) обновляется каждые 2 с; правила и дроп рисуются один раз — список длинный
+function elDyn(){
+  const pt = elParty(), me = typeof NET !== "undefined" ? NET.id : null, lead = pt && pt.leader === me, n = pt ? pt.members.length : 0;
+  const net = elNet(), lv = elLvOk(), left = elMin(), inZone = eliteLoc(locKey), st = EL.st || {};
+  const ready = !!pt && pt.members.every(m => m.online && (+m.lvl || 1) >= ELITE.MIN);       // все в сети и 25+
+  const pill = !lv ? `<i class="fr-st no">С ${ELITE.MIN} уровня</i>` : !net ? `<i class="fr-st no">Нужна связь с сервером</i>`
+    : left < 1 ? `<i class="fr-st no">Лимит на сегодня исчерпан</i>` : `<i class="fr-st ok">Можно начать</i>`;
+  const sub = inZone ? "Ты в элитной зоне" : !lv ? `Доступно с ${ELITE.MIN} уровня` : left < 1 ? "Новые минуты — в 00:00 МСК"
+    : pt && n === ELITE.SIZE && !ready ? `Не все готовы: нужен ${ELITE.MIN} уровень и быть в сети`
+    : pt && n === ELITE.SIZE ? (lead ? "Группа в сборе — входите" : "Группа в сборе — лидер заводит в зону") : "Войдите, чтобы начать";
+  let btn;
+  if(inZone) btn = `<button class="fr-go" type="button" disabled>Ты в зоне</button>`;
+  else if(!pt) btn = `<button class="fr-go" type="button" data-el="create" ${net && lv && left >= 1 ? "" : "disabled"}>Создать группу</button>`;
+  else if(n > ELITE.SIZE) btn = `<button class="fr-go" type="button" disabled>В группе ${n} человек — нужно ровно ${ELITE.SIZE}</button>`;
+  else if(!lead) btn = `<button class="fr-go" type="button" disabled>Ждём лидера · ${n}/${ELITE.SIZE}</button>`;
+  else if(n === ELITE.SIZE || window.NET_ADMIN) btn = `<button class="fr-go gold" type="button" data-el="enter" ${net && left >= 1 && (ready || window.NET_ADMIN) ? "" : "disabled"}>Войти</button>`;
+  else if(!(st.my && st.my.open)) btn = `<button class="fr-go" type="button" data-el="create" ${net ? "" : "disabled"}>Открыть набор в группу</button>`;
+  else btn = `<button class="fr-go" type="button" disabled>Ждём игроков · ${n}/${ELITE.SIZE}</button>`;
+  // своя группа
+  const mine = pt ? `<div class="el-sec">Моя группа <em>${n}/${ELITE.SIZE}${st.my && st.my.open ? " · набор открыт" : ""}</em></div>
+    <div class="el-mine">${pt.members.map(m => { const C = CLASSES[m.cls], ok = (+m.lvl || 1) >= ELITE.MIN;
+      return `<div class="el-m"><span class="el-mn" data-notr style="color:${C ? C.color : "#E4DED1"}">${m.id === pt.leader ? "★ " : ""}${esc(m.nick)}</span>
+        <span class="el-ml ${ok ? "" : "bad"}">${+m.lvl || 1} ур.${ok ? "" : " · нужен " + ELITE.MIN}</span>${m.online ? "" : `<span class="el-ml bad">не в сети</span>`}</div>`; }).join("")}
+      ${Array.from({length:Math.max(0, ELITE.SIZE - n)}, () => `<div class="el-m empty"><span>Свободное место</span></div>`).join("")}</div>
+    <button class="btn wide el-leave" type="button" data-el="leave">Покинуть группу</button>` : "";
+  // открытые группы
+  const open = (st.open || []).filter(g => !pt || g.pid !== pt.id);
+  const canJoin = net && lv && left >= 1 && !pt;
+  const list = open.length ? open.map(g => `<div class="el-g"><div class="el-gt"><b data-notr>★ ${esc(g.leader)}</b><small>${g.lvl} ур. · ${g.members.map(m => `<i style="background:${CLASSES[m.cls] ? CLASSES[m.cls].color : "#93A0AC"}"></i>`).join("")}</small></div>
+      <span class="el-gn">${g.n}/${ELITE.SIZE}</span><button class="act" type="button" data-el-join="${esc(g.pid)}" ${canJoin ? "" : "disabled"}>Вступить</button></div>`).join("")
+    : `<p class="el-none">${net ? "Открытых групп пока нет" : "Список групп появится, когда будет связь с сервером"}</p>`;
+  return `<div class="fr-head"><div class="fr-ic">${ELITE_ICON}</div><div class="fr-tx"><b>Элитная фарм-зона</b><small>Группа из ${ELITE.SIZE}</small>${pill}</div></div>
+    <div class="fr-tries"><small>Осталось минут сегодня</small><b>${left}/${ELITE.LIMIT} мин</b><span>${sub}</span></div>
+    ${btn}${mine}<div class="el-sec">Открытые группы</div><div class="el-open">${list}</div>`;
+}
+function elDropRows(){
+  const type = "el" + ELITE.rooms[1].hi, k = NPCS[type], D = mobDrops(type, "elite1");
+  const row = (ic, name, val, col) => `<div class="el-drop"><span class="el-di">${ic}</span><span class="el-dn" style="color:${col}">${name}</span><b style="color:${col}">${val}</b></div>`;
+  let h = row(`<svg viewBox="0 0 24 24" fill="none" stroke="#8FE07A" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>`, "Опыт", k.exp.toLocaleString("ru-RU"), "#8FE07A");
+  h += row(`<i class="el-scrap">⚙</i>`, "Лом", `${k.scrap[0]}–${k.scrap[1]} · ${Math.round(D.scrapChance*100)}%`, "#C9D1D8");
+  for(const i of D.items.filter(i => i.sect === "mat")) h += row(icon(i.id), ITEMS[i.id].name, pctF(i.chance), "#E4DED1");
+  for(const i of D.items.filter(i => i.sect === "sph")) h += row(i.id === "cores" ? coreIcon("ci-m") : icon(i.id), i.id === "cores" ? "Энергоядро" : ITEMS[i.id].name, pctF(i.chance), i.id === "sph_ti" ? "#F2C14B" : i.id === "cores" ? "#5FD4E8" : "#7BD58A");
+  // осколки уникальных сетов: шанс считает сервер (items.roll) — 4% на 15 ур. +0,1% за уровень; элитный множитель на них не действует
+  const sh = Math.min(0.6, (ELITE_SHARD[0] + ELITE_SHARD[1]*(k.lvl - SHARD_MIN_LVL))/100);
+  h += row(icon(SHARD_IDS[0]), "Осколок уникального сета (любой)", pctF(sh), "#C77DFF");
+  for(const i of D.items.filter(i => i.sect === "book" || i.sect === "bookp")){ const it = ITEMS[i.id], C = it.cls && CLASSES[it.cls];
+    h += row(icon(i.id), it.name, pctF(i.chance), C ? C.color : "#C9D1D8"); }
+  if(D.gear) D.gear.per.forEach((per, g) => { if(per) for(const id of D.gear.pool) h += row(icon(id, g), ITEMS[id].name, pctF(per), GRADES[g].color); });
+  return h;
+}
+const ELITE_SHARD = [4.0, 0.1];                 // SHARD_BASE и SHARD_STEP по умолчанию в items.py (сверяет test_elite.py)
+function renderElite(){
+  EL.sig = "";
+  body().innerHTML = `<section class="fr el" style="--c:#F2C14B"><div id="elDyn">${elDyn()}</div>
+    <div class="fr-grid"><div><small>Уровень</small><b>${ELITE.MIN}+</b></div><div><small>Когда</small><b>Доступно всегда</b></div>
+      <div><small>Игроки</small><b>${ELITE.SIZE}</b></div><div><small>Лимит</small><b>${ELITE.LIMIT} мин/день</b></div></div>
+    <h4 class="fr-how">Как это работает</h4>
+    <ol class="fr-steps"><li>Вход с ${ELITE.MIN} уровня, только полной группой из ${ELITE.SIZE} человек</li>
+      <li>Войти в зону может только лидер группы — он затягивает за собой остальных участников (группа из ${ELITE.SIZE} человек)</li>
+      <li>Если в зоне останется меньше ${ELITE.SIZE} человек группы, всех выводит из зоны</li>
+      <li>2 комнаты по ${ELITE.ROOM_N} монстров, сильнее обычных и вдвое быстрее — стоят пачками по 4, сами не нападают, но удар по одному будит всю пачку</li>
+      <li>Не более ${ELITE.LIMIT} минут в зоне на игрока в день</li>
+      <li>Погибший возрождается у входа в зону — группа остаётся в сборе</li></ol>
+    <h4 class="fr-how">Дроп с монстров</h4><p class="hint el-dh">Шансы — для монстра ${ELITE.rooms[1].hi} уровня: у элитных монстров ценный дроп ×${ELITE.LOOT} к обычным (кроме осколков)</p>
+    <div class="el-drops">${elDropRows()}</div></section>
+    <button class="btn wide" type="button" data-evback="1">← Все события</button>`;
+}
+function elRefresh(){
+  const box = document.getElementById("elDyn"); if(!box || sheetRender !== renderElite) return;
+  const h = elDyn(); if(h !== EL.sig){ EL.sig = h; box.innerHTML = h; }
+}
+function openElite(){ openSheet("События", "Регулярные активности", renderElite); elSend({op:"state"}); }
+setInterval(() => {                                // пока открыто окно — состояние раз в 2 с; в зоне — раз в 10 с (минуты)
+  const open = sheetRender === renderElite, zone = eliteLoc(locKey);
+  if(!(open || zone) || !elNet()) return;
+  if(performance.now() - EL.pollT > (open ? 2000 : 10000)){ EL.pollT = performance.now(); elSend({op:"state"}); }
+  if(open) elRefresh();
+}, 500);
+$("shBody").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b || b.disabled) return;
+  if(b.dataset.el){ b.disabled = true; elSend({op:b.dataset.el}); Sfx.play("ui"); }
+  else if(b.dataset.elJoin){ b.disabled = true; elSend({op:"join", pid:b.dataset.elJoin}); Sfx.play("ui"); }
+});
+{ const _onNetEl = onNetExtra;
+  onNetExtra = function(d){
+    if(d && d.t === "elite"){ EL.st = d; EL.leftT = performance.now(); if(sheetRender === renderElite) elRefresh(); return; }
+    if(d && d.t === "elite_go" && eliteLoc(d.loc)){
+      if(locKey === d.loc) return;
+      EL.pass = performance.now(); if(sheetRender) closeSheet(); showTab("game");
+      toast("★ Лидер ведёт группу в элитную зону"); travel(d.loc); return;
+    }
+    return _onNetEl(d);
+  }; }
+
+// ---- в зоне: вход только по сигналу сервера, возрождение у входа, предупреждение на выходе ----
+{ const _trEl = travel;
+  travel = function(key){
+    if(eliteLoc(key) && key !== locKey && !(EL.pass && performance.now() - EL.pass < 8000) && !window.NET_ADMIN){
+      toast("В элитную зону группу заводит лидер: События → Элитная фарм-зона"); return; }
+    if(key === "lobby" && eliteLoc(locKey) && p && p.dead){ elRespawn(); return; }    // гибель в зоне — не выход из неё
+    if(eliteLoc(key)) EL.pass = 0;
+    return _trEl(key);
+  }; }
+function elRespawn(){
+  $("death").classList.remove("show");
+  S.hp = stat().maxhp; Object.assign(p, {x:ELITE.spawn.x, y:ELITE.spawn.y, dead:false, deadT:0, inv:2, vx:0, vy:0, dashT:0, target:null});
+  for(const e of enemies) if(e.chase && (!e.owner || e.owner === (typeof NET !== "undefined" ? NET.id : 0))){ e.chase = false; e.roomAggro = false; }
+  toast("Возрождение у входа в зону"); save();
+}
+{ const _hurtEl = hurtPlayer;
+  hurtPlayer = function(dmg, by, src){
+    const was = p && p.dead, r = _hurtEl(dmg, by, src);
+    if(!was && p && p.dead && eliteLoc(locKey)){ const sm = $("death").querySelector(".death-box small"); if(sm) sm.textContent = "возрождение у входа в зону…"; }
+    return r;
+  }; }
+{ const _openBackEl = openBackPortal;
+  openBackPortal = function(){
+    if(!eliteLoc(locKey)) return _openBackEl();
+    openSheet("Выход из элитной зоны", "Элитная фарм-зона", () => {
+      $("shBody").innerHTML = `<p class="hint">Если в зоне останется меньше ${ELITE.SIZE} человек группы, всех выведет из зоны.</p><button class="btn pri wide" type="button" data-go="lobby">Покинуть зону</button>`;
+    });
+  }; }
+// плашка в зоне: минуты на сегодня и сколько участников группы в зоне
+const elPill = document.createElement("div"); elPill.className = "fear-wave el-pill"; elPill.hidden = true;
+document.getElementById("scrGame").append(elPill);
+setInterval(() => {
+  const on = eliteLoc(locKey); document.body.classList.toggle("el-run", on); if(!on) EL.inLoc = "";
+  if(elPill.hidden === on) elPill.hidden = !on; if(!on) return;
+  const pt = elParty(), inside = pt ? pt.members.filter(m => m.online && m.loc === locKey).length : 1, low = pt && inside < ELITE.SIZE;
+  if(EL.inLoc !== locKey){ EL.inLoc = locKey; EL.inT = now; }                     // только вошли: группа ещё подтягивается
+  const txt = "★ " + elMin() + " мин" + (pt ? " · в зоне " + inside + "/" + ELITE.SIZE : "");
+  if(elPill._t !== txt){ elPill._t = txt; elPill.textContent = txt; }
+  elPill.classList.toggle("low", !!low && now - EL.inT > 8);
+  if(low && now - EL.inT > 8 && now > EL.warn){ EL.warn = now + 6; toast("В зоне меньше " + ELITE.SIZE + " человек группы — скоро всех выведет"); }
+}, 500);
+
+// ---- вид: золотое кольцо под элитными монстрами, знаки залов, тёплый свет ----
+{ const _deEl = drawEnemy;
+  drawEnemy = function(e, t){
+    const k = NPCS[e.type];
+    if(k && k.elite){
+      const rv = k.r*MOB_K, pu = .55 + Math.sin(t*3 + (e.pack || 0))*.2;
+      ctx.save(); ctx.globalAlpha = pu; ctx.strokeStyle = "#F2C14B"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(e.x, e.y + rv*0.55, rv + 7, (rv + 7)*0.42, 0, 0, Math.PI*2); ctx.stroke();
+      if(e.chase){ ctx.globalAlpha = .25; ctx.fillStyle = "#FF6A3A"; ctx.fill(); }
+      ctx.restore();
+    }
+    return _deEl(e, t);
+  }; }
+{ const _ddEl = drawDungeon;
+  drawDungeon = function(cx, cy, t){
+    const r = _ddEl(cx, cy, t);
+    if(!eliteLoc(locKey)) return r;
+    for(const rm of dgRooms){
+      if(!rm.elitePacks || rm.x > cx + vw || rm.x + rm.w < cx || rm.y > cy + vh || rm.y + rm.h < cy) continue;
+      ctx.save(); ctx.globalAlpha = .16; ctx.strokeStyle = "#F2C14B"; ctx.lineWidth = 6;               // знак зала на полу
+      ctx.beginPath(); for(let i = 0; i < 6; i++){ const a = Math.PI/6 + i*Math.PI/3; ctx.lineTo(rm.cx + Math.cos(a)*170, rm.cy + Math.sin(a)*170*.8); } ctx.closePath(); ctx.stroke();
+      ctx.globalAlpha = .1; ctx.fillStyle = "#F2C14B"; ctx.beginPath();
+      for(let i = 0; i < 10; i++){ const a = -Math.PI/2 + i*Math.PI/5, rr2 = i % 2 ? 48 : 110; ctx.lineTo(rm.cx + Math.cos(a)*rr2, rm.cy + Math.sin(a)*rr2*.8); } ctx.closePath(); ctx.fill();
+      ctx.restore();
+      nameText(T(rm.name) + " · " + T("ур.") + " " + rm.lv, rm.door.x, rm.door.y - 40, "#F2C14B", "700 14px Rubik, sans-serif");
+    }
+    return r;
+  }; }
+for(let i = 1; i <= ELITE.SLOTS; i++) AMB["elite" + i] = {tint:"rgba(242,193,75,.05)", kind:"ember", n:26, c:["#FFE08A", "#F2C14B"]};
+
 // ===================== КРОВАВАЯ БАШНЯ =====================
 // Каждый день 20:30 МСК: запись 5 минут, затем общий старт. Своя дорога: 60 монстров 5 ур. → барьер →
 // 60 монстров 10 ур. → барьер → общий босс «Багровый Страж» (прочность общая, без дропа).
@@ -14585,6 +14872,8 @@ Object.assign(I18N, {"ЦЕЛЬ": ["TARGET", "ЦІЛЬ", "OBJ.", "HEDEF", "ALVO"]
 Object.assign(I18N, {"Попыток на сегодня": ["Attempts today", "Спроб на сьогодні", "Intentos de hoy", "Bugünkü haklar", "Tentativas de hoje"], "Войдите, чтобы начать": ["Enter to begin", "Увійдіть, щоб почати", "Entra para empezar", "Başlamak için gir", "Entre para começar"], "Новые попытки — в 00:00 МСК": ["New attempts at 00:00 MSK", "Нові спроби — о 00:00 МСК", "Nuevos intentos a las 00:00 MSK", "Yeni haklar 00:00 MSK'da", "Novas tentativas às 00:00 MSK"], "Когда": ["When", "Коли", "Cuándo", "Ne zaman", "Quando"], "Соло": ["Solo", "Соло", "Solo", "Solo", "Solo"], "Попытки": ["Attempts", "Спроби", "Intentos", "Haklar", "Tentativas"], "Можно начать": ["Ready to start", "Можна почати", "Puedes empezar", "Başlayabilirsin", "Pode começar"], "Попытки закончились": ["No attempts left", "Спроби скінчилися", "Sin intentos", "Hak kalmadı", "Sem tentativas"], "Как это работает": ["How it works", "Як це працює", "Cómo funciona", "Nasıl çalışır", "Como funciona"], "{n} попытки в день, тратится при входе": ["{n} attempts a day, spent on entry", "{n} спроби на день, витрачається при вході", "{n} intentos al día, se gasta al entrar", "Günde {n} hak, girişte harcanır", "{n} tentativas por dia, gasta ao entrar"], "Монстры приходят волнами по {n}, уровень волны растёт с каждой": ["Monsters come in waves of {n}, the wave level rises every time", "Монстри приходять хвилями по {n}, рівень хвилі росте з кожною", "Los monstruos llegan en oleadas de {n}, el nivel sube con cada una", "Canavarlar {n}'lik dalgalarla gelir, seviye her dalgada artar", "Os monstros vêm em ondas de {n}, o nível sobe a cada onda"], "Дойдите до волны {n}, чтобы пройти испытание целиком": ["Reach wave {n} to clear the whole trial", "Дійдіть до хвилі {n}, щоб пройти випробування повністю", "Llega a la oleada {n} para superar toda la prueba", "Denemenin tamamı için {n}. dalgaya ulaş", "Chegue à onda {n} para concluir a prova inteira"], "Смерть выбрасывает из подземелья в центральный ангар": ["Death throws you out of the dungeon to the Central Hangar", "Смерть викидає з підземелля в центральний ангар", "La muerte te expulsa de la mazmorra al hangar central", "Ölüm seni zindandan merkez hangara atar", "A morte te expulsa da masmorra para o hangar central"], "Нет попыток": ["No attempts", "Немає спроб", "Sin intentos", "Hak yok", "Sem tentativas"], "Монстры появятся через": ["Monsters arrive in", "Монстри з'являться через", "Los monstruos llegan en", "Canavarlar geliyor", "Os monstros chegam em"], "Испытание пройдено!": ["Trial cleared!", "Випробування пройдено!", "¡Prueba superada!", "Deneme tamamlandı!", "Prova concluída!"], "Испытание «Страх» пройдено: все {n} волн!": ["Fear trial cleared: all {n} waves!", "Випробування «Страх» пройдено: усі {n} хвиль!", "Prueba «Miedo» superada: ¡las {n} oleadas!", "Korku denemesi tamamlandı: {n} dalganın hepsi!", "Prova «Medo» concluída: todas as {n} ondas!"], "Пройдено волн: {n} из {m}": ["Waves cleared: {n} of {m}", "Пройдено хвиль: {n} з {m}", "Oleadas superadas: {n} de {m}", "Geçilen dalga: {n}/{m}", "Ondas concluídas: {n} de {m}"], "В «Страх» входят через События": ["Fear is entered from Events", "У «Страх» входять через Події", "A «Miedo» se entra desde Eventos", "Korku'ya Etkinlikler'den girilir", "Entra-se no «Medo» pelos Eventos"], "«Страх» открывается с {n} уровня": ["Fear unlocks at level {n}", "«Страх» відкривається з {n} рівня", "«Miedo» se abre en el nivel {n}", "Korku {n}. seviyede açılır", "«Medo» abre no nível {n}"], "Попытки на сегодня закончились": ["No attempts left for today", "Спроби на сьогодні скінчилися", "No quedan intentos por hoy", "Bugünlük hak kalmadı", "Acabaram as tentativas de hoje"], "попытки на сегодня закончились": ["no attempts left for today", "спроби на сьогодні скінчилися", "no quedan intentos por hoy", "bugünlük hak kalmadı", "acabaram as tentativas de hoje"], "Выход из подземелья": ["Dungeon exit", "Вихід із підземелля", "Salida de la mazmorra", "Zindan çıkışı", "Saída da masmorra"], "Забег закончится, а попытка не вернётся.": ["The run will end and the attempt won't come back.", "Забіг закінчиться, а спроба не повернеться.", "La partida terminará y el intento no se devuelve.", "Koşu biter ve hak geri gelmez.", "A corrida termina e a tentativa não volta."], "Покинуть подземелье": ["Leave the dungeon", "Покинути підземелля", "Salir de la mazmorra", "Zindandan çık", "Sair da masmorra"], "Неистовый": ["Frenzied", "Шалений", "Frenético", "Çılgın", "Frenético"], "Багровый": ["Crimson", "Багряний", "Carmesí", "Kızıl", "Carmesim"], "Обсидиановый": ["Obsidian", "Обсидіановий", "Obsidiano", "Obsidyen", "Obsidiano"], "Ртутный": ["Mercurial", "Ртутний", "Mercurial", "Cıva", "Mercurial"], "Инфернальный": ["Hellish", "Інфернальний", "Infernal", "Cehennemî", "Infernal"], "Безумный": ["Mad", "Божевільний", "Loco", "Deli", "Louco"], "Неудержимый": ["Unstoppable", "Нестримний", "Imparable", "Durdurulamaz", "Imparável"], "Коварный": ["Treacherous", "Підступний", "Traicionero", "Hain", "Traiçoeiro"], "Безжалостный": ["Ruthless", "Нещадний", "Despiadado", "Acımasız", "Impiedoso"], "Колоссальный": ["Colossal", "Колосальний", "Colosal", "Devasa", "Colossal"], "Мрачный": ["Grim", "Похмурий", "Sombrío", "Kasvetli", "Sombrio"], "Роковой": ["Doom", "Фатальний", "Fatal", "Uğursuz", "Fatídico"], "Сумеречный": ["Twilight", "Сутінковий", "Crepuscular", "Alacakaranlık", "Crepuscular"], "Громадный": ["Massive", "Величезний", "Enorme", "Koca", "Enorme"], "Безликий": ["Faceless", "Безликий", "Sin rostro", "Yüzsüz", "Sem rosto"], "Испепеляющий": ["Incinerating", "Спопеляючий", "Incinerador", "Kül eden", "Incinerador"], "Неумолимый": ["Relentless", "Невблаганний", "Implacable", "Amansız", "Implacável"], "Предвечный": ["Primeval", "Предвічний", "Primigenio", "Ezeli", "Primevo"], "Непобедимый": ["Invincible", "Непереможний", "Invencible", "Yenilmez", "Invencível"], "страж": ["guard", "вартовий", "guardián", "muhafız", "guardião"], "воин": ["warrior", "воїн", "guerrero", "savaşçı", "guerreiro"], "охотник": ["hunter", "мисливець", "cazador", "avcı", "caçador"], "рубака": ["slasher", "рубака", "tajador", "kesici", "retalhador"], "ветеран": ["veteran", "ветеран", "veterano", "kıdemli", "veterano"], "громила": ["brute", "громило", "bruto", "zorba", "brutamontes"], "берсерк": ["berserker", "берсерк", "berserker", "berserker", "berserker"], "палач": ["executioner", "кат", "verdugo", "cellat", "carrasco"], "чемпион": ["champion", "чемпіон", "campeón", "şampiyon", "campeão"], "гладиатор": ["gladiator", "гладіатор", "gladiador", "gladyatör", "gladiador"], "каратель": ["punisher", "каратель", "castigador", "cezalandırıcı", "punidor"], "разрушитель": ["destroyer", "руйнівник", "destructor", "yıkıcı", "destruidor"], "истребитель": ["exterminator", "винищувач", "exterminador", "imha edici", "exterminador"], "опустошитель": ["ravager", "спустошувач", "devastador", "harap edici", "devastador"], "вожак": ["alpha", "ватажок", "cabecilla", "elebaşı", "líder"], "лорд": ["lord", "лорд", "señor", "lord", "lorde"], "тиран": ["tyrant", "тиран", "tirano", "tiran", "tirano"], "повелитель": ["overlord", "володар", "soberano", "hükümdar", "soberano"], "владыка": ["sovereign", "владика", "monarca", "efendi", "monarca"], "титан": ["titan", "титан", "titán", "titan", "titã"]});
 // мировой босс в своём логове: вход, возврат к боссу, PvP
 Object.assign(I18N, {"Логово Владыки": ["Overlord's Lair", "Лігво Володаря", "Guarida del Señor", "Hükümdarın İni", "Covil do Senhor"], "Мировой босс · PvP-зона": ["World boss · PvP zone", "Світовий бос · PvP-зона", "Jefe mundial · zona PvP", "Dünya patronu · PvP bölgesi", "Chefe mundial · zona PvP"], "К боссу": ["To the boss", "До боса", "Al jefe", "Patrona", "Ao chefe"], "Вернуться к боссу — кнопка «⚔ К боссу» в ангаре": ["Back to the boss: the «⚔ To the boss» button in the hangar", "Повернутися до боса — кнопка «⚔ До боса» в ангарі", "Volver al jefe: botón «⚔ Al jefe» en el hangar", "Patrona dön: hangardaki «⚔ Patrona» düğmesi", "Voltar ao chefe: botão «⚔ Ao chefe» no hangar"], "Мировой босс ушёл — возврат в ангар": ["The world boss is gone — back to the hangar", "Світовий бос пішов — повернення в ангар", "El jefe mundial se fue: vuelta al hangar", "Dünya patronu gitti — hangara dönüş", "O chefe mundial foi embora — volta ao hangar"], "Мировой босс сейчас не в логове. Расписание — в Событиях": ["The world boss isn't in its lair now. Schedule — in Events", "Світового боса зараз немає в лігві. Розклад — у Подіях", "El jefe mundial no está en su guarida. Horario: en Eventos", "Dünya patronu şu an ininde değil. Program — Etkinlikler'de", "O chefe mundial não está no covil agora. Horário — em Eventos"], "Мировой босс сейчас не в логове": ["The world boss isn't in its lair now", "Світового боса зараз немає в лігві", "El jefe mundial no está en su guarida", "Dünya patronu şu an ininde değil", "O chefe mundial não está no covil agora"], "Добыча мирового босса": ["World boss loot", "Здобич світового боса", "Botín del jefe mundial", "Dünya patronu ganimeti", "Saque do chefe mundial"], "Логово Владыки · прочность босса {n}% · PvP-зона": ["Overlord's Lair · boss hull {n}% · PvP zone", "Лігво Володаря · міцність боса {n}% · PvP-зона", "Guarida del Señor · integridad del jefe {n}% · zona PvP", "Hükümdarın İni · patron dayanıklılığı %{n} · PvP bölgesi", "Covil do Senhor · integridade do chefe {n}% · zona PvP"], "Босс повержен — добыча ещё лежит в логове": ["Boss defeated — the loot is still in the lair", "Боса переможено — здобич ще лежить у лігві", "Jefe derrotado: el botín sigue en la guarida", "Patron yenildi — ganimet hâlâ inde", "Chefe derrotado — o saque ainda está no covil"], "Босс в логове!": ["Boss in the lair!", "Бос у лігві!", "¡El jefe está en la guarida!", "Patron inde!", "Chefe no covil!"], "Ты уже в логове": ["You're already in the lair", "Ти вже в лігві", "Ya estás en la guarida", "Zaten indesin", "Você já está no covil"], "Босс повержен": ["Boss defeated", "Боса переможено", "Jefe derrotado", "Patron yenildi", "Chefe derrotado"], "Добыча ещё лежит в логове": ["The loot is still in the lair", "Здобич ще лежить у лігві", "El botín sigue en la guarida", "Ganimet hâlâ inde", "O saque ainda está no covil"], "В логово": ["To the lair", "До лігва", "A la guarida", "İne", "Ao covil"], "Босс появляется в своём логове. Вход — через События или портал в ангаре, пока босс жив.": ["The boss appears in its lair. Enter via Events or the hangar portal while the boss is alive.", "Бос з'являється у своєму лігві. Вхід — через Події або портал в ангарі, поки бос живий.", "El jefe aparece en su guarida. Entra desde Eventos o el portal del hangar mientras viva.", "Patron kendi ininde belirir. Patron yaşadıkça Etkinlikler'den veya hangar portalından gir.", "O chefe aparece no seu covil. Entre por Eventos ou pelo portal do hangar enquanto ele estiver vivo."], "В логове PvP: другие пилоты могут атаковать. Ремонт после гибели бесплатный.": ["PvP in the lair: other pilots can attack. Repair after death is free.", "У лігві PvP: інші пілоти можуть атакувати. Ремонт після загибелі безкоштовний.", "PvP en la guarida: otros pilotos pueden atacar. La reparación tras morir es gratis.", "İnde PvP var: diğer pilotlar saldırabilir. Ölümden sonra onarım ücretsiz.", "PvP no covil: outros pilotos podem atacar. O reparo após morrer é grátis."], "Погиб — возвращайся сразу: кнопка «⚔ К боссу» в ангаре.": ["Died? Come right back: the «⚔ To the boss» button in the hangar.", "Загинув — повертайся одразу: кнопка «⚔ До боса» в ангарі.", "¿Has caído? Vuelve enseguida: botón «⚔ Al jefe» en el hangar.", "Öldün mü? Hemen dön: hangardaki «⚔ Patrona» düğmesi.", "Morreu? Volte já: botão «⚔ Ao chefe» no hangar."], "Мировой босс сейчас в логове": ["The world boss is in its lair now", "Світовий бос зараз у лігві", "El jefe mundial está ahora en su guarida", "Dünya patronu şu an ininde", "O chefe mundial está no covil agora"], "Мировой босс «Владыка Ржавчины» появился в своём логове! Вход — портал в ангаре или События": ["World boss «Rust Overlord» has appeared in its lair! Enter via the hangar portal or Events", "Світовий бос «Володар Іржі» з'явився у своєму лігві! Вхід — портал в ангарі або Події", "¡El jefe mundial «Señor del Óxido» apareció en su guarida! Entra por el portal del hangar o Eventos", "Dünya patronu «Pas Efendisi» ininde belirdi! Giriş — hangar portalı veya Etkinlikler", "O chefe mundial «Senhor da Ferrugem» surgiu no covil! Entre pelo portal do hangar ou Eventos"], "Владыка Ржавчины повержен! Добыча лежит в логове": ["Rust Overlord is defeated! The loot is in the lair", "Володаря Іржі переможено! Здобич лежить у лігві", "¡Señor del Óxido derrotado! El botín está en la guarida", "Pas Efendisi yenildi! Ganimet inde", "Senhor da Ferrugem derrotado! O saque está no covil"], "Мировой босс «Владыка Ржавчины» ушёл непобеждённым": ["World boss «Rust Overlord» left undefeated", "Світовий бос «Володар Іржі» пішов непереможеним", "El jefe mundial «Señor del Óxido» se fue invicto", "Dünya patronu «Pas Efendisi» yenilmeden gitti", "O chefe mundial «Senhor da Ferrugem» partiu invicto"]});
+// элитная фарм-зона: окно события, группы, зона, монстры, сообщения сервера
+Object.assign(I18N, {"Группа из {n}": ["Group of {n}", "Група з {n}", "Grupo de {n}", "{n} kişilik grup", "Grupo de {n}"], "Лимит на сегодня исчерпан": ["Today's limit is used up", "Ліміт на сьогодні вичерпано", "Límite de hoy agotado", "Bugünkü sınır doldu", "Limite de hoje esgotado"], "Лимит на сегодня": ["Daily limit reached", "Ліміт на сьогодні", "Límite diario", "Günlük sınır", "Limite diário"], "Ты в элитной зоне": ["You're in the elite zone", "Ти в елітній зоні", "Estás en la zona élite", "Elit bölgedesin", "Você está na zona de elite"], "Ты в зоне": ["You're in the zone", "Ти в зоні", "Estás en la zona", "Bölgedesin", "Você está na zona"], "Новые минуты — в 00:00 МСК": ["New minutes at 00:00 MSK", "Нові хвилини — о 00:00 МСК", "Nuevos minutos a las 00:00 MSK", "Yeni dakikalar 00:00 MSK'da", "Novos minutos às 00:00 MSK"], "Не все готовы: нужен {n} уровень и быть в сети": ["Not everyone is ready: level {n} and online are required", "Не всі готові: потрібен {n} рівень і бути в мережі", "No todos están listos: hace falta nivel {n} y estar en línea", "Herkes hazır değil: {n}. seviye ve çevrimiçi olmak gerekli", "Nem todos estão prontos: nível {n} e estar online"], "Группа в сборе — входите": ["The group is complete — go in", "Група в зборі — заходьте", "El grupo está completo: entrad", "Grup tamam — girin", "O grupo está completo — entrem"], "Группа в сборе — лидер заводит в зону": ["The group is complete — the leader takes it in", "Група в зборі — лідер заводить у зону", "El grupo está completo: el líder lo lleva a la zona", "Grup tamam — lider bölgeye götürür", "O grupo está completo — o líder leva à zona"], "Создать группу": ["Create a group", "Створити групу", "Crear grupo", "Grup kur", "Criar grupo"], "В группе {n} человек — нужно ровно {m}": ["The group has {n} people — exactly {m} needed", "У групі {n} осіб — потрібно рівно {m}", "El grupo tiene {n} personas: hacen falta {m} exactas", "Grupta {n} kişi var — tam {m} gerekli", "O grupo tem {n} pessoas — precisa de exatamente {m}"], "Ждём лидера · {n}/{m}": ["Waiting for the leader · {n}/{m}", "Чекаємо лідера · {n}/{m}", "Esperando al líder · {n}/{m}", "Lider bekleniyor · {n}/{m}", "Aguardando o líder · {n}/{m}"], "Ждём игроков · {n}/{m}": ["Waiting for players · {n}/{m}", "Чекаємо гравців · {n}/{m}", "Esperando jugadores · {n}/{m}", "Oyuncular bekleniyor · {n}/{m}", "Aguardando jogadores · {n}/{m}"], "Открыть набор в группу": ["Open the group to players", "Відкрити набір у групу", "Abrir el grupo a jugadores", "Gruba alım aç", "Abrir o grupo para jogadores"], "Моя группа": ["My group", "Моя група", "Mi grupo", "Grubum", "Meu grupo"], "набор открыт": ["open to join", "набір відкрито", "abierto", "alım açık", "aberto"], "нужен {n} уровень": ["needs level {n}", "потрібен {n} рівень", "necesita nivel {n}", "{n}. seviye gerekli", "precisa do nível {n}"], "нужен {n}": ["needs {n}", "потрібен {n}", "necesita {n}", "{n} gerekli", "precisa {n}"], "Свободное место": ["Free slot", "Вільне місце", "Plaza libre", "Boş yer", "Vaga livre"], "Покинуть группу": ["Leave the group", "Покинути групу", "Salir del grupo", "Gruptan ayrıl", "Sair do grupo"], "Открытые группы": ["Open groups", "Відкриті групи", "Grupos abiertos", "Açık gruplar", "Grupos abertos"], "Открытых групп пока нет": ["No open groups yet", "Відкритих груп поки немає", "Aún no hay grupos abiertos", "Henüz açık grup yok", "Ainda não há grupos abertos"], "Список групп появится, когда будет связь с сервером": ["The group list will appear once connected to the server", "Список груп з'явиться, коли буде зв'язок із сервером", "La lista de grupos aparecerá al conectar con el servidor", "Grup listesi sunucuya bağlanınca görünür", "A lista de grupos aparece quando houver conexão com o servidor"], "Осталось минут сегодня": ["Minutes left today", "Залишилося хвилин сьогодні", "Minutos restantes hoy", "Bugün kalan dakika", "Minutos restantes hoje"], "Лимит": ["Limit", "Ліміт", "Límite", "Sınır", "Limite"], "{n} мин/день": ["{n} min/day", "{n} хв/день", "{n} min/día", "{n} dk/gün", "{n} min/dia"], "Вход с {n} уровня, только полной группой из {m} человек": ["Entry from level {n}, only as a full group of {m}", "Вхід з {n} рівня, лише повною групою з {m} осіб", "Entrada desde el nivel {n}, solo con un grupo completo de {m}", "{n}. seviyeden giriş, yalnızca {m} kişilik tam grupla", "Entrada a partir do nível {n}, só com um grupo completo de {m}"], "Войти в зону может только лидер группы — он затягивает за собой остальных участников (группа из {n} человек)": ["Only the group leader can enter the zone — they pull the other members in (a group of {n})", "Увійти в зону може лише лідер групи — він затягує за собою інших учасників (група з {n} осіб)", "Solo el líder del grupo puede entrar en la zona: arrastra consigo al resto (grupo de {n})", "Bölgeye yalnızca grup lideri girebilir — diğer üyeleri de yanında çeker ({n} kişilik grup)", "Só o líder do grupo pode entrar na zona — ele puxa os outros membros (grupo de {n})"], "Если в зоне останется меньше {n} человек группы, всех выводит из зоны": ["If fewer than {n} group members remain in the zone, everyone is taken out", "Якщо в зоні залишиться менше {n} осіб групи, всіх виводить із зони", "Si quedan menos de {n} miembros del grupo en la zona, todos salen de ella", "Bölgede {n} kişiden az grup üyesi kalırsa herkes bölgeden çıkarılır", "Se restarem menos de {n} membros do grupo na zona, todos são retirados"], "{n} комнаты по {m} монстров, сильнее обычных и вдвое быстрее — стоят пачками по {k}, сами не нападают, но удар по одному будит всю пачку": ["{n} rooms of {m} monsters, stronger than usual and twice as fast — they stand in packs of {k}, don't attack first, but hitting one wakes the whole pack", "{n} кімнати по {m} монстрів, сильніші за звичайних і вдвічі швидші — стоять зграями по {k}, самі не нападають, але удар по одному будить усю зграю", "{n} salas de {m} monstruos, más fuertes de lo normal y el doble de rápidos: están en grupos de {k}, no atacan primero, pero golpear a uno despierta a todo el grupo", "{m} canavarlı {n} oda; normalden güçlü ve iki kat hızlı — {k}'lü sürüler halinde durur, kendileri saldırmaz ama birine vurmak tüm sürüyü uyandırır", "{n} salas de {m} monstros, mais fortes que o normal e duas vezes mais rápidos — ficam em grupos de {k}, não atacam primeiro, mas acertar um acorda o grupo todo"], "Не более {n} минут в зоне на игрока в день": ["No more than {n} minutes in the zone per player per day", "Не більше {n} хвилин у зоні на гравця на день", "No más de {n} minutos en la zona por jugador al día", "Oyuncu başına günde en fazla {n} dakika", "No máximo {n} minutos na zona por jogador por dia"], "Погибший возрождается у входа в зону — группа остаётся в сборе": ["A fallen pilot respawns at the zone entrance — the group stays together", "Загиблий відроджується біля входу в зону — група залишається в зборі", "El caído reaparece en la entrada de la zona: el grupo sigue unido", "Ölen pilot bölge girişinde yeniden doğar — grup bir arada kalır", "Quem cai renasce na entrada da zona — o grupo continua junto"], "Дроп с монстров": ["Monster drops", "Дроп із монстрів", "Botín de monstruos", "Canavar ganimeti", "Saque dos monstros"], "Шансы — для монстра {n} уровня: у элитных монстров ценный дроп ×{m} к обычным (кроме осколков)": ["Chances are for a level {n} monster: elite monsters have ×{m} valuable drops vs. regular ones (except shards)", "Шанси — для монстра {n} рівня: в елітних монстрів цінний дроп ×{m} до звичайних (крім уламків)", "Probabilidades para un monstruo de nivel {n}: los élite dan botín valioso ×{m} frente a los normales (salvo fragmentos)", "Şanslar {n}. seviye canavar için: elit canavarlarda değerli ganimet normalin ×{m} katı (parçalar hariç)", "Chances para um monstro de nível {n}: monstros de elite têm saque valioso ×{m} em relação aos normais (exceto fragmentos)"], "Осколок уникального сета (любой)": ["Unique set shard (any)", "Уламок унікального сету (будь-який)", "Fragmento de conjunto único (cualquiera)", "Eşsiz set parçası (herhangi)", "Fragmento de conjunto único (qualquer)"], "Лидер ведёт группу в элитную зону": ["The leader is taking the group into the elite zone", "Лідер веде групу в елітну зону", "El líder lleva al grupo a la zona élite", "Lider grubu elit bölgeye götürüyor", "O líder leva o grupo à zona de elite"], "В элитную зону группу заводит лидер: События → Элитная фарм-зона": ["The leader takes the group into the elite zone: Events → Elite farm zone", "В елітну зону групу заводить лідер: Події → Елітна фарм-зона", "El líder lleva al grupo a la zona élite: Eventos → Zona de farmeo élite", "Gruba elit bölgeye lider götürür: Etkinlikler → Elit farm bölgesi", "O líder leva o grupo à zona de elite: Eventos → Zona de farm de elite"], "Возрождение у входа в зону": ["Respawned at the zone entrance", "Відродження біля входу в зону", "Reaparición en la entrada de la zona", "Bölge girişinde yeniden doğuş", "Renascimento na entrada da zona"], "возрождение у входа в зону…": ["respawning at the zone entrance…", "відродження біля входу в зону…", "reapareciendo en la entrada de la zona…", "bölge girişinde yeniden doğuluyor…", "renascendo na entrada da zona…"], "Выход из элитной зоны": ["Elite zone exit", "Вихід з елітної зони", "Salida de la zona élite", "Elit bölge çıkışı", "Saída da zona de elite"], "Если в зоне останется меньше {n} человек группы, всех выведет из зоны.": ["If fewer than {n} group members remain in the zone, everyone will be taken out.", "Якщо в зоні залишиться менше {n} осіб групи, всіх виведе із зони.", "Si quedan menos de {n} miembros del grupo en la zona, todos saldrán de ella.", "Bölgede {n} kişiden az grup üyesi kalırsa herkes çıkarılır.", "Se restarem menos de {n} membros do grupo na zona, todos serão retirados."], "Покинуть зону": ["Leave the zone", "Покинути зону", "Salir de la zona", "Bölgeden çık", "Sair da zona"], "в зоне {n}/{m}": ["in zone {n}/{m}", "у зоні {n}/{m}", "en la zona {n}/{m}", "bölgede {n}/{m}", "na zona {n}/{m}"], "В зоне меньше {n} человек группы — скоро всех выведет": ["Fewer than {n} group members in the zone — everyone will be taken out soon", "У зоні менше {n} осіб групи — скоро всіх виведе", "Hay menos de {n} miembros del grupo en la zona: pronto saldrán todos", "Bölgede {n} kişiden az grup üyesi var — yakında herkes çıkarılacak", "Menos de {n} membros do grupo na zona — em breve todos serão retirados"], "Выход из зоны": ["Zone exit", "Вихід із зони", "Salida de la zona", "Bölge çıkışı", "Saída da zona"], "Элитная зона": ["Elite zone", "Елітна зона", "Zona élite", "Elit bölge", "Zona de elite"], "Зал I": ["Hall I", "Зала I", "Sala I", "Salon I", "Salão I"], "Зал II": ["Hall II", "Зала II", "Sala II", "Salon II", "Salão II"], "Гвардейский": ["Guards", "Гвардійський", "De la guardia", "Muhafız", "Da guarda"], "Штурмовой": ["Assault", "Штурмовий", "De asalto", "Hücum", "De assalto"], "Карательный": ["Punitive", "Каральний", "Punitivo", "Cezalandırıcı", "Punitivo"], "Ударный": ["Strike", "Ударний", "De choque", "Darbe", "De choque"], "Тяжёлый": ["Heavy", "Важкий", "Pesado", "Ağır", "Pesado"], "Боевой": ["Battle", "Бойовий", "De combate", "Savaş", "De combate"], "Осадный": ["Siege", "Облоговий", "De asedio", "Kuşatma", "De cerco"], "Имперский": ["Imperial", "Імперський", "Imperial", "İmparatorluk", "Imperial"], "Багряный": ["Scarlet", "Багряний", "Escarlata", "Al", "Escarlate"], "Золотой": ["Golden", "Золотий", "Dorado", "Altın", "Dourado"], "Элитная зона открывается с {n} уровня": ["The elite zone opens at level {n}", "Елітна зона відкривається з {n} рівня", "La zona élite se abre en el nivel {n}", "Elit bölge {n}. seviyede açılır", "A zona de elite abre no nível {n}"], "Лимит {n} минут в элитной зоне на сегодня исчерпан": ["Today's {n}-minute elite zone limit is used up", "Ліміт {n} хвилин в елітній зоні на сьогодні вичерпано", "Se agotó el límite de {n} minutos de hoy en la zona élite", "Bugünkü {n} dakikalık elit bölge sınırı doldu", "O limite de {n} minutos na zona de elite de hoje acabou"], "лимит {n} минут на сегодня исчерпан": ["today's {n}-minute limit is used up", "ліміт {n} хвилин на сьогодні вичерпано", "se agotó el límite de {n} minutos de hoy", "bugünkü {n} dakikalık sınır doldu", "o limite de {n} minutos de hoje acabou"], "Открыть набор может только лидер группы": ["Only the group leader can open it to players", "Відкрити набір може лише лідер групи", "Solo el líder del grupo puede abrirlo", "Alımı yalnızca grup lideri açabilir", "Só o líder do grupo pode abrir para jogadores"], "Группа уже в сборе": ["The group is already complete", "Група вже в зборі", "El grupo ya está completo", "Grup zaten tamam", "O grupo já está completo"], "Группа создана — она видна в «Открытых группах»": ["Group created — it's listed in «Open groups»", "Групу створено — вона видна у «Відкритих групах»", "Grupo creado: aparece en «Grupos abiertos»", "Grup kuruldu — «Açık gruplar»da görünüyor", "Grupo criado — aparece em «Grupos abertos»"], "Сначала выйди из своей группы": ["Leave your group first", "Спершу вийди зі своєї групи", "Primero sal de tu grupo", "Önce kendi grubundan çık", "Primeiro saia do seu grupo"], "Эта группа уже закрыла набор": ["This group is no longer taking players", "Ця група вже закрила набір", "Este grupo ya no admite jugadores", "Bu grup artık oyuncu almıyor", "Este grupo já não aceita jogadores"], "В группе уже {n} человека": ["The group already has {n} people", "У групі вже {n} особи", "El grupo ya tiene {n} personas", "Grupta zaten {n} kişi var", "O grupo já tem {n} pessoas"], "вступил в группу": ["joined the group", "вступив у групу", "se unió al grupo", "gruba katıldı", "entrou no grupo"], "Сначала создай группу": ["Create a group first", "Спершу створи групу", "Primero crea un grupo", "Önce bir grup kur", "Primeiro crie um grupo"], "Войти в зону может только лидер группы": ["Only the group leader can enter the zone", "Увійти в зону може лише лідер групи", "Solo el líder del grupo puede entrar en la zona", "Bölgeye yalnızca grup lideri girebilir", "Só o líder do grupo pode entrar na zona"], "Нужна полная группа из {n} человек": ["A full group of {n} is needed", "Потрібна повна група з {n} осіб", "Hace falta un grupo completo de {n}", "{n} kişilik tam grup gerekli", "É preciso um grupo completo de {n}"], "Участник": ["Member", "Учасник", "Miembro", "Üye", "Membro"], "сейчас погиб — подождите возрождения": ["has just died — wait for the respawn", "щойно загинув — зачекайте відродження", "acaba de caer: esperad a que reaparezca", "az önce öldü — yeniden doğmasını bekleyin", "acabou de cair — aguardem o renascimento"], "уже в элитной зоне": ["is already in the elite zone", "вже в елітній зоні", "ya está en la zona élite", "zaten elit bölgede", "já está na zona de elite"], "в бою с игроком — подождите": ["is fighting a player — wait", "у бою з гравцем — зачекайте", "está en combate con un jugador: esperad", "bir oyuncuyla savaşıyor — bekleyin", "está lutando com um jogador — aguardem"], "Все элитные зоны заняты — попробуйте через минуту": ["All elite zones are busy — try again in a minute", "Усі елітні зони зайняті — спробуйте за хвилину", "Todas las zonas élite están ocupadas: probad en un minuto", "Tüm elit bölgeler dolu — bir dakika sonra deneyin", "Todas as zonas de elite estão ocupadas — tentem daqui a um minuto"], "В элитную зону группу заводит лидер": ["The leader takes the group into the elite zone", "В елітну зону групу заводить лідер", "El líder lleva al grupo a la zona élite", "Grubu elit bölgeye lider götürür", "O líder leva o grupo à zona de elite"], "В зоне осталось меньше {n} человек группы — всех вывели из зоны": ["Fewer than {n} group members were left in the zone — everyone was taken out", "У зоні залишилося менше {n} осіб групи — всіх вивели із зони", "Quedaron menos de {n} miembros del grupo en la zona: todos han salido", "Bölgede {n} kişiden az grup üyesi kaldı — herkes çıkarıldı", "Restaram menos de {n} membros do grupo na zona — todos foram retirados"], "В пати уже {n} игрока": ["The party already has {n} players", "У паті вже {n} гравці", "El grupo ya tiene {n} jugadores", "Grupta zaten {n} oyuncu var", "O grupo já tem {n} jogadores"]});
 
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:

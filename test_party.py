@@ -4,16 +4,20 @@
 и рвали соединение игрока. Запуск: python -m unittest test_party
 """
 import asyncio
+import sys
 import time
 import types
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import elite  # noqa: E402
+
 SRC = (Path(__file__).resolve().parent / "webserver.py").read_text(encoding="utf-8")
 
 
 def load():
-    ns = {"time": time, "asyncio": asyncio,
+    ns = {"time": time, "asyncio": asyncio, "elite": elite,
           "metrics": types.SimpleNamespace(inc=lambda *a, **k: None),
           "pvpguard": types.SimpleNamespace(in_combat=lambda *a: False, heal=lambda *a: None, combat_left=lambda *a: 0)}
     a = SRC.index("PARTY_MAX = 4")
@@ -78,6 +82,74 @@ class PartyTest(unittest.TestCase):
     def test_kick_stale_party(self):
         self.ns["member_party"][1] = "gone"                  # пати уже нет — кик не падает
         self.act("pkick", 1, 2)
+
+
+class EliteGroupTest(unittest.TestCase):
+    """Элитная фарм-зона: группа на основе пати, «Открытые группы», вход лидера, правило трёх."""
+    def setUp(self):
+        self.ns, self.on, self.sent = load()
+        elite._used.clear(); elite._last.clear(); elite._runs.clear(); elite._open.clear()
+        for u in self.on.values():
+            u["lvl"] = 30
+        self.pushed = []
+        self.conn = types.SimpleNamespace(push=lambda p: self.pushed.append(p))
+        self.ns["in_pvp_combat"] = lambda i: False
+
+    def op(self, uid, op, **kw):
+        asyncio.run(self.ns["handle_elite"]({"t": "elite", "op": op, **kw}, self.on[uid], self.conn))
+        return self.pushed[-1]                                # ответ — состояние окна
+
+    def test_create_join_enter(self):
+        st = self.op(1, "create")
+        pid = self.ns["member_party"][1]
+        self.assertTrue(self.ns["parties"][pid]["elite"])
+        self.assertTrue(elite.is_open(pid))
+        self.assertEqual(st["my"]["pid"], pid)
+        st2 = self.op(2, "state")
+        self.assertEqual([g["pid"] for g in st2["open"]], [pid])    # группа видна в «Открытых группах»
+        self.op(2, "join", pid=pid)
+        self.op(3, "join", pid=pid)
+        self.assertEqual(sorted(self.ns["parties"][pid]["members"]), [1, 2, 3])
+        self.assertFalse(elite.is_open(pid))                        # в сборе — из списка убрана
+        self.op(4, "join", pid=pid)
+        self.assertNotIn(4, self.ns["member_party"])                # четвёртый не помещается
+        self.op(2, "enter")
+        self.assertIsNone(elite.run_of_pid(pid))                    # войти может только лидер
+        self.op(1, "enter")
+        loc = elite.run_of_pid(pid)
+        self.assertIn(loc, elite.LOCS)
+        go = [u for u, p in self.sent if isinstance(p, dict) and p.get("t") == "elite_go" and p["loc"] == loc]
+        self.assertEqual(sorted(go), [1, 2, 3])                     # лидер затягивает всех троих
+
+    def test_low_level_and_not_full(self):
+        self.op(1, "create")
+        pid = self.ns["member_party"][1]
+        self.op(1, "enter")
+        self.assertIsNone(elite.run_of_pid(pid))                    # не полная группа
+        self.on[5]["lvl"] = 20
+        self.op(5, "join", pid=pid)
+        self.assertNotIn(5, self.ns["member_party"])                # 20 уровень — нельзя
+
+    def test_lone_leader_keeps_group_open(self):
+        self.op(1, "create")
+        pid = self.ns["member_party"][1]
+        self.op(2, "join", pid=pid)
+        self.op(2, "leave")
+        self.assertIn(pid, self.ns["parties"])                      # лидер ждёт дальше, группа снова открыта
+        self.assertTrue(elite.is_open(pid))
+        self.op(1, "leave")
+        self.assertNotIn(pid, self.ns["parties"])
+
+    def test_elite_party_cap_for_invites(self):
+        self.op(1, "create")
+        pid = self.ns["member_party"][1]
+        for u in (2, 3, 4):
+            self.act_inv(1, u)
+        self.assertEqual(len(self.ns["parties"][pid]["members"]), elite.SIZE)
+
+    def act_inv(self, a, b):
+        asyncio.run(self.ns["handle_party"]({"t": "pinv", "to": b}, self.on[a]))
+        asyncio.run(self.ns["handle_party"]({"t": "pacc", "to": a}, self.on[b]))
 
 
 if __name__ == "__main__":

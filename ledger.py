@@ -40,6 +40,7 @@ NPCS = {   # id: (lvl, [лом мин, макс], {материал: вес})
 }
 DG_BASE = ("scrap_crawler", "rogue_drone", "sentry_bot", "war_walker")
 FEAR_BASE, FEAR_WAVES = ("scrap_crawler", "rogue_drone", "war_walker"), 59   # монстры «Страха» fw1…fw59 (NPCS["fw" + w] в игре)
+ELITE_RANGE, ELITE_LOOT = (26, 36), 2          # элитные монстры el26…el36: лом ×2, шансы дропа ×2 (как ELITE в игре и items.ELITE_LOOT)
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6}
 LOC_CORES = {"reactor_ruins", "iron_canyon"}   # локации с флагом cores в LOCS
 TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
@@ -62,6 +63,12 @@ def mob_info(mob):
             if pre == "db":
                 scrap = (scrap[0] * 10, scrap[1] * 10)
             return L, scrap, loot, pre == "db"
+    if mob.startswith("el") and mob[2:].isdigit():             # элитная зона: как моб подземелья того же уровня, лом ×2
+        L = int(mob[2:])
+        if not ELITE_RANGE[0] <= L <= ELITE_RANGE[1]:
+            return None
+        loot = {k: round(v * 0.6, 3) for k, v in NPCS[DG_BASE[(L - 1) % 4]][2].items()}
+        return L, ((L + 1) * 2, (2 * L + 4) * 2), loot, False
     if mob.startswith("fw") and mob[2:].isdigit():             # «Страх»: лом и материалы как у монстра подземелья того же уровня
         L = int(mob[2:])
         if not 1 <= L <= FEAR_WAVES:
@@ -80,6 +87,7 @@ def kill_income(mob, loc, vip_scrap=0.0, drop_bonus=0.0):
     if not info:
         return {}
     lv, scrap, loot, boss = info
+    em = ELITE_LOOT if mob.startswith("el") else 1             # элитный моб: шансы ×ELITE_LOOT
     if mob in NPCS:
         lv = lv or LOC_MIN.get(loc, 1)
     s = lv - 1
@@ -89,12 +97,12 @@ def kill_income(mob, loc, vip_scrap=0.0, drop_bonus=0.0):
     dm = 1 + drop_bonus + DROP_UP_MAX
     base = (0.13 + 0.0079 * s) / 100
     for mid, c in loot.items():
-        ch = base * max(0.3, min(1.0, c / 0.4))
+        ch = base * max(0.3, min(1.0, c / 0.4)) * em
         if boss:
             ch = min(0.9, ch * BOSS_LOOT)
         out[mid] = out.get(mid, 0) + min(1.0, ch * dm) * LEDGER_K
     if lv >= 3 or loc in LOC_CORES:
-        ch = (0.02 + 0.001 * s) / 100
+        ch = (0.02 + 0.001 * s) / 100 * em
         if boss:
             ch = min(0.9, ch * BOSS_LOOT)
         out["cores"] = min(1.0, ch * dm) * LEDGER_K

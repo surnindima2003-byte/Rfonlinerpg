@@ -39,10 +39,17 @@ LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6, "sector1": 1,
 DUNGEON_RANGE = {"sector1": (1, 20), "sector2": (21, 40), "arena_fear": (1, 40), "farm1": (21, 30), "season1": (21, 30)}
 # «Страх» (fear.py): свои монстры fw1…fw59 — уровень монстра равен номеру волны, водятся только в arena_fear
 FEAR_LOC, FEAR_WAVES = "arena_fear", 59
+# элитная фарм-зона (elite.py): элитные монстры el26…el36 — только в экземплярах elite1…elite6
+ELITE_LOCS, ELITE_RANGE = tuple(f"elite{i}" for i in range(1, 7)), (26, 36)
+ELITE_HP = 2.5                                            # прочность ×2,5 к мобу подземелья того же уровня (как NPCS["el…"] в игре)
 
 
 def mob_level(mob, loc):
     """Уровень моба в этой локации или None — такого моба здесь не бывает."""
+    m = re.fullmatch(r"el(\d{2})", mob or "")
+    if m:
+        lv = int(m.group(1))
+        return lv if loc in ELITE_LOCS and ELITE_RANGE[0] <= lv <= ELITE_RANGE[1] else None
     m = re.fullmatch(r"fw(\d{1,2})", mob or "")
     if m:
         lv = int(m.group(1))
@@ -72,6 +79,9 @@ def mob_hp(mob):
     """Прочность моба — зеркало NPCS из игры. None — такого моба нет."""
     if mob in BASE_HP:
         return BASE_HP[mob]
+    if len(mob) == 4 and mob[:2] == "el" and mob[2:].isdigit():
+        lv = int(mob[2:])
+        return _js_round(mob_hp(f"dg{lv}") * ELITE_HP) if ELITE_RANGE[0] <= lv <= ELITE_RANGE[1] else None
     if len(mob) >= 3 and mob[:2] == "fw" and mob[2:].isdigit():
         lv = int(mob[2:])                                 # монстр «Страха»: вдвое слабее монстра подземелья (fearHp в игре)
         return _js_round((20 + 14 * lv + 0.25 * lv * lv) * 0.5) if 1 <= lv <= FEAR_WAVES else None

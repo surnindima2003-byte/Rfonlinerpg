@@ -32,6 +32,7 @@ import mobguard
 
 ARENA = {"arena_fear", "lobby", "tower"}      # на арене волны свои у каждого, в ангаре мобов нет
 RESPAWN, RESPAWN_BOSS = 10, 300
+RESPAWN_ELITE = 45                   # элитные пачки (el…) возвращаются не сразу — зал можно зачистить
 REGEN_AFTER = 12                     # без ударов столько секунд — моб полностью восстанавливается
 OWNER_STALE = 2.0                    # владелец не присылал позицию столько секунд — моб свободен
 MAX_IDX = 5000
@@ -181,7 +182,7 @@ def _kill(loc, i, m, hub, now):
     if len(fights) >= mobguard.MAX_FIGHTS:
         fights.pop(next(iter(fights)))
     fights[iid] = [m["type"], m["max"], now, now]
-    m["dead_until"] = now + (RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN)
+    m["dead_until"] = now + (RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN_ELITE if m["type"].startswith("el") else RESPAWN)
     m["dmg"] = {}
     m["hp"] = m["max"]
     _dirty.get(loc, set()).discard(i)

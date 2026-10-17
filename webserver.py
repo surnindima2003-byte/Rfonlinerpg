@@ -40,6 +40,7 @@ import skillfx
 import worldboss
 import tower
 import fear
+import elite
 import vip
 import ledger
 from config import WEBAPP_URL
@@ -50,6 +51,8 @@ MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1", "wboss"}
 SEASON_LOC = "season1"                                   # сезонная зона: вход только с билетом сезона
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда (в логове мирового босса wboss — есть)
+LOCS |= set(elite.LOCS)                                # экземпляры элитной фарм-зоны (по одному на группу)
+SAFE_LOCS |= set(elite.LOCS)                           # в зоне только своя группа — PvP нет
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -1404,6 +1407,11 @@ guild_history = {}           # id гильдии -> deque сообщений (в
 
 # ---------- пати (до 4 игроков, живёт в памяти сервера) ----------
 PARTY_MAX = 4
+
+
+def party_cap(pid):
+    """Сколько человек помещается в пати: в группе элитной фарм-зоны — ровно elite.SIZE."""
+    return elite.SIZE if parties.get(pid, {}).get("elite") else PARTY_MAX
 parties = {}                 # id пати -> {"id", "leader", "members": [tg_id, ...]}
 member_party = {}            # tg_id -> id пати
 invites = {}                 # tg_id приглашённого -> {tg_id пригласившего: время}
@@ -1613,7 +1621,7 @@ def party_payload(pid):
         i = online(uid) or {}
         members.append({"id": uid, "nick": i.get("nick", "?"), "lvl": i.get("lvl", 1), "cls": i.get("cls", ""),
                         "hp": i.get("hp", 0), "mhp": i.get("mhp", 1), "loc": i.get("loc", ""), "online": bool(i)})
-    return {"id": pid, "leader": pt["leader"], "members": members}
+    return {"id": pid, "leader": pt["leader"], "members": members, "elite": bool(pt.get("elite")), "open": elite.is_open(pid)}
 
 
 async def send_party(pid, extra_uids=()):
@@ -1633,7 +1641,15 @@ async def party_leave(uid, kicked=False):
     await push_to_player(uid, {"t": "party", "party": None})
     if kicked:
         await push_to_player(uid, {"t": "pinfo", "text": "Тебя исключили из пати"})
+    if pt.get("elite") and pt["members"] and not elite.run_of_pid(pid):
+        # группа элитной зоны не распадается, пока в ней есть лидер: место освободилось — снова в «Открытых группах»
+        if pt["leader"] == uid:
+            pt["leader"] = pt["members"][0]
+        elite.set_open(pid, True)
+        await send_party(pid)
+        return
     if len(pt["members"]) <= 1:
+        elite.set_open(pid, False)
         for rest in pt["members"]:
             member_party.pop(rest, None)
             await push_to_player(rest, {"t": "party", "party": None})
@@ -1643,6 +1659,127 @@ async def party_leave(uid, kicked=False):
     if pt["leader"] == uid:
         pt["leader"] = pt["members"][0]
     await send_party(pid)
+
+
+async def elite_state(info):
+    """Состояние элитной фарм-зоны для окна события: минуты на сегодня, открытые группы, своя группа."""
+    uid = info["id"]
+    pid = member_party.get(uid)
+    groups = []
+    for gp, _t in sorted(elite._open.items(), key=lambda kv: kv[1]):
+        pt = parties.get(gp)
+        if not pt or len(pt["members"]) >= elite.SIZE or elite.run_of_pid(gp):
+            continue
+        li = online(pt["leader"])
+        if not li:
+            continue
+        groups.append({"pid": gp, "leader": li.get("nick", "?"), "lvl": int(li.get("lvl") or 1), "n": len(pt["members"]),
+                       "members": [{"cls": (online(m) or {}).get("cls", "")} for m in pt["members"]]})
+        if len(groups) >= 20:
+            break
+    my = None
+    if pid and pid in parties:
+        my = {"pid": pid, "open": elite.is_open(pid), "leader": parties[pid]["leader"] == uid, "run": elite.run_of_pid(pid)}
+    return {"t": "elite", "left": int(elite.left(uid)), "limit": elite.LIMIT, "open": groups, "my": my}
+
+
+async def handle_elite(d, info, conn):
+    """Элитная фарм-зона: create — открыть набор (создать группу), join — вступить в открытую группу,
+    leave — выйти из группы, enter — лидер заводит полную группу в зону, state — только состояние."""
+    op, uid = d.get("op"), info["id"]
+    admin = bool(info.get("admin"))
+    pid = member_party.get(uid)
+    if pid and pid not in parties:
+        member_party.pop(uid, None)
+        pid = None
+
+    def say(text):
+        conn.push(realtime.encode({"t": "pinfo", "text": text}))
+    lvl_ok = admin or int(info.get("lvl") or 1) >= elite.MIN_LVL
+    limit_txt = f"Лимит {elite.LIMIT // 60} минут в элитной зоне на сегодня исчерпан"
+    if op == "create":
+        if not lvl_ok:
+            say(f"Элитная зона открывается с {elite.MIN_LVL} уровня")
+        elif elite.left(uid) < 60:
+            say(limit_txt)
+        elif pid and parties[pid]["leader"] != uid:
+            say("Открыть набор может только лидер группы")
+        elif pid and len(parties[pid]["members"]) >= elite.SIZE:
+            say("Группа уже в сборе")
+        else:
+            if not pid:
+                pid = f"e{uid}-{int(time.time())}"
+                parties[pid] = {"id": pid, "leader": uid, "members": [uid]}
+                member_party[uid] = pid
+            parties[pid]["elite"] = True
+            elite.set_open(pid, True)
+            await send_party(pid)
+            say("Группа создана — она видна в «Открытых группах»")
+    elif op == "join":
+        target = str(d.get("pid") or "")[:48]
+        pt = parties.get(target)
+        if pid:
+            say("Сначала выйди из своей группы")
+        elif not pt or not elite.is_open(target) or elite.run_of_pid(target):
+            say("Эта группа уже закрыла набор")
+        elif len(pt["members"]) >= elite.SIZE:
+            say(f"В группе уже {elite.SIZE} человека")
+        elif not lvl_ok:
+            say(f"Элитная зона открывается с {elite.MIN_LVL} уровня")
+        elif elite.left(uid) < 60:
+            say(limit_txt)
+        else:
+            pt["members"].append(uid)
+            member_party[uid] = target
+            if len(pt["members"]) >= elite.SIZE:
+                elite.set_open(target, False)
+            await send_party(target)
+            for m in pt["members"]:
+                if m != uid:
+                    await push_to_player(m, {"t": "pinfo", "text": f"{info['nick']} вступил в группу"})
+    elif op == "leave":
+        if pid:
+            await party_leave(uid)
+    elif op == "enter":
+        if not pid:
+            say("Сначала создай группу")
+        elif parties[pid]["leader"] != uid:
+            say("Войти в зону может только лидер группы")
+        else:
+            members = list(parties[pid]["members"])
+            infos = {m: online(m) for m in members}
+            why = elite.check_enter(uid, members, infos, admin=admin)
+            busy = [i.get("nick", "?") for i in infos.values() if i and in_pvp_combat(i)]
+            if not why and busy:
+                why = f"{busy[0]} в бою с игроком — подождите"
+            if why:
+                say(why)
+            else:
+                loc = elite.start(pid, members, need=len(members) if admin else elite.SIZE)
+                if not loc:
+                    say("Все элитные зоны заняты — попробуйте через минуту")
+                else:
+                    for m in members:
+                        await push_to_player(m, {"t": "elite_go", "loc": loc})
+                    metrics.inc("elite.start")
+    conn.push(realtime.encode(await elite_state(info)))
+
+
+def elite_where(uid):
+    i = online(uid)
+    return i.get("loc") if i else None
+
+
+def elite_tick():
+    """Раз в секунду: лимит минут и правило «меньше 3 человек группы в зоне — всех выводит»."""
+    now = time.time()
+    for loc, uids, why in elite.tick(elite_where, now):
+        for u in uids:
+            i = online(u)
+            if i and i.get("loc") == loc and now - i.get("el_kick", 0) > 3:
+                i["el_kick"] = now
+                hub.to_uid(u, {"t": "loc_fix", "loc": "lobby", "x": 500, "y": 640, "text": why})
+        metrics.inc("elite.kick")
 
 
 async def handle_party(d, info):
@@ -1663,8 +1800,8 @@ async def handle_party(d, info):
             pid = None
         if pid and (parties[pid]["leader"] != uid):
             return await push_to_player(uid, {"t": "pinfo", "text": "Приглашать может только лидер пати"})
-        if pid and len(parties[pid]["members"]) >= PARTY_MAX:
-            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        if pid and len(parties[pid]["members"]) >= party_cap(pid):
+            return await push_to_player(uid, {"t": "pinfo", "text": f"В пати уже {party_cap(pid)} игрока"})
         invites.setdefault(other, {})[uid] = time.time()
         await push_to_player(other, {"t": "pinv", "from": {"id": uid, "nick": info["nick"], "lvl": info["lvl"], "cls": info.get("cls", "")}})
         await push_to_player(uid, {"t": "pinfo", "text": "Приглашение отправлено"})
@@ -1678,8 +1815,8 @@ async def handle_party(d, info):
         if opid and opid in parties and parties[opid]["leader"] != other:
             # пригласивший с тех пор вступил в чужую пати и больше не лидер — так приглашать нельзя
             return await push_to_player(uid, {"t": "pinfo", "text": "Приглашение устарело"})
-        if opid and opid in parties and len(parties[opid]["members"]) >= PARTY_MAX:
-            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        if opid and opid in parties and len(parties[opid]["members"]) >= party_cap(opid):
+            return await push_to_player(uid, {"t": "pinfo", "text": f"В пати уже {party_cap(opid)} игрока"})
         if uid in member_party:
             # Выход из своей пати может её распустить — в том числе ту, куда нас зовут (встречные приглашения).
             # Раньше после этого шёл parties[pid] по уже удалённой пати: KeyError и обрыв соединения.
@@ -1689,10 +1826,12 @@ async def handle_party(d, info):
             pid = f"p{other}-{int(time.time())}"
             parties[pid] = {"id": pid, "leader": other, "members": [other]}
             member_party[other] = pid
-        if len(parties[pid]["members"]) >= PARTY_MAX:
-            return await push_to_player(uid, {"t": "pinfo", "text": "В пати уже 4 игрока"})
+        if len(parties[pid]["members"]) >= party_cap(pid):
+            return await push_to_player(uid, {"t": "pinfo", "text": f"В пати уже {party_cap(pid)} игрока"})
         parties[pid]["members"].append(uid)
         member_party[uid] = pid
+        if len(parties[pid]["members"]) >= elite.SIZE:
+            elite.set_open(pid, False)                 # группа в сборе — из «Открытых групп» убираем
         await send_party(pid)
     elif t == "pdec":
         if invites.get(uid, {}).pop(other, None):
@@ -2483,6 +2622,11 @@ async def handle_ws_message(d, t, info, conn):
                 if time.time() - info.get("sz_warn", 0) > 10:
                     info["sz_warn"] = time.time()
                     conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
+        if d.get("loc") in elite.LOCS and d.get("loc") != old_loc and not info.get("admin") and not elite.member_of(d.get("loc"), info["id"]):
+            d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}         # в экземпляр зоны — только его группа
+            if time.time() - info.get("el_warn", 0) > 2:
+                info["el_warn"] = time.time()
+                conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"], "text": "В элитную зону группу заводит лидер"}))
         if d.get("loc") == worldboss.LOC and old_loc != worldboss.LOC and not info.get("admin") and not worldboss.open_now():
             d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}         # босса нет и добычи нет — логово закрыто
             if time.time() - info.get("wb_warn", 0) > 2:
@@ -2501,6 +2645,10 @@ async def handle_ws_message(d, t, info, conn):
                     conn.push(realtime.encode({"t": "fear", "used": fear.used(info["id"]), "tries": fear.TRIES}))
                     conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"], "text": why}))
         clean_pos(d, info)
+        if info["loc"] in elite.LOCS:
+            elite.account(info["id"])                       # минуты в элитной зоне (120 в день)
+        elif old_loc in elite.LOCS:
+            elite.out_of_zone(info["id"])
         if info["loc"] == fear.LOC:
             fear.seen_inside(info["id"])
         elif old_loc == fear.LOC:
@@ -2520,6 +2668,8 @@ async def handle_ws_message(d, t, info, conn):
             mobguard.on_hits(info["id"], info.get("lvl_cap") or info.get("lvl") or 1, d["mh"])
         if d.get("mk"):
             queue_kills(d, info, conn)
+    elif t == "elite":
+        await handle_elite(d, info, conn)
     elif t in ("pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp"):
         await handle_party(d, info)
     elif t == "pvp":
@@ -2703,6 +2853,7 @@ async def world_loop():
             if tick % WORLD_HZ == 0:
                 for pid in list(parties):
                     await send_party(pid)
+                elite_tick()                                # элитная зона: лимит минут и неполная группа
             mobworld.tick(hub)                              # общие мобы: прочность, смерть, возрождение
             worldboss.tick(hub)                             # мировой босс: расписание, удары по площади
             if tick % 5 == 0:
@@ -2760,6 +2911,7 @@ async def cleanup_loop():
             vip.cleanup()
             worldboss.cleanup()
             tower.cleanup()
+            elite.cleanup(online_ids, set(parties))
             fear.cleanup()
             special_quests.cleanup()
             metrics.gauge("mem.dicts", {"invites": len(invites), "last_seen": len(last_seen), "chat_limits": len(chat_limits),
