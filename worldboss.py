@@ -1,9 +1,10 @@
 """Мировой босс «Владыка Ржавчины» (как мировой босс в Liberty, в нашем стиле).
 
 Расписание: понедельник, среда, пятница, воскресенье — в 20:00 по Москве, держится до 30 минут.
-Появляется в Центральном ангаре (безопасная зона) — драться может каждый. Прочность общая для всех
-и считается только на сервере. Босс бьёт по площади: место удара заранее подсвечивается красным кругом.
-Когда босс повержен, добыча падает на пол для всех: кто первый подобрал, того и предмет.
+Живёт в своей локации — «Логове Владыки» (wboss): там все пилоты видят друг друга и действует PvP.
+Войти можно, пока босс жив или лежит его добыча (open_now); погибший возвращается к боссу сразу.
+Прочность общая для всех и считается только на сервере. Босс бьёт по площади: место удара заранее
+подсвечивается красным кругом. Когда босс повержен, добыча падает на пол для всех: кто первый подобрал, того и предмет.
 
   телефон → сервер: {"t":"wbhit","dmg"}, {"t":"wbpick","id"}
   сервер → все:     {"t":"wb", ...состояние}, {"t":"wbaoe","x","y","r","in"}, {"t":"wbloot","items"}, {"t":"wbrm","id"}
@@ -21,9 +22,10 @@ HOUR = 20
 DURATION = 30 * 60
 MAX_HP = 5_000_000
 NAME = "Владыка Ржавчины"
-X, Y = 640, 960                    # юго-запад площади: не закрывает портал, лавки и точку появления
-LOC = "lobby"
+X, Y = 900, 640                    # центр площадки логова (WBL.boss в игре); вход и портал в ангар — внизу
+LOC = "wboss"
 # полный дроп с одного убийства (кучки по одной штуке — «кто успел, тот забрал»)
+ANNOUNCE = f"⚠ Мировой босс «{NAME}» появился в своём логове! Вход — портал в ангаре или События"
 DROP = [("cores", 1, 0, 10), ("pot_hp", 1, 0, 5), ("pot_xp", 1, 0, 5), ("pot_atk", 1, 0, 5), ("kit_l", 1, 0, 5),
         ("garmor", 1, 1, 1), ("gweapon", 1, 1, 1), ("gany", 1, 0, 5), ("sph_ti", 1, 0, 2), ("sph_cu", 1, 0, 5)]
 
@@ -42,7 +44,12 @@ def next_start(now=None):
 
 def view():
     return {"t": "wb", "active": st["active"], "hp": max(0, int(st["hp"])), "max": MAX_HP, "until": int(st["until"] * 1000),
-            "next": next_start() * 1000, "name": NAME, "x": X, "y": Y, "loc": LOC}
+            "next": next_start() * 1000, "name": NAME, "x": X, "y": Y, "loc": LOC, "loot": len(st["loot"])}
+
+
+def open_now():
+    """В логово пускаем, пока босс жив или на полу ещё лежит его добыча."""
+    return bool(st["active"] or st["loot"])
 
 
 def start(manual=False, slot=None):
@@ -67,7 +74,7 @@ def tick(hub):
         s = next_start(now)
         if s <= now < s + DURATION and st.get("done_slot") != s:
             start(slot=s)
-            hub.to_all({"t": "pinfo", "text": f"⚠ Мировой босс «{NAME}» появился в Центральном ангаре!"})
+            hub.to_all({"t": "pinfo", "text": ANNOUNCE})
     if st["active"]:
         if now > st["until"]:
             _ended(now)
@@ -82,6 +89,7 @@ def tick(hub):
         hub.to_all(view())
     if st["loot"] and now > st["loot_until"]:
         st["loot"] = {}
+        st["dirty"] = True                                         # в view() — сколько добычи осталось (вход в логово)
         hub.to_loc(LOC, {"t": "wbloot", "items": []})              # кучки исчезают и у игроков (раньше висели до перезахода)
 
 
@@ -113,7 +121,7 @@ async def on_hit(info, d, hub, seasonpts):
                 import math
                 items[str(n)] = {"id": str(n), "kind": kind, "n": cnt, "g": g, "x": round(X + math.cos(a) * r), "y": round(Y + math.sin(a) * r * 0.7)}
         st["loot"], st["loot_until"] = items, now + 600
-        hub.to_all({"t": "pinfo", "text": f"🏆 {NAME} повержен! Собирайте добычу в ангаре"})
+        hub.to_all({"t": "pinfo", "text": f"🏆 {NAME} повержен! Добыча лежит в логове"})
         hub.to_all(view())
         hub.to_loc(LOC, {"t": "wbloot", "items": list(items.values())})
         metrics.inc("wboss.kill")
@@ -124,6 +132,8 @@ def on_pick(info, d, hub):
     if not it or info.get("loc") != LOC or (info.get("x", 0) - it["x"]) ** 2 + (info.get("y", 0) - it["y"]) ** 2 > 90 ** 2:
         return
     st["loot"].pop(it["id"], None)                                 # кто первый — того и предмет
+    if not st["loot"]:
+        st["dirty"] = True                                         # добычу разобрали — логово закрывается
     if it.get("kind") == "cores":
         import ledger
         ledger.add(info["id"], {"cores": it.get("n", 1)})          # учёт ресурсов: ядра с мирового босса

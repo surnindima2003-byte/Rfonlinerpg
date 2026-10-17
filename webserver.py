@@ -47,9 +47,9 @@ from config import WEBAPP_URL
 GAME_FILE = Path(__file__).parent / "game.html"
 GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1"}
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1", "wboss"}
 SEASON_LOC = "season1"                                   # сезонная зона: вход только с билетом сезона
-SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда
+SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда (в логове мирового босса wboss — есть)
 FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
@@ -2483,6 +2483,11 @@ async def handle_ws_message(d, t, info, conn):
                 if time.time() - info.get("sz_warn", 0) > 10:
                     info["sz_warn"] = time.time()
                     conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
+        if d.get("loc") == worldboss.LOC and old_loc != worldboss.LOC and not info.get("admin") and not worldboss.open_now():
+            d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}         # босса нет и добычи нет — логово закрыто
+            if time.time() - info.get("wb_warn", 0) > 2:
+                info["wb_warn"] = time.time()
+                conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"], "text": "Мировой босс сейчас не в логове"}))
         if d.get("loc") == fear.LOC and old_loc != fear.LOC:
             # «Страх»: с 10 уровня и 2 попытки в сутки (fear.py) — без попытки в подземелье не пускаем
             ok, why = fear.enter(info["id"], fear_lvl(d, info), bool(info.get("admin")))
@@ -2797,7 +2802,7 @@ async def start_web(port: int):
         body, user = await read_auth(request)
         if body.get("start") and user["admin"] and not worldboss.st["active"]:
             worldboss.start(manual=True)
-            hub.to_all({"t": "pinfo", "text": f"⚠ Мировой босс «{worldboss.NAME}» появился в Центральном ангаре!"})
+            hub.to_all({"t": "pinfo", "text": worldboss.ANNOUNCE})
         return web.json_response({"ok": True, **worldboss.view()})
     app.router.add_post("/api/wboss", api_wboss)
     tower.setup(app, read_auth, online)

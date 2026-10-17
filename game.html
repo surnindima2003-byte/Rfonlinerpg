@@ -303,6 +303,11 @@ body.dbg-ok .h2-av{pointer-events:auto;cursor:pointer}
 .wb-gift{font-style:normal;font-size:20px;width:26px;text-align:center}
 .wb-card{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:1px solid #B9862E;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:linear-gradient(180deg,rgba(242,193,75,.18),var(--panel-2));color:var(--text)}
 .wb-card b{color:#F2C14B;font-size:14px}.wb-card small{color:var(--muted)}
+.wb-back{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--hb, 120px) + 52px);z-index:5;display:flex;align-items:center;gap:9px;border:1.5px solid #E0463A;border-radius:12px;padding:7px 14px;background:linear-gradient(180deg,rgba(84,20,17,.96),rgba(40,10,10,.96));color:#FFD8CE;font:700 14px Rubik,sans-serif;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 12px rgba(224,70,58,.35);animation:wbpulse 1.6s ease-in-out infinite}
+.wb-back[hidden]{display:none}.wb-back span{font:12px 'Russo One',sans-serif;color:#FF8A7A}.wb-back:active{transform:translateX(-50%) scale(.97)}
+@keyframes wbpulse{50%{box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 22px rgba(224,70,58,.65)}}
+@media (prefers-reduced-motion: reduce){.wb-back{animation:none}}
+.death-box .death-wb{color:#FFB0A0}
 .h2-tk{font-size:12px;filter:drop-shadow(0 0 4px rgba(242,193,75,.8))}.h2-tk[hidden]{display:none}
 .up-new{font-style:normal;background:#3FA35A;color:#fff;border-radius:4px;padding:0 4px;font-size:9px;vertical-align:1px}
 .spt-head{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px}.spt-head.solo{grid-template-columns:1fr}
@@ -2761,9 +2766,9 @@ const safeSpot = o => locKey === "lobby" || (npcs[0] && Math.hypot(o.x-npcs[0].x
 
 let lastHitBy = "враг";
 // Гибель: робот возвращается в ангар, ремонт стоит DEATH_SCRAP_PCT лома (3%). Раньше гибель была бесплатной.
-// На аренах событий («Страх», Кровавая башня) гибель — конец забега, лом там не теряется.
+// На аренах событий («Страх», Кровавая башня) гибель — конец забега, лом там не теряется. В логове мирового босса (noLoss) — тоже.
 const DEATH_SCRAP_PCT = 0.03;
-const deathScrapLoss = () => { const L = LOCS[locKey]; return !L || L.arena || locKey === "lobby" ? 0 : Math.floor((+S.scrap || 0) * DEATH_SCRAP_PCT); };
+const deathScrapLoss = () => { const L = LOCS[locKey]; return !L || L.arena || L.noLoss || locKey === "lobby" ? 0 : Math.floor((+S.scrap || 0) * DEATH_SCRAP_PCT); };
 function hurtPlayer(dmg, by, src){ if(window.NET_GOD) return; if(by) lastHitBy = by;
   // p._pvpHit — удар пилота (hurtByPlayer): его урон считает и сервер, поэтому здесь не режем его тем, чего сервер не знает
   const stp = stat(), pvpHit = !!(p && p._pvpHit);
@@ -3463,8 +3468,10 @@ function draw(t){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   // мягкая камера: догоняет робота с небольшой задержкой и чуть смотрит вперёд по ходу движения
   // при входе в локацию, телепорте и воскрешении — сразу на месте, без «полёта» через карту
-  const gx = W < vw ? (W - vw)/2 : Math.max(0, Math.min(W - vw, p.x + (p.vx || 0)*MOVE.camLead - vw/2));
-  const gy = H < vh ? (H - vh)/2 : Math.max(0, Math.min(H - vh, p.y + (p.vy || 0)*MOVE.camLead - vh*MOVE.anchorY));
+  // точка, за которой следит камера: обычно робот, у мирового босса — между роботом и боссом (camFocus)
+  const F = typeof camFocus === "function" ? camFocus() : p;
+  const gx = W < vw ? (W - vw)/2 : Math.max(0, Math.min(W - vw, F.x + (p.vx || 0)*MOVE.camLead - vw/2));
+  const gy = H < vh ? (H - vh)/2 : Math.max(0, Math.min(H - vh, F.y + (p.vy || 0)*MOVE.camLead - vh*MOVE.anchorY));
   if(CAM.loc !== locKey || Math.hypot(gx - CAM.x, gy - CAM.y) > MOVE.camSnap){ CAM.x = gx; CAM.y = gy; CAM.loc = locKey; }
   else { const ck = 1 - Math.exp(-drawDt*MOVE.camK); CAM.x += (gx - CAM.x)*ck; CAM.y += (gy - CAM.y)*ck; }
   // камера стоит ровно на пикселях экрана — пиксель-арт не «дрожит» при плавном движении
@@ -10942,7 +10949,8 @@ const AMB = {
   scrapfields:{tint:"rgba(200,150,90,.06)", kind:"dust", n:46, c:["#C9A27A", "#9A7A58"]},
   reactor_ruins:{tint:"rgba(110,255,140,.06)", kind:"rad", n:36, c:["#9CFF9C", "#5AE07A"]},
   iron_canyon:{tint:"rgba(255,170,90,.05)", kind:"wind", n:44, c:["#E8C79A", "#FF9A4A"]},
-  arena_fear:{tint:"rgba(255,80,30,.05)", kind:"ember", n:30, c:["#FFB070", "#FF5A2A"]}
+  arena_fear:{tint:"rgba(255,80,30,.05)", kind:"ember", n:30, c:["#FFB070", "#FF5A2A"]},
+  wboss:{tint:"rgba(255,60,30,.06)", kind:"ember", n:36, c:["#FF9A5A", "#FF4A2A"]}
 };
 const AMBP = {key:"", list:[]};
 // мягкий спрайт пара: радиальный градиент рисуется один раз на цвет, дальше только drawImage
@@ -11017,10 +11025,17 @@ setInterval(() => { const el = $("hTk"); if(el && typeof ticketActive === "funct
   setInterval(() => { if(typeof NET !== "undefined") NET.stealth = p && p.stealthT > now ? 1 : 0; }, 200);
 }
 // ===================== МИРОВОЙ БОСС «ВЛАДЫКА РЖАВЧИНЫ» =====================
-// Пн, ср, пт, вс в 20:00 МСК в Центральном ангаре. Прочность общая (считает сервер), удары по площади
-// подсвечиваются красным кругом, после победы добыча падает на пол для всех.
-const WB = {st:null, aoe:[], loot:new Map(), hitT:0, lastPick:0};
-const wbOn = () => WB.st && WB.st.active && locKey === "lobby";
+// Пн, ср, пт, вс в 20:00 МСК. Босс живёт в своей локации — «Логове Владыки»: там все пилоты видят друг друга
+// и действует PvP. Вход — кнопкой в Событиях, порталом в ангаре или кнопкой «⚔ К боссу» в ангаре, пока босс жив
+// (после гибели можно сразу вернуться). Прочность общая (считает сервер, worldboss.py), удары по площади
+// подсвечиваются красным кругом, после победы добыча падает на пол для всех. Ремонт после гибели в логове бесплатный.
+const WB_LOC = "wboss";
+const WBL = {W:1800, H:1700, boss:{x:900, y:640}, spawn:{x:900, y:1440}, portal:{x:900, y:1530}, ring:420};   // boss — как X, Y в worldboss.py
+LOCS[WB_LOC] = {name:"Логово Владыки", min:1, hidden:true, noLoss:true, npcs:[], count:0, ground:"#2E211C", ground2:"#382821", rock:"#5A3A2A"};
+const WB = {st:null, aoe:[], loot:new Map(), hitT:0, lastPick:0, goneT:0};
+const wbOn = () => !!(WB.st && WB.st.active && locKey === WB_LOC);
+const wbOpen = () => !!(WB.st && (WB.st.active || WB.st.loot > 0));          // босс жив или его добыча ещё лежит
+const wbPos = () => WB.st && WB.st.x ? {x:WB.st.x, y:WB.st.y} : WBL.boss;
 const WB_DROP = [["cores", "Энергоядра", 10], ["pot_hp", "Зелье прочности", 5], ["pot_xp", "Зелье опыта", 5], ["pot_atk", "Зелье силы", 5],
   ["kit_l", "Большой ремкомплект", 5], ["garmor", "Случайная зелёная броня", 1], ["gweapon", "Случайное зелёное оружие", 1],
   ["gany", "Случайные предметы", 5], ["sph_ti", "Титановая сфера (безопасная)", 2], ["sph_cu", "Медная сфера (обычная)", 5]];
@@ -11028,29 +11043,30 @@ function wbSend(o){ if(typeof NET !== "undefined" && NET.ws && NET.ws.readyState
 // удары по боссу: обычные атаки (огонь/АВТО) и атакующие умения рядом с боссом
 function wbHit(mult){
   if(!wbOn() || !p || p.dead) return false;
-  const st = stat(), d = Math.hypot(p.x - WB.st.x, p.y - WB.st.y);
+  const B = wbPos(), st = stat(), d = Math.hypot(p.x - B.x, p.y - B.y);
   if(d > classParams().range + st.range + 130) return false;
   const crit = Math.random()*100 < st.crit, dmg = Math.round(st.atk*(1 + buffV("atk"))*(mult || 1)*(crit ? st.critPow : 1));
   wbSend({t:"wbhit", dmg});
-  p.aim = p.ang = Math.atan2(WB.st.y - 40 - p.y, WB.st.x - p.x); p.atkT = 0.25;
-  if(classParams().melee) CB.fx.push({type:"slash", x:WB.st.x - 20, y:WB.st.y - 50, a:p.aim, life:.2, max:.2, c:classParams().color || "#fff"});
-  else beams.push({x1:p.x, y1:p.y - 26, x2:WB.st.x + Math.random()*40 - 20, y2:WB.st.y - 60 + Math.random()*30, life:0.12});
-  addText(WB.st.x + Math.random()*60 - 30, WB.st.y - 120, (crit ? "КРИТ " : "") + dmg, crit ? "#F2C14B" : "#FF8A6A");
+  p.aim = p.ang = Math.atan2(B.y - 40 - p.y, B.x - p.x); p.atkT = 0.25;
+  if(classParams().melee) CB.fx.push({type:"slash", x:B.x - 20, y:B.y - 50, a:p.aim, life:.2, max:.2, c:classParams().color || "#fff"});
+  else beams.push({x1:p.x, y1:p.y - 26, x2:B.x + Math.random()*40 - 20, y2:B.y - 60 + Math.random()*30, life:0.12});
+  addText(B.x + Math.random()*60 - 30, B.y - 120, (crit ? "КРИТ " : "") + dmg, crit ? "#F2C14B" : "#FF8A6A");
   Sfx.play(crit ? "crit" : "shot"); return true;
 }
 setInterval(() => {
   if(!wbOn() || !p || p.dead || !(firing || auto)) return;   // АВТО бьёт и под окном; «УДАР» окно само отпускает
+  if(typeof tgtPlayer === "function" && tgtPlayer()) return;     // в цели пилот — бой с ним, а не с боссом
   if(performance.now() < WB.hitT) return;
   if(wbHit(1)) WB.hitT = performance.now() + 1000/classParams().rate/(stat().rate || 1);
 }, 100);
 setInterval(() => {      // подбор и без нажатия «Огонь»: просто подъедь к предмету
-  if(locKey !== "lobby" || !WB.loot.size || !p || p.dead || performance.now() - WB.lastPick < 250) return;
+  if(locKey !== WB_LOC || !WB.loot.size || !p || p.dead || performance.now() - WB.lastPick < 250) return;
   for(const it of WB.loot.values()) if(Math.hypot(it.x - p.x, it.y - p.y) < 60){ WB.lastPick = performance.now(); wbSend({t:"wbpick", id:it.id}); break; }
 }, 150);
 {
   const _useWB = useSkill;
   useSkill = function(i){
-    if(wbOn()){ const C = clsOf(S.cls); if(C && !(CB.cd[i] > 0)){ const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
+    if(wbOn() && !(typeof tgtPlayer === "function" && tgtPlayer())){ const C = clsOf(S.cls); if(C && !(CB.cd[i] > 0)){ const s = skillAt(C.skills[i], skillLv(C.skills[i].id));
       if(s.mult && wbHit(s.mult*(1 + stat().skillDmg))){ CB.cd[i] = s.cd*(1 - stat().cdr); Sfx.play("crit"); return; } } }
     return _useWB(i);
   };
@@ -11065,36 +11081,70 @@ function wbGive(it){
   } else { addItem(S.inv, it.kind, it.n, INV_MAX) || addItem(S.store, it.kind, it.n, STORE_MAX); addText(p.x, p.y - 40, "+" + ITEMS[it.kind].name, "#7BD58A"); }
   Sfx.play("pick"); save();
 }
-// ---- отрисовка в ангаре ----
-{
-  const _ovWB = drawLobbyOverlay;
-  drawLobbyOverlay = function(t, dt){
-    _ovWB(t, dt);
-    // добыча на полу
-    for(const it of WB.loot.values()){ const bob = Math.sin(t*3 + +it.id)*2;
-      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(242,193,75,.25)"; circle(it.x, it.y, 13); ctx.fill(); ctx.restore();
-      const ic = it.kind === "cores" ? "#E0694A" : it.kind.startsWith("g") ? "#7BD58A" : it.kind.startsWith("sph") ? "#8FD8F0" : "#F2C14B";
-      ctx.fillStyle = "#1B232C"; rr(it.x - 7, it.y - 9 + bob, 14, 14, 3); ctx.fill(); ctx.fillStyle = ic; rr(it.x - 5, it.y - 7 + bob, 10, 10, 2); ctx.fill(); }
-    // круги ударов босса
-    WB.aoe = WB.aoe.filter(a => now < a.at + 0.35);
-    for(const a of WB.aoe){ const k = Math.min(1, 1 - (a.at - now)/a.dur);
-      ctx.save(); ctx.fillStyle = `rgba(224,70,58,${now >= a.at ? .45 : .12 + k*.18})`; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r, a.r*.55, 0, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = "#FF4A3A"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r*k, a.r*.55*k, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
-      if(!a.done && now >= a.at){ a.done = true; if(p && !p.dead && Math.hypot((p.x - a.x)/a.r, (p.y - a.y)/(a.r*.55)) < 1){ const st = stat(); p.inv = 0; hurtPlayer(Math.round(st.maxhp*0.18 + 40), "Владыка Ржавчины"); } } }
-    if(!wbOn()) return;
-    const B = WB.st, bx = B.x, by = B.y, pulse = (Math.sin(t*3) + 1)/2;
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    const g = ctx.createRadialGradient(bx, by - 40, 10, bx, by - 40, 190); g.addColorStop(0, `rgba(255,60,40,${.35 + pulse*.15})`); g.addColorStop(1, "rgba(255,60,40,0)");
-    ctx.fillStyle = g; ctx.fillRect(bx - 190, by - 230, 380, 380); ctx.restore();
-    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(bx, by + 6, 80, 22, 0, 0, Math.PI*2); ctx.fill();
-    drawRustLord(bx, by, t, (t % 2.2) < .3);
-    ctx.save(); ctx.globalCompositeOperation = "source-atop"; ctx.restore();
-    const w = 150, k = Math.max(0, B.hp/B.max);
-    label("⚠ БОСС · " + B.name, bx, by - 200, "#FF6A5A");
-    ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(bx - w/2 - 2, by - 190, w + 4, 10); ctx.fillStyle = "#3A1414"; ctx.fillRect(bx - w/2, by - 188, w, 6);
-    ctx.fillStyle = "#E0463A"; ctx.fillRect(bx - w/2, by - 188, w*k, 6);
-  };
+
+// ---- логово: площадка с боссом в центре, вход и портал в ангар внизу, кучи лома по краям — укрытия для PvP ----
+{ const _blWB = buildLoc;
+  buildLoc = function(key){
+    if(key !== WB_LOC) return _blWB(key);
+    locKey = key; rocks = []; enemies = []; npcs = []; bolts = []; beams = []; drops = []; texts = [];
+    W = WBL.W; H = WBL.H;
+    const B = WBL.boss, S0 = WBL.spawn, rng = seeded(4242);
+    rocks.push({x:B.x, y:B.y - 20, r:78, deco:true});                                   // сквозь босса не пройти
+    for(let tries = 0; rocks.length < 28 && tries < 2000; tries++){
+      const x = 90 + rng()*(W - 180), y = 90 + rng()*(H - 180), r = 22 + rng()*30;
+      if(Math.hypot(x - B.x, (y - B.y)*1.25) < WBL.ring + 60 || Math.hypot(x - S0.x, y - S0.y) < 300 || (Math.abs(x - B.x) < 120 && y > B.y)) continue;
+      if(rocks.some(k => k.r && !k.deco && Math.hypot(k.x - x, k.y - y) < k.r + r + 40)) continue;
+      rocks.push({x, y, r, shade:rng()});
+    }
+    npcs = [{kind:"back", x:WBL.portal.x, y:WBL.portal.y}];
+    return {x:S0.x, y:S0.y};
+  }; }
+// в логове после гибели ремонт бесплатный; напоминание, что к боссу можно вернуться сразу
+{ const _hurtWB = hurtPlayer;
+  hurtPlayer = function(dmg, by, src){
+    const was = p && p.dead, r = _hurtWB(dmg, by, src);
+    if(!was && p && p.dead && locKey === WB_LOC && WB.st && WB.st.active){
+      const box = $("death").querySelector(".death-box");
+      if(box) box.insertAdjacentHTML("beforeend", `<small class="death-wb">Вернуться к боссу — кнопка «⚔ К боссу» в ангаре</small>`);
+    }
+    return r;
+  }; }
+// ---- отрисовка: площадка, добыча и круги ударов — на земле, босс — до пилотов (пилоты всегда видны поверх) ----
+function wbDrawGround(t){
+  const B = wbPos(), R = WBL.ring;
+  ctx.save();
+  const g = ctx.createRadialGradient(B.x, B.y, 40, B.x, B.y, R + 20);
+  g.addColorStop(0, "rgba(18,6,4,.6)"); g.addColorStop(.8, "rgba(46,14,8,.35)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(B.x, B.y, R + 20, (R + 20)*.8, 0, 0, Math.PI*2); ctx.fill();
+  ctx.setLineDash([22, 14]); ctx.lineDashOffset = -t*12; ctx.strokeStyle = WB.st && WB.st.active ? "rgba(255,90,60,.6)" : "rgba(242,169,59,.35)"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.ellipse(B.x, B.y, R, R*.8, 0, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  // добыча на полу
+  for(const it of WB.loot.values()){ const bob = Math.sin(t*3 + +it.id)*2;
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(242,193,75,.25)"; circle(it.x, it.y, 13); ctx.fill(); ctx.restore();
+    const ic = it.kind === "cores" ? "#E0694A" : it.kind.startsWith("g") ? "#7BD58A" : it.kind.startsWith("sph") ? "#8FD8F0" : "#F2C14B";
+    ctx.fillStyle = "#1B232C"; rr(it.x - 7, it.y - 9 + bob, 14, 14, 3); ctx.fill(); ctx.fillStyle = ic; rr(it.x - 5, it.y - 7 + bob, 10, 10, 2); ctx.fill(); }
+  // круги ударов босса: урон — тому, кто не успел выйти
+  WB.aoe = WB.aoe.filter(a => now < a.at + 0.35);
+  for(const a of WB.aoe){ const k = Math.min(1, 1 - (a.at - now)/a.dur);
+    ctx.save(); ctx.fillStyle = `rgba(224,70,58,${now >= a.at ? .45 : .12 + k*.18})`; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r, a.r*.55, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#FF4A3A"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(a.x, a.y, a.r*k, a.r*.55*k, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+    if(!a.done && now >= a.at){ a.done = true; if(p && !p.dead && Math.hypot((p.x - a.x)/a.r, (p.y - a.y)/(a.r*.55)) < 1){ const st = stat(); p.inv = 0; hurtPlayer(Math.round(st.maxhp*0.18 + 40), "Владыка Ржавчины"); } } }
+  if(!wbOn()) return;
+  const bx = B.x, by = B.y, pulse = (Math.sin(t*3) + 1)/2;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const gl = ctx.createRadialGradient(bx, by - 40, 10, bx, by - 40, 190); gl.addColorStop(0, `rgba(255,60,40,${.35 + pulse*.15})`); gl.addColorStop(1, "rgba(255,60,40,0)");
+  ctx.fillStyle = gl; ctx.fillRect(bx - 190, by - 230, 380, 380); ctx.restore();
+  ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(bx, by + 6, 80, 22, 0, 0, Math.PI*2); ctx.fill();
+  drawRustLord(bx, by, t, (t % 2.2) < .3);             // имя и прочность — в полосе вверху экрана (wbBar)
 }
+// камера у босса: чем ближе робот к боссу, тем сильнее кадр сдвигается к нему — огромный босс не прячется под карточкой пилота
+function camFocus(){
+  if(locKey !== WB_LOC || !wbOn() || !p) return p;
+  const B = wbPos(), d = Math.hypot(B.x - p.x, B.y - p.y), k = 0.42*Math.max(0, Math.min(1, 1 - (d - 320)/480));
+  return k > 0 ? {x:p.x + (B.x - p.x)*k, y:p.y + (B.y - 70 - p.y)*k} : p;
+}
+{ const _dfWB = drawField; drawField = function(cx, cy){ const r = _dfWB(cx, cy); if(locKey === WB_LOC) wbDrawGround(performance.now()/1000); return r; }; }
 // полоса прочности босса вверху экрана
 const wbBar = document.createElement("div"); wbBar.className = "wb-bar"; wbBar.hidden = true;
 wbBar.innerHTML = `<b>Владыка Ржавчины</b><div class="wb-hp"><i></i><span></span></div>`;
@@ -11107,6 +11157,38 @@ setInterval(() => {
   wbBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
   wbBar.querySelector("span").textContent = B.hp.toLocaleString("ru-RU") + " / " + B.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%";
 }, 250);
+// кнопка «⚔ К боссу» в ангаре, пока босс жив: вернуться после гибели — одно нажатие
+const wbBack = document.createElement("button"); wbBack.type = "button"; wbBack.className = "wb-back"; wbBack.hidden = true;
+wbBack.innerHTML = `<b>⚔ К боссу</b><span data-notr></span>`;
+document.getElementById("scrGame").append(wbBack);
+wbBack.addEventListener("click", () => { if(p && !p.dead && locKey === "lobby"){ Sfx.play("ui"); travel(WB_LOC); } });
+setInterval(() => {
+  const on = locKey === "lobby" && !!(WB.st && WB.st.active);
+  if(wbBack.hidden === on) wbBack.hidden = !on;
+  if(on){ const s = Math.max(1, Math.ceil(WB.st.hp/WB.st.max*100)) + "%"; if(wbBack._s !== s){ wbBack._s = s; wbBack.lastChild.textContent = s; } }
+  // босс ушёл и добычи не осталось — через несколько секунд логово само возвращает в ангар
+  if(locKey === WB_LOC && WB.st && !wbOpen() && !WB.loot.size && p && !p.dead){
+    if(!WB.goneT) WB.goneT = performance.now() + 6000;
+    else if(performance.now() > WB.goneT){ WB.goneT = 0; toast("Мировой босс ушёл — возврат в ангар"); travel("lobby"); }
+  } else WB.goneT = 0;
+}, 300);
+// в логово — только пока босс жив или лежит его добыча (админам — всегда)
+{ const _trWB = travel;
+  travel = function(key){
+    if(key === WB_LOC && locKey !== WB_LOC && !wbOpen() && !window.NET_ADMIN){ toast("Мировой босс сейчас не в логове. Расписание — в Событиях"); return; }
+    const r = _trWB(key);
+    // табличка при входе: не «Враги рядом», а что это за место
+    if(key === WB_LOC) setTimeout(() => { if(locKey === WB_LOC) $("zoneTag").innerHTML = LOCS[WB_LOC].name + "<small>Мировой босс · PvP-зона</small>"; }, 380);
+    return r;
+  }; }
+// портал в ангаре: пока идёт бой с боссом, первой строкой — вход в логово
+{ const _rpWB = renderPortal;
+  renderPortal = function(){
+    _rpWB(); if(!wbOpen()) return;
+    const B = WB.st, k = Math.max(1, Math.ceil(B.hp/B.max*100));
+    body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-go="${WB_LOC}"><b>⚔ ${B.active ? "Мировой босс: " + (B.name || "Владыка Ржавчины") : "Добыча мирового босса"}</b>` +
+      `<small>${B.active ? `Логово Владыки · прочность босса ${k}% · PvP-зона` : "Босс повержен — добыча ещё лежит в логове"}</small></button>`);
+  }; }
 // ---- окно «Мировой босс» (в Событиях) ----
 // время события по Москве: «вт, 19:00 МСК» — день недели на языке игрока (так же в карточке и окне Chip War)
 function mskWhen(ms){
@@ -11120,10 +11202,13 @@ function wbNext(){ if(WB.st) return WB.st.next;
   const n = Date.now(); for(let a = 0; a < 8; a++){ const d = new Date(n + a*864e5 + 3*3600e3); d.setUTCHours(17, 0, 0, 0);
     const msk = new Date(d.getTime() + 3*3600e3).getUTCDay(); if([1, 3, 5, 0].includes(msk) && d.getTime() + 1800e3 > n) return d.getTime(); } return n; }
 function renderWB(){
-  const on = WB.st && WB.st.active, nx = wbNext(), left = Math.max(0, nx - Date.now()), dd = Math.floor(left/864e5), hh = Math.floor(left%864e5/36e5), mm = Math.floor(left%36e5/6e4);
-  body().innerHTML = `<div class="wb-top">${on ? `<b class="wb-live">⚔ Босс в ангаре!</b><small>${WB.st.hp.toLocaleString("ru-RU")} / ${WB.st.max.toLocaleString("ru-RU")}</small>
-      <button class="act" type="button" data-wbgo="1">В ангар</button>` : `<b>${dd ? dd + " д " : ""}${hh} ч ${mm} мин</b><small>До следующего босса</small><em>${mskWhen(nx)}</em>`}</div>
-    <p class="hint"><b>Расписание:</b> понедельник, среда, пятница, воскресенье — в 20:00 по Москве.<br>Появляется в Центральном ангаре — драться может каждый, обычными ударами и умениями.<br>Босс бьёт по площади: красный круг под ногами — успей отойти.<br>Добыча падает на пол для всех: кто успел, тот забрал.</p>
+  const on = WB.st && WB.st.active, loot = !on && wbOpen(), nx = wbNext(), left = Math.max(0, nx - Date.now()), dd = Math.floor(left/864e5), hh = Math.floor(left%864e5/36e5), mm = Math.floor(left%36e5/6e4);
+  const here = locKey === WB_LOC;
+  body().innerHTML = `<div class="wb-top">${on ? `<b class="wb-live">⚔ Босс в логове!</b><small>${WB.st.hp.toLocaleString("ru-RU")} / ${WB.st.max.toLocaleString("ru-RU")}</small>
+      ${here ? `<small>Ты уже в логове</small>` : `<button class="act" type="button" data-wbgo="1">К боссу</button>`}`
+    : loot ? `<b class="wb-live">🏆 Босс повержен</b><small>Добыча ещё лежит в логове</small>${here ? "" : `<button class="act" type="button" data-wbgo="1">В логово</button>`}`
+    : `<b>${dd ? dd + " д " : ""}${hh} ч ${mm} мин</b><small>До следующего босса</small><em>${mskWhen(nx)}</em>`}</div>
+    <p class="hint"><b>Расписание:</b> понедельник, среда, пятница, воскресенье — в 20:00 по Москве.<br>Босс появляется в своём логове. Вход — через События или портал в ангаре, пока босс жив.<br>В логове PvP: другие пилоты могут атаковать. Ремонт после гибели бесплатный.<br>Погиб — возвращайся сразу: кнопка «⚔ К боссу» в ангаре.<br>Босс бьёт по площади: красный круг под ногами — успей отойти.<br>Добыча падает на пол для всех: кто успел, тот забрал.</p>
     <div class="spt-sec"><b>Полный дроп с одного убийства:</b></div>
     ${WB_DROP.map(([id, n, c]) => `<div class="wb-drop"><span>${ITEMS[id] ? icon(id) : `<i class="wb-gift">🎁</i>`}${n}</span><b>×${c}</b></div>`).join("")}
     ${window.NET_ADMIN && !on ? `<button class="act alt" type="button" data-wbstart="1" style="margin-top:8px">Админ: вызвать босса сейчас</button>` : ""}`;
@@ -11131,11 +11216,11 @@ function renderWB(){
 function openWorldBoss(){ openSheet("Мировой босс", "Владыка Ржавчины", renderWB); if(typeof NET !== "undefined" && NET.api) NET.api("/api/wboss", {}).then(r => { if(r && r.ok){ WB.st = r; if(sheetRender === renderWB) renderWB(); } }).catch(() => {}); }
 {
   const _evWB = openEvents;
-  openEvents = function(){ _evWB(); if(WB.st && WB.st.active) body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-wbopen="1"><b>👑 Мировой босс сейчас в ангаре</b><small>Нажми, чтобы присоединиться</small></button>`); };
+  openEvents = function(){ _evWB(); if(WB.st && WB.st.active) body().insertAdjacentHTML("afterbegin", `<button class="wb-card" type="button" data-wbopen="1"><b>👑 Мировой босс сейчас в логове</b><small>Нажми, чтобы присоединиться</small></button>`); };
   document.getElementById("shBody").addEventListener("click", e => {
     const b = e.target.closest("button"); if(!b) return;
     if(b.dataset.wbopen){ openWorldBoss(); }
-    else if(b.dataset.wbgo){ closeSheet(); if(locKey !== "lobby") travel("lobby"); }
+    else if(b.dataset.wbgo){ closeSheet(); showTab("game"); if(locKey !== WB_LOC) travel(WB_LOC); }
     else if(b.dataset.wbstart){ NET.api("/api/wboss", {start:1}).then(r => { if(r && r.ok){ WB.st = r; renderWB(); } }); }
   });
   const prevWB = onNetExtra;
@@ -12358,7 +12443,8 @@ const TILE_PAL = {
   dungeon:["#2C3846", "#26313D", "#34424F", "#1D2630"], corr:["#242E3A", "#1F2833", "#2B3744", "#171F28"],
   lobby:["#2A3542", "#24303C", "#324050", "#1B242E"], scrapfields:["#5A4636", "#4E3C2E", "#6A5240", "#3A2C20"],
   reactor_ruins:["#34423A", "#2C3831", "#3E4E44", "#222C26"], iron_canyon:["#3E3538", "#342C2F", "#4A4044", "#262022"],
-  arena_fear:["#2A2230", "#231C29", "#34293C", "#1A1420"]
+  arena_fear:["#2A2230", "#231C29", "#34293C", "#1A1420"],
+  wboss:["#3B2A24", "#34251F", "#48352B", "#251812"]          // логово мирового босса: ржавый металл
 };
 const tilePats = {};
 function tilePattern(kind){
@@ -12415,6 +12501,7 @@ const DECAL_KINDS = {
   reactor_ruins:["crack", "toxic", "grate", "debris", "toxic", "crack"],
   iron_canyon:["crack", "crack", "dust", "debris", "tracks", "bolts"],
   arena_fear:["scorch", "rune", "crack", "scorch", "dust", "debris"],
+  wboss:["crack", "oil", "scorch", "debris", "bolts", "scorch", "tracks", "grate"],
   // остальные локации — набор деталей Железного каньона плюс свои
   lobby:["crack", "crack", "dust", "debris", "tracks", "bolts", "oil", "grate"],
   dungeon:["crack", "crack", "dust", "debris", "tracks", "bolts", "oil", "grate"]
@@ -14496,6 +14583,8 @@ Object.assign(I18N, {"Танк · ближний бой": ["Tank · melee", "Т�
 Object.assign(I18N, {"ЦЕЛЬ": ["TARGET", "ЦІЛЬ", "OBJ.", "HEDEF", "ALVO"], "Смена цели": ["Switch target", "Зміна цілі", "Cambiar objetivo", "Hedef değiştir", "Trocar alvo"], "Нет целей рядом": ["No targets nearby", "Немає цілей поруч", "No hay objetivos cerca", "Yakında hedef yok", "Nenhum alvo por perto"], "Других целей рядом нет": ["No other targets nearby", "Інших цілей поруч немає", "No hay otros objetivos cerca", "Yakında başka hedef yok", "Nenhum outro alvo por perto"], "Твой робот уничтожен — возврат в ангар": ["Your robot was destroyed — returning to the hangar", "Твого робота знищено — повернення в ангар", "Tu robot fue destruido — volviendo al hangar", "Robotun yok edildi — hangara dönülüyor", "Seu robô foi destruído — voltando ao hangar"]});
 // «Страх»: окно события, отсчёт, волны, выход из подземелья, имена монстров fw1…fw59
 Object.assign(I18N, {"Попыток на сегодня": ["Attempts today", "Спроб на сьогодні", "Intentos de hoy", "Bugünkü haklar", "Tentativas de hoje"], "Войдите, чтобы начать": ["Enter to begin", "Увійдіть, щоб почати", "Entra para empezar", "Başlamak için gir", "Entre para começar"], "Новые попытки — в 00:00 МСК": ["New attempts at 00:00 MSK", "Нові спроби — о 00:00 МСК", "Nuevos intentos a las 00:00 MSK", "Yeni haklar 00:00 MSK'da", "Novas tentativas às 00:00 MSK"], "Когда": ["When", "Коли", "Cuándo", "Ne zaman", "Quando"], "Соло": ["Solo", "Соло", "Solo", "Solo", "Solo"], "Попытки": ["Attempts", "Спроби", "Intentos", "Haklar", "Tentativas"], "Можно начать": ["Ready to start", "Можна почати", "Puedes empezar", "Başlayabilirsin", "Pode começar"], "Попытки закончились": ["No attempts left", "Спроби скінчилися", "Sin intentos", "Hak kalmadı", "Sem tentativas"], "Как это работает": ["How it works", "Як це працює", "Cómo funciona", "Nasıl çalışır", "Como funciona"], "{n} попытки в день, тратится при входе": ["{n} attempts a day, spent on entry", "{n} спроби на день, витрачається при вході", "{n} intentos al día, se gasta al entrar", "Günde {n} hak, girişte harcanır", "{n} tentativas por dia, gasta ao entrar"], "Монстры приходят волнами по {n}, уровень волны растёт с каждой": ["Monsters come in waves of {n}, the wave level rises every time", "Монстри приходять хвилями по {n}, рівень хвилі росте з кожною", "Los monstruos llegan en oleadas de {n}, el nivel sube con cada una", "Canavarlar {n}'lik dalgalarla gelir, seviye her dalgada artar", "Os monstros vêm em ondas de {n}, o nível sobe a cada onda"], "Дойдите до волны {n}, чтобы пройти испытание целиком": ["Reach wave {n} to clear the whole trial", "Дійдіть до хвилі {n}, щоб пройти випробування повністю", "Llega a la oleada {n} para superar toda la prueba", "Denemenin tamamı için {n}. dalgaya ulaş", "Chegue à onda {n} para concluir a prova inteira"], "Смерть выбрасывает из подземелья в центральный ангар": ["Death throws you out of the dungeon to the Central Hangar", "Смерть викидає з підземелля в центральний ангар", "La muerte te expulsa de la mazmorra al hangar central", "Ölüm seni zindandan merkez hangara atar", "A morte te expulsa da masmorra para o hangar central"], "Нет попыток": ["No attempts", "Немає спроб", "Sin intentos", "Hak yok", "Sem tentativas"], "Монстры появятся через": ["Monsters arrive in", "Монстри з'являться через", "Los monstruos llegan en", "Canavarlar geliyor", "Os monstros chegam em"], "Испытание пройдено!": ["Trial cleared!", "Випробування пройдено!", "¡Prueba superada!", "Deneme tamamlandı!", "Prova concluída!"], "Испытание «Страх» пройдено: все {n} волн!": ["Fear trial cleared: all {n} waves!", "Випробування «Страх» пройдено: усі {n} хвиль!", "Prueba «Miedo» superada: ¡las {n} oleadas!", "Korku denemesi tamamlandı: {n} dalganın hepsi!", "Prova «Medo» concluída: todas as {n} ondas!"], "Пройдено волн: {n} из {m}": ["Waves cleared: {n} of {m}", "Пройдено хвиль: {n} з {m}", "Oleadas superadas: {n} de {m}", "Geçilen dalga: {n}/{m}", "Ondas concluídas: {n} de {m}"], "В «Страх» входят через События": ["Fear is entered from Events", "У «Страх» входять через Події", "A «Miedo» se entra desde Eventos", "Korku'ya Etkinlikler'den girilir", "Entra-se no «Medo» pelos Eventos"], "«Страх» открывается с {n} уровня": ["Fear unlocks at level {n}", "«Страх» відкривається з {n} рівня", "«Miedo» se abre en el nivel {n}", "Korku {n}. seviyede açılır", "«Medo» abre no nível {n}"], "Попытки на сегодня закончились": ["No attempts left for today", "Спроби на сьогодні скінчилися", "No quedan intentos por hoy", "Bugünlük hak kalmadı", "Acabaram as tentativas de hoje"], "попытки на сегодня закончились": ["no attempts left for today", "спроби на сьогодні скінчилися", "no quedan intentos por hoy", "bugünlük hak kalmadı", "acabaram as tentativas de hoje"], "Выход из подземелья": ["Dungeon exit", "Вихід із підземелля", "Salida de la mazmorra", "Zindan çıkışı", "Saída da masmorra"], "Забег закончится, а попытка не вернётся.": ["The run will end and the attempt won't come back.", "Забіг закінчиться, а спроба не повернеться.", "La partida terminará y el intento no se devuelve.", "Koşu biter ve hak geri gelmez.", "A corrida termina e a tentativa não volta."], "Покинуть подземелье": ["Leave the dungeon", "Покинути підземелля", "Salir de la mazmorra", "Zindandan çık", "Sair da masmorra"], "Неистовый": ["Frenzied", "Шалений", "Frenético", "Çılgın", "Frenético"], "Багровый": ["Crimson", "Багряний", "Carmesí", "Kızıl", "Carmesim"], "Обсидиановый": ["Obsidian", "Обсидіановий", "Obsidiano", "Obsidyen", "Obsidiano"], "Ртутный": ["Mercurial", "Ртутний", "Mercurial", "Cıva", "Mercurial"], "Инфернальный": ["Hellish", "Інфернальний", "Infernal", "Cehennemî", "Infernal"], "Безумный": ["Mad", "Божевільний", "Loco", "Deli", "Louco"], "Неудержимый": ["Unstoppable", "Нестримний", "Imparable", "Durdurulamaz", "Imparável"], "Коварный": ["Treacherous", "Підступний", "Traicionero", "Hain", "Traiçoeiro"], "Безжалостный": ["Ruthless", "Нещадний", "Despiadado", "Acımasız", "Impiedoso"], "Колоссальный": ["Colossal", "Колосальний", "Colosal", "Devasa", "Colossal"], "Мрачный": ["Grim", "Похмурий", "Sombrío", "Kasvetli", "Sombrio"], "Роковой": ["Doom", "Фатальний", "Fatal", "Uğursuz", "Fatídico"], "Сумеречный": ["Twilight", "Сутінковий", "Crepuscular", "Alacakaranlık", "Crepuscular"], "Громадный": ["Massive", "Величезний", "Enorme", "Koca", "Enorme"], "Безликий": ["Faceless", "Безликий", "Sin rostro", "Yüzsüz", "Sem rosto"], "Испепеляющий": ["Incinerating", "Спопеляючий", "Incinerador", "Kül eden", "Incinerador"], "Неумолимый": ["Relentless", "Невблаганний", "Implacable", "Amansız", "Implacável"], "Предвечный": ["Primeval", "Предвічний", "Primigenio", "Ezeli", "Primevo"], "Непобедимый": ["Invincible", "Непереможний", "Invencible", "Yenilmez", "Invencível"], "страж": ["guard", "вартовий", "guardián", "muhafız", "guardião"], "воин": ["warrior", "воїн", "guerrero", "savaşçı", "guerreiro"], "охотник": ["hunter", "мисливець", "cazador", "avcı", "caçador"], "рубака": ["slasher", "рубака", "tajador", "kesici", "retalhador"], "ветеран": ["veteran", "ветеран", "veterano", "kıdemli", "veterano"], "громила": ["brute", "громило", "bruto", "zorba", "brutamontes"], "берсерк": ["berserker", "берсерк", "berserker", "berserker", "berserker"], "палач": ["executioner", "кат", "verdugo", "cellat", "carrasco"], "чемпион": ["champion", "чемпіон", "campeón", "şampiyon", "campeão"], "гладиатор": ["gladiator", "гладіатор", "gladiador", "gladyatör", "gladiador"], "каратель": ["punisher", "каратель", "castigador", "cezalandırıcı", "punidor"], "разрушитель": ["destroyer", "руйнівник", "destructor", "yıkıcı", "destruidor"], "истребитель": ["exterminator", "винищувач", "exterminador", "imha edici", "exterminador"], "опустошитель": ["ravager", "спустошувач", "devastador", "harap edici", "devastador"], "вожак": ["alpha", "ватажок", "cabecilla", "elebaşı", "líder"], "лорд": ["lord", "лорд", "señor", "lord", "lorde"], "тиран": ["tyrant", "тиран", "tirano", "tiran", "tirano"], "повелитель": ["overlord", "володар", "soberano", "hükümdar", "soberano"], "владыка": ["sovereign", "владика", "monarca", "efendi", "monarca"], "титан": ["titan", "титан", "titán", "titan", "titã"]});
+// мировой босс в своём логове: вход, возврат к боссу, PvP
+Object.assign(I18N, {"Логово Владыки": ["Overlord's Lair", "Лігво Володаря", "Guarida del Señor", "Hükümdarın İni", "Covil do Senhor"], "Мировой босс · PvP-зона": ["World boss · PvP zone", "Світовий бос · PvP-зона", "Jefe mundial · zona PvP", "Dünya patronu · PvP bölgesi", "Chefe mundial · zona PvP"], "К боссу": ["To the boss", "До боса", "Al jefe", "Patrona", "Ao chefe"], "Вернуться к боссу — кнопка «⚔ К боссу» в ангаре": ["Back to the boss: the «⚔ To the boss» button in the hangar", "Повернутися до боса — кнопка «⚔ До боса» в ангарі", "Volver al jefe: botón «⚔ Al jefe» en el hangar", "Patrona dön: hangardaki «⚔ Patrona» düğmesi", "Voltar ao chefe: botão «⚔ Ao chefe» no hangar"], "Мировой босс ушёл — возврат в ангар": ["The world boss is gone — back to the hangar", "Світовий бос пішов — повернення в ангар", "El jefe mundial se fue: vuelta al hangar", "Dünya patronu gitti — hangara dönüş", "O chefe mundial foi embora — volta ao hangar"], "Мировой босс сейчас не в логове. Расписание — в Событиях": ["The world boss isn't in its lair now. Schedule — in Events", "Світового боса зараз немає в лігві. Розклад — у Подіях", "El jefe mundial no está en su guarida. Horario: en Eventos", "Dünya patronu şu an ininde değil. Program — Etkinlikler'de", "O chefe mundial não está no covil agora. Horário — em Eventos"], "Мировой босс сейчас не в логове": ["The world boss isn't in its lair now", "Світового боса зараз немає в лігві", "El jefe mundial no está en su guarida", "Dünya patronu şu an ininde değil", "O chefe mundial não está no covil agora"], "Добыча мирового босса": ["World boss loot", "Здобич світового боса", "Botín del jefe mundial", "Dünya patronu ganimeti", "Saque do chefe mundial"], "Логово Владыки · прочность босса {n}% · PvP-зона": ["Overlord's Lair · boss hull {n}% · PvP zone", "Лігво Володаря · міцність боса {n}% · PvP-зона", "Guarida del Señor · integridad del jefe {n}% · zona PvP", "Hükümdarın İni · patron dayanıklılığı %{n} · PvP bölgesi", "Covil do Senhor · integridade do chefe {n}% · zona PvP"], "Босс повержен — добыча ещё лежит в логове": ["Boss defeated — the loot is still in the lair", "Боса переможено — здобич ще лежить у лігві", "Jefe derrotado: el botín sigue en la guarida", "Patron yenildi — ganimet hâlâ inde", "Chefe derrotado — o saque ainda está no covil"], "Босс в логове!": ["Boss in the lair!", "Бос у лігві!", "¡El jefe está en la guarida!", "Patron inde!", "Chefe no covil!"], "Ты уже в логове": ["You're already in the lair", "Ти вже в лігві", "Ya estás en la guarida", "Zaten indesin", "Você já está no covil"], "Босс повержен": ["Boss defeated", "Боса переможено", "Jefe derrotado", "Patron yenildi", "Chefe derrotado"], "Добыча ещё лежит в логове": ["The loot is still in the lair", "Здобич ще лежить у лігві", "El botín sigue en la guarida", "Ganimet hâlâ inde", "O saque ainda está no covil"], "В логово": ["To the lair", "До лігва", "A la guarida", "İne", "Ao covil"], "Босс появляется в своём логове. Вход — через События или портал в ангаре, пока босс жив.": ["The boss appears in its lair. Enter via Events or the hangar portal while the boss is alive.", "Бос з'являється у своєму лігві. Вхід — через Події або портал в ангарі, поки бос живий.", "El jefe aparece en su guarida. Entra desde Eventos o el portal del hangar mientras viva.", "Patron kendi ininde belirir. Patron yaşadıkça Etkinlikler'den veya hangar portalından gir.", "O chefe aparece no seu covil. Entre por Eventos ou pelo portal do hangar enquanto ele estiver vivo."], "В логове PvP: другие пилоты могут атаковать. Ремонт после гибели бесплатный.": ["PvP in the lair: other pilots can attack. Repair after death is free.", "У лігві PvP: інші пілоти можуть атакувати. Ремонт після загибелі безкоштовний.", "PvP en la guarida: otros pilotos pueden atacar. La reparación tras morir es gratis.", "İnde PvP var: diğer pilotlar saldırabilir. Ölümden sonra onarım ücretsiz.", "PvP no covil: outros pilotos podem atacar. O reparo após morrer é grátis."], "Погиб — возвращайся сразу: кнопка «⚔ К боссу» в ангаре.": ["Died? Come right back: the «⚔ To the boss» button in the hangar.", "Загинув — повертайся одразу: кнопка «⚔ До боса» в ангарі.", "¿Has caído? Vuelve enseguida: botón «⚔ Al jefe» en el hangar.", "Öldün mü? Hemen dön: hangardaki «⚔ Patrona» düğmesi.", "Morreu? Volte já: botão «⚔ Ao chefe» no hangar."], "Мировой босс сейчас в логове": ["The world boss is in its lair now", "Світовий бос зараз у лігві", "El jefe mundial está ahora en su guarida", "Dünya patronu şu an ininde", "O chefe mundial está no covil agora"], "Мировой босс «Владыка Ржавчины» появился в своём логове! Вход — портал в ангаре или События": ["World boss «Rust Overlord» has appeared in its lair! Enter via the hangar portal or Events", "Світовий бос «Володар Іржі» з'явився у своєму лігві! Вхід — портал в ангарі або Події", "¡El jefe mundial «Señor del Óxido» apareció en su guarida! Entra por el portal del hangar o Eventos", "Dünya patronu «Pas Efendisi» ininde belirdi! Giriş — hangar portalı veya Etkinlikler", "O chefe mundial «Senhor da Ferrugem» surgiu no covil! Entre pelo portal do hangar ou Eventos"], "Владыка Ржавчины повержен! Добыча лежит в логове": ["Rust Overlord is defeated! The loot is in the lair", "Володаря Іржі переможено! Здобич лежить у лігві", "¡Señor del Óxido derrotado! El botín está en la guarida", "Pas Efendisi yenildi! Ganimet inde", "Senhor da Ferrugem derrotado! O saque está no covil"], "Мировой босс «Владыка Ржавчины» ушёл непобеждённым": ["World boss «Rust Overlord» left undefeated", "Світовий бос «Володар Іржі» пішов непереможеним", "El jefe mundial «Señor del Óxido» se fue invicto", "Dünya patronu «Pas Efendisi» yenilmeden gitti", "O chefe mundial «Senhor da Ferrugem» partiu invicto"]});
 
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
