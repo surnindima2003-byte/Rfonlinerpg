@@ -118,7 +118,7 @@ class Drop(unittest.TestCase):
     def test_only_in_gem_locations(self):
         self.assertIn("        if loc in GEM_LOCS:", ITEMS_SRC)
         self.assertIn("for d in roll_gems(lv, base_mult):", ITEMS_SRC)
-        self.assertEqual(set(items.GEM_LOCS), {"sector1", "sector2", "farm1", "season1"})
+        self.assertEqual(set(items.GEM_LOCS), {"sector1", "sector2", "farm1", "season1", "world"})
 
 
 class Codex(unittest.TestCase):

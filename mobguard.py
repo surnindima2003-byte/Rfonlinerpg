@@ -46,6 +46,9 @@ ELITE_HP = 2.5                                            # прочность �
 # Монстр этапа — как монстр «Страха» того же уровня (их много и они идут пачками), босс — моб подземелья 40 ур. ×COOP_BOSS_HP
 COOP_LOCS, COOP_STAGES, COOP_BOSS = tuple(f"coop{i}" for i in range(1, 9)), (10, 15, 20, 25, 30, 40, 50, 60), 40
 COOP_BOSS_HP = 40
+# «Мир» (открытый мир, 10 спотов): монстры wm40…wm59 водятся только в локации world. Прочность — по формуле моба
+# подземелья того же уровня (Шагоход ×1,25), как NPCS["wm…"] в игре; уровень — число в имени
+WORLD_LOC, WORLD_RANGE = "world", (40, 59)
 
 
 def mob_level(mob, loc):
@@ -60,6 +63,10 @@ def mob_level(mob, loc):
     if m:
         lv = int(m.group(1))
         return lv if loc in ELITE_LOCS and ELITE_RANGE[0] <= lv <= ELITE_RANGE[1] else None
+    m = re.fullmatch(r"wm(\d{2})", mob or "")
+    if m:
+        lv = int(m.group(1))
+        return lv if loc == WORLD_LOC and WORLD_RANGE[0] <= lv <= WORLD_RANGE[1] else None
     m = re.fullmatch(r"fw(\d{1,2})", mob or "")
     if m:
         lv = int(m.group(1))
@@ -85,10 +92,18 @@ def _js_round(x):
     return int(x + 0.5)                                   # Math.round из игры (Python round — банковское)
 
 
+def _dg_hp(lv):
+    """Прочность моба подземелья lv-го уровня (на ней же стоят монстры Мира)."""
+    return _js_round((20 + 14 * lv + 0.25 * lv * lv) * (1.25 if DG_BASE[(lv - 1) % 4] == "war_walker" else 1))
+
+
 def mob_hp(mob):
     """Прочность моба — зеркало NPCS из игры. None — такого моба нет."""
     if mob in BASE_HP:
         return BASE_HP[mob]
+    if len(mob) == 4 and mob[:2] == "wm" and mob[2:].isdigit():
+        lv = int(mob[2:])
+        return _dg_hp(lv) if WORLD_RANGE[0] <= lv <= WORLD_RANGE[1] else None
     if len(mob) == 4 and mob[:2] == "el" and mob[2:].isdigit():
         lv = int(mob[2:])
         return _js_round(mob_hp(f"dg{lv}") * ELITE_HP) if ELITE_RANGE[0] <= lv <= ELITE_RANGE[1] else None
@@ -104,7 +119,7 @@ def mob_hp(mob):
         lv = int(mob[2:])
         if not 1 <= lv <= 40:
             return None
-        hp = _js_round((20 + 14 * lv + 0.25 * lv * lv) * (1.25 if DG_BASE[(lv - 1) % 4] == "war_walker" else 1))
+        hp = _dg_hp(lv)
         return hp * 10 if mob[1] == "b" else hp
     return None
 

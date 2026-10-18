@@ -45,6 +45,7 @@ ELITE_RANGE, ELITE_LOOT = (26, 36), 2          # элитные монстры e
 COOP_STAGES = (10, 15, 20, 25, 30, 40, 50, 60)
 COOP_BASE = ("scrap_crawler", "rogue_drone", "sentry_bot", "war_walker", "scrap_crawler", "rogue_drone", "sentry_bot", "war_walker")
 COOP_BOSS = 40
+WORLD_RANGE = (40, 59)         # «Мир»: монстры wm40…wm59 — как моб подземелья того же уровня (как mobguard.WORLD_RANGE)
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6}
 LOC_CORES = {"reactor_ruins", "iron_canyon"}   # локации с флагом cores в LOCS
 TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
@@ -83,6 +84,12 @@ def mob_info(mob):
         L = COOP_BOSS
         loot = {k: round(v * 0.6, 3) for k, v in NPCS[DG_BASE[(L - 1) % 4]][2].items()}
         return L, ((L + 1) * 10, (2 * L + 4) * 10), loot, True
+    if mob.startswith("wm") and mob[2:].isdigit():             # «Мир»: лом и материалы как у моба подземелья того же уровня
+        L = int(mob[2:])
+        if not WORLD_RANGE[0] <= L <= WORLD_RANGE[1]:
+            return None
+        loot = {k: round(v * 0.6, 3) for k, v in NPCS[DG_BASE[(L - 1) % 4]][2].items()}
+        return L, (L + 1, 2 * L + 4), loot, False
     if mob.startswith("fw") and mob[2:].isdigit():             # «Страх»: лом и материалы как у монстра подземелья того же уровня
         L = int(mob[2:])
         if not 1 <= L <= FEAR_WAVES:

@@ -99,8 +99,9 @@ def forget(uid):
     _floor.pop(uid, None)
 
 
-async def add_kill(s, uid, lv, boss=False):
-    _remember(uid, await _bump(s, uid, exp=mob_exp(lv, boss)))
+async def add_kill(s, uid, lv, boss=False, mult=1):
+    """Опыт за подтверждённое убийство; mult — множитель локации (Мир — items.WORLD_XP, как WORLD.XP в игре)."""
+    _remember(uid, await _bump(s, uid, exp=mob_exp(lv, boss) * mult))
     return _cap[uid]
 
 

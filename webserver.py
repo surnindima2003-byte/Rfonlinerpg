@@ -50,7 +50,7 @@ from config import WEBAPP_URL
 GAME_FILE = Path(__file__).parent / "game.html"
 GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
-LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1", "wboss"}
+LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1", "wboss", "world"}
 SEASON_LOC = "season1"                                   # сезонная зона: вход только с билетом сезона
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда (в логове мирового босса wboss — есть)
 LOCS |= set(elite.LOCS)                                # экземпляры элитной фарм-зоны (по одному на группу)

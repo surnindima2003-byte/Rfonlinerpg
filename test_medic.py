@@ -41,8 +41,8 @@ class Contract(unittest.TestCase):
     def test_guide_and_patch_notes(self):
         self.assertTrue("заодно бьют монстров" in GUIDE and "Урон слабый" not in GUIDE)     # карточка класса в гайде
         clean = re.sub(r"<!--.*?-->", "", PATCHES, flags=re.S)
-        first = re.search(r'<section\b[^>]*\bdata-patch="([^"]+)"[^>]*data-title="([^"]+)"', clean)
-        self.assertEqual(first.groups(), ("2026-10-18-2", "Ремонтник научился бить"))
+        patches = re.findall(r'<section\b[^>]*\bdata-patch="([^"]+)"[^>]*data-title="([^"]+)"', clean)
+        self.assertIn(("2026-10-18-2", "Ремонтник научился бить"), patches)     # порядок патчей проверяет test_news
 
 
 @unittest.skipUnless(shutil.which("node"), "нет node")

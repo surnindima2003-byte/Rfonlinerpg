@@ -129,14 +129,14 @@ CLOAKS = ("ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_nigh
 # уникальные сеты классов. Учитываются штуками, продаются на маркете за GRAM.
 SHARDS = ("sh_plasma", "sh_ion", "sh_solar", "sh_void", "sh_magma", "sh_cryo", "sh_toxin", "sh_blood")
 # самоцветы (как в game.html → GEMS, «Кодекс самоцветов» LIBERTY): четыре вида, падают с врагов в Нижних и Глубинных
-# цехах, Фарм-зоне и Сезонной зоне по решению сервера (roll_gems) — только в живой игре. Учитываются штуками,
+# цехах, Фарм-зоне, Сезонной зоне и в Мире по решению сервера (roll_gems) — только в живой игре. Учитываются штуками,
 # продаются на маркете за GRAM (не дешевле GEM_MIN_PRICE за штуку — webserver.api_market). В Кодексе их сдают
 # до GEM_MAX штук каждого вида (op "gem"): сданные списываются с учёта игрока навсегда, а счётчик сданных лежит
 # в той же таблице балансов под «cx:<id>» (влезает в 12 символов столбца) — его не нарисовать на телефоне.
 GEMS = ("gm_emer", "gm_ruby", "gm_abys", "gm_jade")
 GEMS_COMMON = ("gm_emer", "gm_ruby")            # шанс как у медной сферы (обычная заточка)
 GEMS_RARE = ("gm_abys", "gm_jade")              # шанс как у титановой сферы (безопасная заточка)
-GEM_LOCS = ("sector1", "sector2", "farm1", "season1")
+GEM_LOCS = ("sector1", "sector2", "farm1", "season1", "world")
 GEM_MAX = 500
 GEM_MIN_PRICE = 0.4                             # GRAM за штуку на маркете (как GEM_MIN_PRICE в игре)
 GEM_CX = "cx:"
@@ -345,8 +345,12 @@ def uniq_spend(S, item_id):
             _take_any(S, k, n)
 
 
-from mobguard import BASE_MOBS, LOC_MIN, DUNGEON_RANGE, mob_level      # таблицы мобов — в mobguard (без базы)
+from mobguard import BASE_MOBS, LOC_MIN, DUNGEON_RANGE, WORLD_LOC, mob_level      # таблицы мобов — в mobguard (без базы)
 SEASON_DROP = {"season1": 1.5}                  # сезонная зона: +50% к ценному дропу
+# «Мир»: опыт за монстров ×3 (WORLD.XP в игре) — и убившему, и союзникам по пати (их доля считается с этого опыта).
+# Снаряжение с монстров выше 50 ур. — как с 50-го (gearLv в игре): старшее поколение вещей — 45 ур., и без этого
+# с топ-спотов (53–59) вещи не падали бы вовсе
+WORLD_XP, WORLD_GEAR_LV = 3, 50
 ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5]   # как в игре
 P = lambda pct: pct / 100.0
 
@@ -370,13 +374,14 @@ ELITE_LOOT = 2                                   # элитный моб (el…)
 _boss_t = {}
 
 
-def roll(lv, mult=1, shard_mult=None):
+def roll(lv, mult=1, shard_mult=None, gear_lv=None):
     """Бросок ценного лута за одного убитого моба (mult > 1 — главарь). shard_mult — свой множитель осколков
-    (у элитных мобов осколки не умножаются), по умолчанию тот же mult."""
+    (у элитных мобов осколки не умножаются), по умолчанию тот же mult. gear_lv — уровень, по которому выбираются
+    вещи и их шансы (монстры Мира выше 50 ур. — как 50-й), по умолчанию уровень моба."""
     sm = mult if shard_mult is None else shard_mult
-    out, s = [], lv - 1
-    pool = [g for g, need in GEAR if lv - 10 <= need <= lv + 2]
-    for grade, per in enumerate(gear_per(lv)):
+    out, s, gl = [], lv - 1, lv if gear_lv is None else gear_lv
+    pool = [g for g, need in GEAR if gl - 10 <= need <= gl + 2]
+    for grade, per in enumerate(gear_per(gl)):
         # потолок 50% — на итоговый шанс (раньше min стоял до умножения на число вещей и не ограничивал ничего)
         if per and pool and random.random() < min(0.5, per * mult * len(pool)):
             out.append({"kind": "gear", "id": random.choice(pool), "g": grade})
@@ -814,9 +819,10 @@ async def process_kills(s, uid, me, kills, exp_out=None):
                 continue                               # главари не могут умирать слишком часто
             _boss_t[uid], mult = time.time(), BOSS_LOOT
         await pvp.mob_killed(uid, me)
-        cap = await progress.add_kill(s, uid, lv, boss)
+        xm = WORLD_XP if loc == WORLD_LOC else 1
+        cap = await progress.add_kill(s, uid, lv, boss, mult=xm)
         if exp_out is not None:
-            exp_out.append(progress.mob_exp(lv, boss))
+            exp_out.append(progress.mob_exp(lv, boss) * xm)
         import seasonpts
         ctr = seasonpts.kill_counter(loc)
         if ctr:
@@ -836,11 +842,11 @@ async def process_kills(s, uid, me, kills, exp_out=None):
                                            drop_bonus=vrow[3] + (0.6 if ticket else 0) + (0.5 if loc == "season1" else 0)))
         base_mult = mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
         em = ELITE_LOOT if mob.startswith("el") else 1                  # элитная зона: ценный дроп ×2 (осколки — как обычно)
-        for d in roll(lv, base_mult * em, shard_mult=base_mult):
+        for d in roll(lv, base_mult * em, shard_mult=base_mult, gear_lv=min(lv, WORLD_GEAR_LV) if loc == WORLD_LOC else None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)
-        if loc in GEM_LOCS:                                             # самоцветы: цеха, Фарм-зона и Сезонная зона
+        if loc in GEM_LOCS:                                             # самоцветы: цеха, Фарм-зона, Сезонная зона и Мир
             for d in roll_gems(lv, base_mult):
                 item = await add_spheres(s, uid, d["id"], d["n"])
                 item["i"] = i

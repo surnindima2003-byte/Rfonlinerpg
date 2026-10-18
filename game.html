@@ -703,6 +703,12 @@ button.li{width:100%;font:inherit;color:inherit}
 .maplegend{display:flex;justify-content:center;gap:14px;font-size:12px;color:#93A0AC;margin-top:8px}
 .maplegend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .maph{margin:4px 2px 0;font:14px 'Russo One',sans-serif;color:var(--muted);letter-spacing:.5px}
+.wmap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px}
+.wmap canvas{margin:0}
+.wspots{display:grid;gap:6px}
+.wspot{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c);border-radius:12px;padding:8px 12px}
+.wspot b{display:block;color:var(--c);font-weight:700}
+.wspot small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 .moblist{display:grid;gap:8px}
 .mobcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .mobcard.open{border-color:var(--faction)}
@@ -1889,7 +1895,7 @@ for(const id of SHARD_IDS) ITEMS[id] = {name:SHARD[id].name, type:"shard", sell:
 // Сколько сдано, хранит сервер (items.py → GEM_CX): телефон берёт счётчики при входе (regSync).
 // kind: "c" — частый (шанс как у медной сферы), "r" — редкий (как у титановой). shape — огранка на иконке.
 const GEM_MAX = 500, GEM_MIN_PRICE = 0.4;
-const GEM_LOCS = ["sector1", "sector2", "farm1", "season1"];
+const GEM_LOCS = ["sector1", "sector2", "farm1", "season1", "world"];
 const GEM_STEPS = {
   c:[[1, {atk:5}], [10, {atk:5, def:5}], [20, {atk:5, def:5}], [50, {atk:10}], [100, {atk:10, def:10}], [300, {atk:30, def:30, hp:3000}], [500, {atk:50, def:50, rate:0.2}]],
   r:[[1, {atk:10}], [10, {atk:10, def:10}], [30, {atk:20}], [60, {atk:20, def:20}], [100, {atk:30}], [150, {atk:30, def:30}], [300, {atk:50, def:50, hp:5000}], [500, {atk:100, def:100, rate:0.2}]]
@@ -2952,7 +2958,7 @@ function killEnemy(e){
   const k = NPCS[e.type], L = LOCS[locKey];
   e.dead = true; e.respawn = now + (k.boss ? BOSS_RESPAWN : 10); logBattle("kill", k.name); Sfx.play("kill");
   const tk = typeof ticketActive === "function" && ticketActive(), sroom = locKey === "season1" || locKey === "tower";
-  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (locKey === "tower" ? 4 : sroom ? 1.5 : 1) * (1 + (stat().xpUp || 0)));
+  const gain = Math.round(k.exp * (typeof guildExpMult === "function" ? guildExpMult() : 1) * (1 + (typeof vipBonus === "function" ? vipBonus().xp : 0) + (typeof potV === "function" ? potV("xp") : 0)) * (tk ? 2 : 1) * (locKey === "tower" ? 4 : sroom ? 1.5 : locKey === "world" ? 3 : 1) * (1 + (stat().xpUp || 0)));   // Мир: ×3 (WORLD.XP, items.WORLD_XP)
   if(typeof seasonAddXp === "function") seasonAddXp(k.boss ? 20 : 1);          // опыт сезона: 1 за врага, 20 за главаря — не зависит от уровня моба
   S.exp += gain; addText(e.x, e.y-34, "+" + gain + " опыта", "#5FD4E8");
   if(typeof guildAddXp === "function") guildAddXp(gain);
@@ -3124,7 +3130,7 @@ function update(dt){
 
 function updateEnemies(dt, st){
   for(const e of enemies){
-    if(e.dead){ if(now > e.respawn){ if(e.room) respawnDungeon(e); else Object.assign(e, makeEnemy(e.type, npcs[0])); } continue; }
+    if(e.dead){ if(now > e.respawn){ if(e.room) respawnDungeon(e); else if(e.spot) respawnSpot(e); else Object.assign(e, makeEnemy(e.type, npcs[0])); } continue; }
     const k = NPCS[e.type];
     if(e.owner && e.owner !== NET.id && typeof shOn === "function" && shOn()){
       // общий моб: его ИИ считает телефон игрока, за которым он гонится; здесь — только плавное движение к его позиции
@@ -3132,16 +3138,18 @@ function updateEnemies(dt, st){
       if(e.rx != null){ const f = Math.min(1, dt*8), mx = e.rx - e.x, my = e.ry - e.y; e.x += mx*f; e.y += my*f; e.moving = Math.hypot(mx, my) > 3; if(e.rang != null) e.ang = e.rang; }
       continue;
     }
-    if(e.room && !e.chase && (Math.abs(e.x - p.x) > 700 + vw/2 || Math.abs(e.y - p.y) > 700 + vh/2)) continue;   // далёкие мобы подземелья спят
+    if((e.room || e.spot) && !e.chase && (Math.abs(e.x - p.x) > 700 + vw/2 || Math.abs(e.y - p.y) > 700 + vh/2)) continue;   // далёкие мобы подземелья и спотов Мира спят
     e.flash -= dt;
     if(e.stun > 0){ e.stun -= dt; e.moving = false; continue; }
     e.cd -= dt; e.lunge -= dt;
     const dx = p.x-e.x, dy = p.y-e.y, d = Math.hypot(dx,dy);
     const safe = p.dead || safeSpot(p);
-    if(!safe && d < 240 && !e.room) e.chase = true;             // в подземельях моб агрится только когда его ударили
+    if(!safe && d < 240 && !e.room && !e.spot) e.chase = true;  // в подземельях моб агрится только когда его ударили
     // фарм-зона и сезонная зона: моб сам бросается, если подойти почти вплотную (≈ 60 px между корпусами)
     else if(!safe && !e.chase && e.room && e.room.scatter && d < k.r + 20 + 60 && los(e.x, e.y, p.x, p.y)) e.chase = true;
-    if(safe || d > (e.room ? 560 : 480) || (e.room && !canReach(e))){ e.chase = false; e.roomAggro = false; }   // вышел из комнаты — моб возвращается
+    // споты Мира: мид и топ бросаются всей пачкой, если подойти близко к ней на её месте; лоу — только если ударить
+    else if(!safe && !e.chase && e.spot && W_TIERS[e.spot.tier].aggro && d < k.r + WORLD.AGGRO && Math.hypot(e.x - e.hx, e.y - e.hy) < 60) wakePack(e);
+    if(safe || d > (e.room || e.spot ? 560 : 480) || (e.room && !canReach(e)) || (e.spot && Math.hypot(e.x - e.spot.x, e.y - e.spot.y) > e.spot.r + WORLD.LEASH)){ e.chase = false; e.roomAggro = false; }   // вышел из комнаты или увёл моба от спота — моб возвращается
     let vx = 0, vy = 0;
     if(e.chase){
       e.ang = Math.atan2(dy,dx);
@@ -3152,8 +3160,8 @@ function updateEnemies(dt, st){
         if(k.ranged) bolts.push({x:e.x, y:e.y, vx:dx/d*330, vy:dy/d*330, dmg, life:1.2, by:k.name, src:e});
         else { hurtPlayer(dmg, k.name, e); e.lunge = 0.15; }
       }
-    } else if(e.room){
-      // подземелье: до удара моб стоит на своём месте; после погони спокойно возвращается туда же
+    } else if(e.room || e.spot){
+      // подземелье и споты Мира: до удара моб стоит на своём месте; после погони спокойно возвращается туда же
       const wx = e.hx - e.x, wy = e.hy - e.y, wd = Math.hypot(wx, wy);
       if(wd > 6){ vx = wx/wd*k.speed*0.6; vy = wy/wd*k.speed*0.6; e.ang = Math.atan2(wy, wx); }
       if(e.hp < e.max) e.hp = Math.min(e.max, e.hp + e.max*0.05*dt);
@@ -6582,7 +6590,7 @@ function onNetExtra(d){
     S.hp = Math.min(mh, S.hp + a); addText(p.x, p.y - 40, "+" + a, "#7BC98A");
     if(!d.q){ toast(String(d.from || "Союзник").slice(0, 16) + " подлатал тебя: +" + a); Sfx.play("pick"); }
   } else if(d.t === "pxp"){
-    const a = Math.max(0, Math.min(500, +d.amount || 0)); if(!a) return;
+    const a = Math.max(0, Math.min(5000, +d.amount || 0)); if(!a) return;   // в Мире опыт ×3: доля за одного монстра 59 ур. — около 1000
     S.exp += a; pxpShow(a);                                   // опыт сразу, надпись — одна раз в 1,5 с
     if(levelUps()){ Sfx.play("level"); toast("Новый уровень: " + S.level + "!"); }
   } else if(d.t === "pinfo" && d.text){ toast(d.text); }
@@ -8556,9 +8564,11 @@ function mobDrops(type, loc){
   out.items.push({id:"sph_ti", chance:P(+(0.00033 + 0.0000036*s).toFixed(7)), sect:"sph"});
   // книги: 0,0001% каждая, книги навыков с 11 ур. — 0,0002%
   for(const b of BOOK_IDS) out.items.push({id:b, chance:P(ITEMS[b].pas ? 0.0001 : lv > 10 ? 0.0002 : 0.0001), sect:ITEMS[b].pas ? "bookp" : "book"});
-  const pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= lv + 2 && (ITEMS[id].lvl || 1) >= lv - 10);   // вещи своего уровня и до 10 ниже
-  out.gear = {pool, per:gearPer(lv)};
-  // самоцветы: только в цехах, Фарм-зоне и Сезонной зоне. Бросает их сервер (items.roll_gems), здесь — шансы для карты
+  // вещи своего уровня и до 10 ниже; у монстров Мира выше 50 ур. — как у 50-го (иначе с топ-спотов снаряжение не падало бы вовсе:
+  // старшее поколение — 45 ур.), gearLv — как items.WORLD_GEAR_LV на сервере
+  const gl = k.gearLv || lv, pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= gl + 2 && (ITEMS[id].lvl || 1) >= gl - 10);
+  out.gear = {pool, per:gearPer(gl)};
+  // самоцветы: в цехах, Фарм-зоне, Сезонной зоне и в Мире. Бросает их сервер (items.roll_gems), здесь — шансы для карты
   out.gems = GEM_LOCS.includes(loc) ? GEM_IDS.map(id => ({id, chance:P(GEMS[id].kind === "c" ? +(0.0033 + 0.000036*s).toFixed(6) : +(0.00033 + 0.0000036*s).toFixed(7))})) : [];
   if(k.boss){                                            // главарь: шансы ценного лута ×150
     out.gems.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
@@ -9661,7 +9671,7 @@ function gemCard(id){
 }
 function gemCodexHtml(){
   const b = gemBonus();
-  return `<p class="hint" style="margin-top:0">Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне и Сезонной зоне. Каждый вид собирается отдельно, до ${GEM_MAX} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.</p>
+  return `<p class="hint" style="margin-top:0">Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне, Сезонной зоне и в Мире. Каждый вид собирается отдельно, до ${GEM_MAX} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.</p>
     <div class="gm-tot"><b>Бонус самоцветов</b><span>${[`+${b.atk} АТК`, `+${b.def} ЗАЩ`, `+${b.hp} ПРОЧ`, `+${Math.round(b.rate*100)}% СКОР. АТАКИ`].map(s => `<i>${s}</i>`).join(" · ")}</span></div>
     ${GEM_IDS.map(gemCard).join("")}
     <p class="hint">Самоцветы можно продавать и покупать на маркете — не дешевле ${String(GEM_MIN_PRICE).replace(".", ",")} GRAM за штуку.</p>`;
@@ -15208,11 +15218,12 @@ Object.assign(I18N, {"Группа из {n}": ["Group of {n}", "Група з {n
 Object.assign(I18N, {"Город": ["City", "Місто", "Ciudad", "Şehir", "Cidade"], "Переход в Центральный ангар": ["Travel to the Central Hangar", "Перехід до Центрального ангара", "Viaje al Hangar Central", "Merkez Hangar'a geçiş", "Ir ao Hangar Central"], "Выход из башни": ["Leave the tower", "Вихід із вежі", "Salir de la torre", "Kuleden çıkış", "Sair da torre"], "Выйти из башни": ["Leave the tower", "Вийти з вежі", "Salir de la torre", "Kuleden çık", "Sair da torre"], "Выход засчитается как сдача: забег в башне закончится.": ["Leaving counts as giving up: your tower run will end.", "Вихід зарахується як здача: забіг у вежі завершиться.", "Salir cuenta como rendirse: tu recorrido en la torre terminará.", "Çıkış teslim olma sayılır: kule koşun sona erer.", "Sair conta como desistência: sua corrida na torre terminará."], "Игра открыта в другом окне": ["The game is open in another window", "Гра відкрита в іншому вікні", "El juego está abierto en otra ventana", "Oyun başka bir pencerede açık", "O jogo está aberto em outra janela"], "Здесь связь с миром отключена": ["The world connection is off here", "Тут зв'язок зі світом вимкнено", "Aquí la conexión con el mundo está desactivada", "Burada dünya bağlantısı kapalı", "Aqui a conexão com o mundo está desligada"], "Играть здесь": ["Play here", "Грати тут", "Jugar aquí", "Burada oyna", "Jogar aqui"], "Сервер обновился": ["The server was updated", "Сервер оновився", "El servidor se actualizó", "Sunucu güncellendi", "O servidor foi atualizado"], "Прогресс игроков сброшен": ["Player progress was reset", "Прогрес гравців скинуто", "El progreso de los jugadores se reinició", "Oyuncu ilerlemesi sıfırlandı", "O progresso dos jogadores foi redefinido"], "Перезапустить сейчас": ["Restart now", "Перезапустити зараз", "Reiniciar ahora", "Şimdi yeniden başlat", "Reiniciar agora"], "Бонусы": ["Bonuses", "Бонуси", "Bonos", "Bonuslar", "Bônus"], "Облик": ["Looks", "Вигляд", "Aspecto", "Görünüm", "Visual"], "не хватает": ["short by", "бракує", "faltan", "eksik", "faltam"], "Крылья и плащи": ["Wings & cloaks", "Крила й плащі", "Alas y capas", "Kanatlar ve pelerinler", "Asas e capas"], "Ремонт:": ["Repairs:", "Ремонт:", "Reparación:", "Onarım:", "Reparo:"], "Портал сезона": ["Season portal", "Портал сезону", "Portal de temporada", "Sezon portalı", "Portal da temporada"], "Войти в сезонную зону": ["Enter the season zone", "Увійти в сезонну зону", "Entrar en la zona de temporada", "Sezon bölgesine gir", "Entrar na zona da temporada"], "Зона для владельцев билета сезона: больше опыта и дропа.": ["Zone for season ticket holders: more XP and drops.", "Зона для власників квитка сезону: більше досвіду й дропу.", "Zona para quienes tienen el pase de temporada: más XP y botín.", "Sezon bileti sahipleri için bölge: daha fazla XP ve ganimet.", "Zona para quem tem o passe da temporada: mais XP e drops."], "🔒 Вход только с билетом сезона. Билет даёт ×2 опыт, +60% к дропу и премиум-награды пропуска.": ["🔒 Entry with a season ticket only. The ticket gives ×2 XP, +60% drops and premium pass rewards.", "🔒 Вхід лише з квитком сезону. Квиток дає ×2 досвід, +60% до дропу й преміум-нагороди пропуску.", "🔒 Solo se entra con el pase de temporada. Da ×2 XP, +60% de botín y recompensas premium del pase.", "🔒 Giriş yalnızca sezon biletiyle. Bilet ×2 XP, +%60 ganimet ve premium bilet ödülleri verir.", "🔒 Entrada só com o passe da temporada. Ele dá ×2 XP, +60% de drops e recompensas premium do passe."], "Купить билет": ["Buy ticket", "Купити квиток", "Comprar pase", "Bilet satın al", "Comprar passe"], "Пропуск": ["Pass", "Пропуск", "Pase", "Bilet", "Passe"], "Уровень пропуска": ["Pass level", "Рівень пропуску", "Nivel del pase", "Bilet seviyesi", "Nível do passe"], "Уровень пропуска:": ["Pass level:", "Рівень пропуску:", "Nivel del pase:", "Bilet seviyesi:", "Nível do passe:"], "Опыт пропуска": ["Pass XP", "Досвід пропуску", "XP del pase", "Bilet XP", "XP do passe"], "опыта пропуска": ["pass XP", "досвіду пропуску", "XP del pase", "bilet XP", "XP do passe"], "Максимальный уровень пропуска": ["Max pass level", "Максимальний рівень пропуску", "Nivel máximo del pase", "Maksimum bilet seviyesi", "Nível máximo do passe"], "Опыт пропуска — за победы над врагами. Он открывает награды уровней и на рейтинг не влияет.": ["Pass XP comes from defeating enemies. It unlocks level rewards and does not affect the ranking.", "Досвід пропуску — за перемоги над ворогами. Він відкриває нагороди рівнів і не впливає на рейтинг.", "La XP del pase se gana venciendo enemigos. Desbloquea recompensas de nivel y no afecta a la clasificación.", "Bilet XP'si düşmanları yenerek kazanılır. Seviye ödüllerini açar, sıralamayı etkilemez.", "O XP do passe vem de derrotar inimigos. Ele libera recompensas de nível e não afeta o ranking."], "Очки сезона — за задания. По ним место в рейтинге и призы в USDT.": ["Season points come from tasks. They decide your ranking place and USDT prizes.", "Очки сезону — за завдання. За ними місце в рейтингу й призи в USDT.", "Los puntos de temporada se ganan con tareas. Deciden tu puesto en la clasificación y los premios en USDT.", "Sezon puanları görevlerden gelir. Sıralamadaki yerini ve USDT ödüllerini belirler.", "Os pontos da temporada vêm das tarefas. Eles definem sua posição no ranking e os prêmios em USDT."], "Место — по очкам сезона. Призы в USDT получают первые 20 пилотов.": ["Place is by season points. The top 20 pilots get USDT prizes.", "Місце — за очками сезону. Призи в USDT отримують перші 20 пілотів.", "El puesto depende de los puntos de temporada. Los 20 primeros pilotos reciben premios en USDT.", "Sıra sezon puanlarına göredir. İlk 20 pilot USDT ödülü alır.", "A posição é pelos pontos da temporada. Os 20 primeiros pilotos recebem prêmios em USDT."], "Задания, рейтинг и пропуск сезона": ["Season tasks, ranking and pass", "Завдання, рейтинг і пропуск сезону", "Tareas, clasificación y pase de temporada", "Sezon görevleri, sıralama ve bilet", "Tarefas, ranking e passe da temporada"]});
 Object.assign(I18N, {"Сдвоенный Колосс": ["Twin Colossus", "Здвоєний Колос", "Coloso Gemelo", "İkiz Dev", "Colosso Gêmeo"], "Патрульный Краулер": ["Patrol Crawler", "Патрульний Краулер", "Reptador de patrulla", "Devriye Sürüngeni", "Rastejador de patrulha"], "Сторожевой Дрон": ["Sentinel Drone", "Сторожовий Дрон", "Dron centinela", "Nöbetçi Drone", "Drone sentinela"], "Заградительный Страж": ["Barrier Guardian", "Загороджувальний Вартовий", "Guardián de barrera", "Bariyer Muhafızı", "Guardião de barreira"], "Штурмовой Шагоход": ["Assault Walker", "Штурмовий Крокохід", "Caminante de asalto", "Hücum Yürüteci", "Andador de assalto"], "Таранный Краулер": ["Ram Crawler", "Таранний Краулер", "Reptador ariete", "Koçbaşı Sürüngen", "Rastejador aríete"], "Осадный Дрон": ["Siege Drone", "Облоговий Дрон", "Dron de asedio", "Kuşatma Drone'u", "Drone de cerco"], "Карательный Страж": ["Punisher Guardian", "Каральний Вартовий", "Guardián punitivo", "Cezalandırıcı Muhafız", "Guardião punitivo"], "нет в зале · {n} с": ["not in the hall · {n} s", "немає в залі · {n} с", "fuera de la sala · {n} s", "salonda değil · {n} sn", "fora do salão · {n} s"], "Вернуться в забег": ["Return to the run", "Повернутися в забіг", "Volver a la carrera", "Koşuya dön", "Voltar à corrida"], "Возвращение в забег «Сотрудничества»": ["Returning to the Cooperation run", "Повернення в забіг «Співпраці»", "Volviendo a la carrera de Cooperación", "İş birliği koşusuna dönülüyor", "Voltando à corrida da Cooperação"], "Опустошающий Шагоход": ["Ravager Walker", "Спустошливий Крокохід", "Caminante devastador", "Yıkıcı Yürüteç", "Andador devastador"], "Этап": ["Stage", "Етап", "Etapa", "Aşama", "Etapa"], "Этап {n}": ["Stage {n}", "Етап {n}", "Etapa {n}", "Aşama {n}", "Etapa {n}"], "Этап {n}/{m}": ["Stage {n}/{m}", "Етап {n}/{m}", "Etapa {n}/{m}", "Aşama {n}/{m}", "Etapa {n}/{m}"], "Этап {n} пройден": ["Stage {n} cleared", "Етап {n} пройдено", "Etapa {n} superada", "Aşama {n} geçildi", "Etapa {n} concluída"], "Этап {n} откроется через": ["Stage {n} opens in", "Етап {n} відкриється через", "La etapa {n} se abre en", "Aşama {n} açılıyor", "A etapa {n} abre em"], "Этапы": ["Stages", "Етапи", "Etapas", "Aşamalar", "Etapas"], "Босс": ["Boss", "Бос", "Jefe", "Patron", "Chefe"], "{n} монстров": ["{n} monsters", "{n} монстрів", "{n} monstruos", "{n} canavar", "{n} monstros"], "Этап {n} из {m} · монстры {k} уровня": ["Stage {n} of {m} · level {k} monsters", "Етап {n} з {m} · монстри {k} рівня", "Etapa {n} de {m} · monstruos de nivel {k}", "Aşama {n}/{m} · {k}. seviye canavarlar", "Etapa {n} de {m} · monstros de nível {k}"], "Барьер пал:": ["Barrier down:", "Бар'єр упав:", "Barrera caída:", "Bariyer düştü:", "Barreira caiu:"], "ждёт в последнем зале!": ["awaits in the last hall!", "чекає в останній залі!", "espera en la última sala.", "son salonda bekliyor!", "espera no último salão!"], "повержен! Награда по жребию:": ["defeated! Reward by lot:", "переможений! Нагорода за жеребом:", "derrotado. Premio por sorteo:", "yenildi! Kurayla ödül:", "derrotado! Prêmio por sorteio:"], "это ты!": ["that's you!", "це ти!", "¡eres tú!", "bu sensin!", "é você!"], "Это ты!": ["That's you!", "Це ти!", "¡Eres tú!", "Bu sensin!", "É você!"], "Награда по жребию": ["Reward by lot", "Нагорода за жеребом", "Premio por sorteo", "Kurayla ödül", "Prêmio por sorteio"], "Пройдено этапов:": ["Stages cleared:", "Пройдено етапів:", "Etapas superadas:", "Geçilen aşamalar:", "Etapas concluídas:"], "Итоги забега": ["Run results", "Підсумки забігу", "Resultados de la carrera", "Koşu sonuçları", "Resultado da corrida"], "Забег окончен": ["Run over", "Забіг закінчено", "Carrera terminada", "Koşu bitti", "Corrida encerrada"], "Сбор группы": ["Group gathering", "Збір групи", "Reuniendo al grupo", "Grup toplanıyor", "Reunindo o grupo"], "Старт забега": ["Run starting", "Старт забігу", "Inicio de la carrera", "Koşu başlıyor", "Início da corrida"], "Дождитесь напарника": ["Wait for your partner", "Дочекайтеся напарника", "Espera a tu compañero", "Ortağını bekle", "Aguarde seu parceiro"], "Барьер к боссу откроется через": ["Boss barrier opens in", "Бар'єр до боса відкриється через", "La barrera del jefe se abre en", "Patron bariyeri açılıyor", "A barreira do chefe abre em"], "Возврат через {n} с": ["Returning in {n} s", "Повернення через {n} с", "Regreso en {n} s", "{n} sn sonra dönüş", "Retorno em {n} s"], "Начать забег": ["Start the run", "Почати забіг", "Iniciar carrera", "Koşuyu başlat", "Iniciar corrida"], "Группа в сборе — начинайте забег": ["The group is ready — start the run", "Група в зборі — починайте забіг", "Grupo listo: empezad la carrera", "Grup hazır — koşuyu başlatın", "Grupo pronto — iniciem a corrida"], "Группа в сборе — забег начинает лидер": ["The group is ready — the leader starts the run", "Група в зборі — забіг починає лідер", "Grupo listo: el líder inicia la carrera", "Grup hazır — koşuyu lider başlatır", "Grupo pronto — o líder inicia a corrida"], "В пати {n} пилота — нужно ровно {m}": ["{n} pilots in the party — exactly {m} needed", "У паті {n} пілоти — потрібно рівно {m}", "Hay {n} pilotos en el grupo: se necesitan exactamente {m}", "Partide {n} pilot var — tam {m} gerekli", "{n} pilotos no grupo — são necessários exatamente {m}"], "Ждём напарника · {n}/{m}": ["Waiting for a partner · {n}/{m}", "Чекаємо напарника · {n}/{m}", "Esperando compañero · {n}/{m}", "Ortak bekleniyor · {n}/{m}", "Aguardando parceiro · {n}/{m}"], "нет попытки": ["no attempt", "немає спроби", "sin intento", "hak yok", "sem tentativa"], "Не все готовы: нужен {n} уровень, попытка и быть в сети": ["Not everyone is ready: level {n}, an attempt and being online are required", "Не всі готові: потрібен {n} рівень, спроба й бути в мережі", "No todos están listos: hace falta nivel {n}, un intento y estar en línea", "Herkes hazır değil: {n}. seviye, hak ve çevrimiçi olmak gerekli", "Nem todos estão prontos: precisa do nível {n}, uma tentativa e estar online"], "Создайте группу или войдите в чужую — начать забег может только лидер группы": ["Create a group or join someone else's — only the group leader can start the run", "Створіть групу або увійдіть до чужої — почати забіг може лише лідер групи", "Crea un grupo o únete a otro: solo el líder del grupo puede iniciar la carrera", "Grup kur ya da başkasınınkine katıl — koşuyu yalnızca grup lideri başlatabilir", "Crie um grupo ou entre em outro — só o líder do grupo pode iniciar a corrida"], "Одна попытка в день, тратится при входе": ["One attempt per day, spent on entry", "Одна спроба на день, витрачається при вході", "Un intento al día, se gasta al entrar", "Günde bir hak, girişte harcanır", "Uma tentativa por dia, gasta ao entrar"], "{n} этапов по {m} монстров, уровень растёт:": ["{n} stages of {m} monsters, the level grows:", "{n} етапів по {m} монстрів, рівень зростає:", "{n} etapas de {m} monstruos, el nivel sube:", "{m} canavarlı {n} aşama, seviye artıyor:", "{n} etapas de {m} monstros, o nível sobe:"], "Монстры общие на двоих: следующий этап открывается, только когда вы вдвоём зачистите текущий": ["Monsters are shared by both of you: the next stage opens only when the two of you clear the current one", "Монстри спільні на двох: наступний етап відкривається, лише коли ви вдвох зачистите поточний", "Los monstruos son comunes a los dos: la siguiente etapa se abre solo cuando los dos limpiéis la actual", "Canavarlar ikinize ortak: sonraki aşama ancak ikiniz mevcut aşamayı temizleyince açılır", "Os monstros são comuns aos dois: a próxima etapa só abre quando vocês dois limparem a atual"], "В конце — общий босс {n} уровня: {m} титановая сфера (безопасная заточка) и {k} энергоядер одному случайному пилоту": ["At the end — a shared level {n} boss: {m} titanium sphere (safe enchanting) and {k} energy cores to one random pilot", "Наприкінці — спільний бос {n} рівня: {m} титанова сфера (безпечне заточування) і {k} енергоядер одному випадковому пілоту", "Al final, un jefe común de nivel {n}: {m} esfera de titanio (mejora segura) y {k} núcleos de energía para un piloto al azar", "Sonunda — ortak {n}. seviye patron: rastgele bir pilota {m} titanyum küre (güvenli güçlendirme) ve {k} enerji çekirdeği", "No fim — um chefe comum de nível {n}: {m} esfera de titânio (refino seguro) e {k} núcleos de energia para um piloto aleatório"], "Смерть любого из двоих завершает забег для обоих": ["The death of either of you ends the run for both", "Смерть будь-кого з двох завершує забіг для обох", "La muerte de cualquiera de los dos termina la carrera para ambos", "İkinizden birinin ölümü koşuyu ikiniz için de bitirir", "A morte de qualquer um dos dois encerra a corrida para ambos"], "Если вход сорвался или связь оборвалась до первого этапа — попытка вернётся": ["If entry failed or the connection dropped before the first stage, the attempt is returned", "Якщо вхід зірвався або зв'язок обірвався до першого етапу — спроба повернеться", "Si la entrada falló o la conexión se cortó antes de la primera etapa, se devuelve el intento", "Giriş başarısız olursa ya da bağlantı ilk aşamadan önce koparsa hak geri verilir", "Se a entrada falhar ou a conexão cair antes da primeira etapa, a tentativa é devolvida"], "На забег — {n} минут": ["{n} minutes per run", "На забіг — {n} хвилин", "{n} minutos por carrera", "Koşu için {n} dakika", "{n} minutos por corrida"], "Награда за босса": ["Boss reward", "Нагорода за боса", "Premio del jefe", "Patron ödülü", "Prêmio do chefe"], "награда за босса": ["boss reward", "нагорода за боса", "premio del jefe", "patron ödülü", "prêmio do chefe"], "Достаётся одному из двоих по жребию — в итогах забега видно, кому и что выдано": ["Goes to one of the two by lot — the run results show who got what", "Дістається одному з двох за жеребом — у підсумках забігу видно, кому й що видано", "Se lo lleva uno de los dos por sorteo: en los resultados se ve quién recibió qué", "Kurayla ikinizden birine gider — koşu sonuçlarında kimin ne aldığı görünür", "Vai para um dos dois por sorteio — o resultado mostra quem recebeu o quê"], "Опыт и добыча с каждого монстра — тому из двоих, кто нанёс ему больше урона. Монстр сильнее тебя на {n}+ уровней опыта и добычи не даёт.": ["XP and loot from each monster go to whichever of you dealt it more damage. A monster {n}+ levels above you gives no XP or loot.", "Досвід і здобич з кожного монстра — тому з двох, хто завдав йому більше шкоди. Монстр, сильніший за тебе на {n}+ рівнів, не дає досвіду й здобичі.", "La experiencia y el botín de cada monstruo son para quien de los dos le hizo más daño. Un monstruo {n}+ niveles por encima de ti no da experiencia ni botín.", "Her canavarın deneyimi ve ganimeti, ona daha çok hasar verene gider. Senden {n}+ seviye yüksek canavar deneyim ve ganimet vermez.", "XP e saque de cada monstro vão para quem dos dois causou mais dano. Um monstro {n}+ níveis acima de você não dá XP nem saque."], "В зал «Сотрудничества» группу заводит лидер: События → Сотрудничество": ["The leader brings the group into the Cooperation hall: Events → Cooperation", "До зали «Співпраці» групу заводить лідер: Події → Співпраця", "El líder lleva al grupo a la sala de Cooperación: Eventos → Cooperación", "Grubu İş birliği salonuna lider götürür: Etkinlikler → İş birliği", "O líder leva o grupo ao salão da Cooperação: Eventos → Cooperação"], "В зал «Сотрудничества» группу заводит лидер": ["The leader brings the group into the Cooperation hall", "До зали «Співпраці» групу заводить лідер", "El líder lleva al grupo a la sala de Cooperación", "Grubu İş birliği salonuna lider götürür", "O líder leva o grupo ao salão da Cooperação"], "Лидер ведёт группу в зал «Сотрудничества»": ["The leader is taking the group into the Cooperation hall", "Лідер веде групу до зали «Співпраці»", "El líder lleva al grupo a la sala de Cooperación", "Lider grubu İş birliği salonuna götürüyor", "O líder está levando o grupo ao salão da Cooperação"], "Выход из зала": ["Leave the hall", "Вихід із зали", "Salir de la sala", "Salondan çıkış", "Sair do salão"], "Забег окончен — можно возвращаться в ангар.": ["The run is over — you can return to the hangar.", "Забіг закінчено — можна повертатися в ангар.", "La carrera terminó: puedes volver al hangar.", "Koşu bitti — hangara dönebilirsin.", "A corrida acabou — você pode voltar ao hangar."], "Забег ещё не начался: если уйти сейчас, попытка вернётся обоим.": ["The run hasn't started yet: if you leave now, both of you get the attempt back.", "Забіг ще не почався: якщо піти зараз, спроба повернеться обом.", "La carrera aún no ha empezado: si sales ahora, ambos recuperáis el intento.", "Koşu henüz başlamadı: şimdi çıkarsan ikinize de hak geri verilir.", "A corrida ainda não começou: se sair agora, os dois recuperam a tentativa."], "Забег закончится для обоих, а попытка не вернётся.": ["The run will end for both of you, and the attempt won't be returned.", "Забіг закінчиться для обох, а спроба не повернеться.", "La carrera terminará para ambos y el intento no se devolverá.", "Koşu ikiniz için de biter ve hak geri verilmez.", "A corrida termina para os dois e a tentativa não volta."], "Покинуть забег": ["Leave the run", "Покинути забіг", "Abandonar la carrera", "Koşudan ayrıl", "Sair da corrida"], "Попытка возвращена — можно попробовать ещё раз сегодня.": ["Attempt returned — you can try again today.", "Спробу повернуто — можна спробувати ще раз сьогодні.", "Intento devuelto: puedes volver a intentarlo hoy.", "Hak geri verildi — bugün tekrar deneyebilirsin.", "Tentativa devolvida — dá para tentar de novo hoje."], "Барьер откроется, когда начнётся забег": ["The barrier opens when the run starts", "Бар'єр відкриється, коли почнеться забіг", "La barrera se abrirá cuando empiece la carrera", "Bariyer koşu başlayınca açılacak", "A barreira abre quando a corrida começar"], "Барьер к боссу откроется после этапа {n}": ["The boss barrier opens after stage {n}", "Бар'єр до боса відкриється після етапу {n}", "La barrera del jefe se abrirá tras la etapa {n}", "Patron bariyeri {n}. aşamadan sonra açılacak", "A barreira do chefe abre após a etapa {n}"], "Барьер откроется, когда вы вдвоём зачистите этап {n}": ["The barrier opens when the two of you clear stage {n}", "Бар'єр відкриється, коли ви вдвох зачистите етап {n}", "La barrera se abrirá cuando los dos limpiéis la etapa {n}", "Bariyer, ikiniz {n}. aşamayı temizleyince açılacak", "A barreira abre quando vocês dois limparem a etapa {n}"], "сильнее тебя на {n}+ ур.: без награды": ["{n}+ levels above you: no reward", "сильніший за тебе на {n}+ рів.: без нагороди", "{n}+ niveles por encima: sin recompensa", "senden {n}+ sv. yüksek: ödül yok", "{n}+ níveis acima: sem recompensa"], "забег окончен для обоих · возврат в ангар…": ["run over for both · returning to the hangar…", "забіг закінчено для обох · повернення в ангар…", "carrera terminada para ambos · volviendo al hangar…", "koşu ikiniz için bitti · hangara dönülüyor…", "corrida encerrada para os dois · voltando ao hangar…"], "Сейсмический удар!": ["Seismic strike!", "Сейсмічний удар!", "¡Golpe sísmico!", "Sismik darbe!", "Golpe sísmico!"], "ярость": ["rage", "лють", "furia", "öfke", "fúria"], "Ты уже в забеге": ["You're already in a run", "Ти вже в забігу", "Ya estás en una carrera", "Zaten bir koşudasın", "Você já está em uma corrida"], "«Сотрудничество» открывается с {n} уровня": ["Cooperation opens at level {n}", "«Співпраця» відкривається з {n} рівня", "Cooperación se abre desde el nivel {n}", "İş birliği {n}. seviyede açılır", "A Cooperação abre no nível {n}"], "Попытка на сегодня уже использована": ["Today's attempt has already been used", "Спробу на сьогодні вже використано", "El intento de hoy ya se ha usado", "Bugünkü hak zaten kullanıldı", "A tentativa de hoje já foi usada"], "попытка на сегодня уже использована": ["today's attempt has already been used", "спробу на сьогодні вже використано", "el intento de hoy ya se ha usado", "bugünkü hak zaten kullanıldı", "a tentativa de hoje já foi usada"], "Сначала дождись возрождения": ["Wait for your respawn first", "Спершу дочекайся відродження", "Primero espera a reaparecer", "Önce yeniden doğmayı bekle", "Primeiro espere renascer"], "Сначала выйди из группы элитной зоны": ["Leave the elite zone group first", "Спершу вийди з групи елітної зони", "Primero sal del grupo de la zona élite", "Önce elit bölge grubundan çık", "Primeiro saia do grupo da zona de elite"], "В «Сотрудничество» идут вдвоём: в твоей пати больше {n} пилотов": ["Cooperation is for two: your party has more than {n} pilots", "У «Співпрацю» йдуть удвох: у твоєму паті більше {n} пілотів", "Cooperación es para dos: tu grupo tiene más de {n} pilotos", "İş birliği iki kişiliktir: partinde {n} pilottan fazla var", "A Cooperação é em dupla: seu grupo tem mais de {n} pilotos"], "В группе уже двое": ["The group already has two", "У групі вже двоє", "El grupo ya tiene dos", "Grupta zaten iki kişi var", "O grupo já tem dois"], "Начать забег может только лидер группы": ["Only the group leader can start the run", "Почати забіг може лише лідер групи", "Solo el líder del grupo puede iniciar la carrera", "Koşuyu yalnızca grup lideri başlatabilir", "Só o líder do grupo pode iniciar a corrida"], "Все залы «Сотрудничества» заняты — попробуйте через минуту": ["All Cooperation halls are busy — try again in a minute", "Усі зали «Співпраці» зайняті — спробуйте за хвилину", "Todas las salas de Cooperación están ocupadas: prueba en un minuto", "Tüm İş birliği salonları dolu — bir dakika sonra dene", "Todos os salões da Cooperação estão ocupados — tente em um minuto"], "Сначала выйди из группы «Сотрудничества»": ["Leave the Cooperation group first", "Спершу вийди з групи «Співпраці»", "Primero sal del grupo de Cooperación", "Önce İş birliği grubundan çık", "Primeiro saia do grupo da Cooperação"], "Нужна группа из {n} пилотов": ["A group of {n} pilots is needed", "Потрібна група з {n} пілотів", "Se necesita un grupo de {n} pilotos", "{n} pilotluk grup gerekli", "É preciso um grupo de {n} pilotos"], "сейчас в другом событии": ["is in another event right now", "зараз в іншій події", "está ahora en otro evento", "şu anda başka bir etkinlikte", "está em outro evento agora"], "уже в забеге": ["is already in a run", "вже в забігу", "ya está en una carrera", "zaten bir koşuda", "já está em uma corrida"], "погиб — забег окончен": ["died — the run is over", "загинув — забіг закінчено", "murió: la carrera terminó", "öldü — koşu bitti", "morreu — a corrida acabou"], "вышел — забег окончен": ["left — the run is over", "вийшов — забіг закінчено", "salió: la carrera terminó", "ayrıldı — koşu bitti", "saiu — a corrida acabou"], "Напарник": ["Partner", "Напарник", "Compañero", "Ortak", "Parceiro"], "Время забега вышло": ["Run time is up", "Час забігу вийшов", "Se acabó el tiempo de la carrera", "Koşu süresi doldu", "O tempo da corrida acabou"], "Напарник не пришёл — попытка возвращена": ["Your partner didn't arrive — attempt returned", "Напарник не прийшов — спробу повернуто", "Tu compañero no llegó: intento devuelto", "Ortağın gelmedi — hak geri verildi", "O parceiro não veio — tentativa devolvida"], "Забег окончен — возврат в ангар": ["Run over — returning to the hangar", "Забіг закінчено — повернення в ангар", "Carrera terminada: regreso al hangar", "Koşu bitti — hangara dönüş", "Corrida encerrada — voltando ao hangar"], "не поместилась — освободи место в сумке или на складе, награда придёт при следующем входе": ["didn't fit — free up space in the bag or storage, the reward will arrive on your next login", "не помістилася — звільни місце в сумці або на складі, нагорода прийде під час наступного входу", "no cabe: libera espacio en la mochila o el almacén, el premio llegará en tu próxima entrada", "sığmadı — çantada veya depoda yer aç, ödül bir sonraki girişte gelecek", "não coube — libere espaço na bolsa ou no armazém, o prêmio chega no próximo login"]});   // «Сотрудничество»: окно, зал, итоги, сообщения сервера (coop.py)
 // самоцветы и Кодекс самоцветов
-Object.assign(I18N, {"Изумрудная линза": ["Emerald Lens", "Смарагдова лінза", "Lente de esmeralda", "Zümrüt Mercek", "Lente de Esmeralda"], "Рубиновый конденсатор": ["Ruby Capacitor", "Рубіновий конденсатор", "Condensador de rubí", "Yakut Kondansatör", "Capacitor de Rubi"], "Кристалл бездны": ["Abyss Crystal", "Кристал безодні", "Cristal del abismo", "Uçurum Kristali", "Cristal do Abismo"], "Нефритовый резонатор": ["Jade Resonator", "Нефритовий резонатор", "Resonador de jade", "Yeşim Rezonatör", "Ressonador de Jade"], "Линза из прицела древнего разведчика: сквозь неё видны слабые узлы брони": ["A lens from an ancient scout's sight: it reveals weak spots in armor", "Лінза з прицілу давнього розвідника: крізь неї видно слабкі вузли броні", "Una lente de la mira de un antiguo explorador: revela los puntos débiles de la armadura", "Eski bir keşif robotunun nişangâhından mercek: zırhın zayıf noktalarını gösterir", "Uma lente da mira de um antigo batedor: revela os pontos fracos da armadura"], "Кристалл держит заряд дольше любой батареи и отдаёт его одним ударом": ["The crystal holds a charge longer than any battery and releases it in a single strike", "Кристал тримає заряд довше за будь-яку батарею і віддає його одним ударом", "El cristal guarda la carga más que cualquier batería y la libera de un solo golpe", "Kristal, şarjı her bataryadan uzun tutar ve tek vuruşta boşaltır", "O cristal guarda a carga por mais tempo que qualquer bateria e a libera num só golpe"], "Поднят из самых глубоких цехов, внутри гудит чужая энергия": ["Recovered from the deepest workshops, alien energy hums inside", "Піднятий із найглибших цехів, усередині гуде чужа енергія", "Rescatado de los talleres más profundos, en su interior zumba una energía ajena", "En derin atölyelerden çıkarıldı, içinde yabancı bir enerji uğulduyor", "Resgatado das oficinas mais profundas, uma energia estranha vibra em seu interior"], "Гасит вибрацию брони и разгоняет приводы до предела": ["Dampens armor vibration and pushes actuators to the limit", "Гасить вібрацію броні й розганяє приводи до межі", "Amortigua la vibración del blindaje y lleva los actuadores al límite", "Zırh titreşimini söndürür ve sürücüleri sınırına kadar hızlandırır", "Amortece a vibração da blindagem e leva os atuadores ao limite"], "Сдаётся в Кодекс → «Самоцветы» за вечный бонус": ["Turn it in at Codex → “Gems” for a permanent bonus", "Здається в Кодекс → «Самоцвіти» за вічний бонус", "Se entrega en Códice → «Gemas» a cambio de un bono permanente", "Kodeks → «Mücevherler» bölümüne verilir, kalıcı bonus kazandırır", "Entregue no Códex → «Gemas» por um bônus permanente"], "продаётся на маркете за GRAM": ["sold on the market for GRAM", "продається на маркеті за GRAM", "se vende en el mercado por GRAM", "pazarda GRAM karşılığında satılır", "vendido no mercado por GRAM"], "Наборы": ["Sets", "Набори", "Conjuntos", "Setler", "Conjuntos"], "Самоцветы": ["Gems", "Самоцвіти", "Gemas", "Mücevherler", "Gemas"], "Самоцвет": ["Gem", "Самоцвіт", "Gema", "Mücevher", "Gema"], "Частый · шанс как у медной сферы": ["Common · same chance as a copper sphere", "Частий · шанс як у мідної сфери", "Común · misma probabilidad que una esfera de cobre", "Yaygın · bakır küre ile aynı şans", "Comum · mesma chance de uma esfera de cobre"], "Редкий · шанс как у титановой сферы": ["Rare · same chance as a titanium sphere", "Рідкісний · шанс як у титанової сфери", "Raro · misma probabilidad que una esfera de titanio", "Nadir · titanyum küre ile aynı şans", "Raro · mesma chance de uma esfera de titânio"], "из {n}": ["of {n}", "з {n}", "de {n}", "/{n}", "de {n}"], "До порога {n}: ещё {m}": ["To threshold {n}: {m} more", "До порогу {n}: ще {m}", "Hasta el umbral {n}: faltan {m}", "{n} eşiğine: {m} kaldı", "Até o limiar {n}: faltam {m}"], "Все пороги собраны": ["All thresholds reached", "Усі пороги зібрано", "Todos los umbrales alcanzados", "Tüm eşiklere ulaşıldı", "Todos os limiares alcançados"], "СКОР. АТАКИ": ["ATK SPD", "ШВ. АТАКИ", "VEL. ATQ", "SAL. HIZI", "VEL. ATQ"], "В сумке и на складе: {n}": ["In bag and storage: {n}", "У сумці та на складі: {n}", "En la bolsa y el almacén: {n}", "Çantada ve depoda: {n}", "Na bolsa e no armazém: {n}"], "Нет в сумке и на складе": ["None in bag or storage", "Немає в сумці та на складі", "No hay en la bolsa ni en el almacén", "Çantada ve depoda yok", "Nada na bolsa nem no armazém"], "не учтено сервером: {n}": ["not registered by the server: {n}", "не враховано сервером: {n}", "no registradas por el servidor: {n}", "sunucuda kayıtlı değil: {n}", "não registradas pelo servidor: {n}"], "Сдать 1": ["Turn in 1", "Здати 1", "Entregar 1", "1 ver", "Entregar 1"], "Сдать все": ["Turn in all", "Здати всі", "Entregar todas", "Hepsini ver", "Entregar todas"], "Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне и Сезонной зоне. Каждый вид собирается отдельно, до {n} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.": ["Gems drop from enemies in the Lower Works, Deep Workshops, Farm zone and Season zone. Each kind is collected separately, up to {n}. Threshold bonuses stack and stay forever; turned-in gems are gone.", "Самоцвіти падають з ворогів у Нижніх і Глибинних цехах, Фарм-зоні та Сезонній зоні. Кожен вид збирається окремо, до {n} штук. Бонуси порогів складаються й лишаються назавжди, здані камені зникають.", "Las gemas caen de los enemigos en los Talleres inferiores, los Talleres profundos, la Zona de farmeo y la Zona de temporada. Cada tipo se reúne por separado, hasta {n}. Los bonos de umbral se suman y son permanentes; las gemas entregadas desaparecen.", "Mücevherler Alt atölyelerde, Derin Atölyelerde, Kasma bölgesinde ve Sezon bölgesinde düşmanlardan düşer. Her tür ayrı toplanır, en fazla {n} adet. Eşik bonusları toplanır ve kalıcıdır; verilen taşlar yok olur.", "Gemas caem de inimigos nas Oficinas inferiores, Oficinas profundas, Zona de farm e Zona da temporada. Cada tipo é coletado separadamente, até {n}. Os bônus de limiar se somam e são permanentes; as gemas entregues desaparecem."], "Бонус самоцветов": ["Gem bonus", "Бонус самоцвітів", "Bono de gemas", "Mücevher bonusu", "Bônus de gemas"], "Самоцветы можно продавать и покупать на маркете — не дешевле {n} GRAM за штуку.": ["Gems can be bought and sold on the market — at least {n} GRAM each.", "Самоцвіти можна продавати й купувати на маркеті — не дешевше {n} GRAM за штуку.", "Las gemas se compran y venden en el mercado, a partir de {n} GRAM cada una.", "Mücevherler pazarda alınıp satılabilir — tanesi en az {n} GRAM.", "Gemas podem ser compradas e vendidas no mercado — a partir de {n} GRAM cada."], "Самоцветы — не дешевле {n} GRAM за штуку": ["Gems — at least {n} GRAM each", "Самоцвіти — не дешевше {n} GRAM за штуку", "Gemas: mínimo {n} GRAM cada una", "Mücevherler — tanesi en az {n} GRAM", "Gemas — mínimo de {n} GRAM cada"], "за лот от {n} GRAM": ["from {n} GRAM per lot", "за лот від {n} GRAM", "desde {n} GRAM por lote", "lot başına en az {n} GRAM", "a partir de {n} GRAM por lote"], "Собрано максимум: {n}": ["Maximum collected: {n}", "Зібрано максимум: {n}", "Máximo reunido: {n}", "En fazla toplandı: {n}", "Máximo coletado: {n}"], "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете": ["Only server-registered gems can be turned in: ones dropped by enemies or bought on the market", "Здати можна лише самоцвіти, враховані сервером: ті, що випали з ворогів або куплені на маркеті", "Solo se pueden entregar gemas registradas por el servidor: las que sueltan los enemigos o compradas en el mercado", "Yalnızca sunucuda kayıtlı mücevherler verilebilir: düşmanlardan düşenler veya pazardan alınanlar", "Só é possível entregar gemas registradas pelo servidor: as que caem de inimigos ou compradas no mercado"], "Порог {n}": ["Threshold {n}", "Поріг {n}", "Umbral {n}", "Eşik {n}", "Limiar {n}"], "Сдано в Кодекс": ["Turned in to the Codex", "Здано в Кодекс", "Entregado al Códice", "Kodeks'e verildi", "Entregue ao Códex"], "— сдай его в Кодекс": ["— turn it in to the Codex", "— здай його в Кодекс", "— entrégala en el Códice", "— onu Kodeks'e ver", "— entregue-a no Códex"], "Самоцветы для Кодекса": ["Gems for the Codex", "Самоцвіти для Кодексу", "Gemas para el Códice", "Kodeks için mücevherler", "Gemas para o Códex"], "сданные в Кодекс": ["turned in to the Codex", "здані в Кодекс", "entregadas al Códice", "Kodeks'e verilenler", "entregues ao Códex"], "Собрано полностью": ["Fully collected", "Зібрано повністю", "Completado", "Tamamen toplandı", "Coletado por completo"], "Это не самоцвет": ["That's not a gem", "Це не самоцвіт", "Eso no es una gema", "Bu bir mücevher değil", "Isso não é uma gema"], "Нет учтённых самоцветов: сдать можно только выпавшие с врагов или купленные на маркете": ["No registered gems: only ones dropped by enemies or bought on the market can be turned in", "Немає врахованих самоцвітів: здати можна лише ті, що випали з ворогів або куплені на маркеті", "No hay gemas registradas: solo se pueden entregar las que sueltan los enemigos o compradas en el mercado", "Kayıtlı mücevher yok: yalnızca düşmanlardan düşenler veya pazardan alınanlar verilebilir", "Sem gemas registradas: só é possível entregar as que caem de inimigos ou compradas no mercado"], "Самоцветы как раз изменились, попробуй ещё раз": ["The gems just changed, try again", "Самоцвіти якраз змінилися, спробуй ще раз", "Las gemas acaban de cambiar, inténtalo de nuevo", "Mücevherler az önce değişti, tekrar dene", "As gemas acabaram de mudar, tente de novo"], "Учтённых самоцветов только {n}: остальные нельзя продать за GRAM": ["Only {n} gems are registered: the rest can't be sold for GRAM", "Врахованих самоцвітів лише {n}: решту не можна продати за GRAM", "Solo hay {n} gemas registradas: el resto no se puede vender por GRAM", "Yalnızca {n} mücevher kayıtlı: kalanlar GRAM karşılığı satılamaz", "Só {n} gemas estão registradas: o resto não pode ser vendido por GRAM"], "За GRAM можно продавать только снаряжение, сферы, осколки и самоцветы с мобов, руны, дронов, артефакты, крылья и плащи": ["Only gear, spheres, shards and gems from monsters, runes, drones, artifacts, wings and cloaks can be sold for GRAM", "За GRAM можна продавати лише спорядження, сфери, уламки й самоцвіти з мобів, руни, дронів, артефакти, крила та плащі", "Por GRAM solo se pueden vender equipo, esferas, fragmentos y gemas de monstruos, runas, drones, artefactos, alas y capas", "GRAM karşılığında yalnızca ekipman, canavarlardan düşen küreler, parçalar ve mücevherler, rünler, dronlar, eserler, kanatlar ve pelerinler satılabilir", "Por GRAM só é possível vender equipamento, esferas, fragmentos e gemas de monstros, runas, drones, artefatos, asas e capas"]});
+Object.assign(I18N, {"Изумрудная линза": ["Emerald Lens", "Смарагдова лінза", "Lente de esmeralda", "Zümrüt Mercek", "Lente de Esmeralda"], "Рубиновый конденсатор": ["Ruby Capacitor", "Рубіновий конденсатор", "Condensador de rubí", "Yakut Kondansatör", "Capacitor de Rubi"], "Кристалл бездны": ["Abyss Crystal", "Кристал безодні", "Cristal del abismo", "Uçurum Kristali", "Cristal do Abismo"], "Нефритовый резонатор": ["Jade Resonator", "Нефритовий резонатор", "Resonador de jade", "Yeşim Rezonatör", "Ressonador de Jade"], "Линза из прицела древнего разведчика: сквозь неё видны слабые узлы брони": ["A lens from an ancient scout's sight: it reveals weak spots in armor", "Лінза з прицілу давнього розвідника: крізь неї видно слабкі вузли броні", "Una lente de la mira de un antiguo explorador: revela los puntos débiles de la armadura", "Eski bir keşif robotunun nişangâhından mercek: zırhın zayıf noktalarını gösterir", "Uma lente da mira de um antigo batedor: revela os pontos fracos da armadura"], "Кристалл держит заряд дольше любой батареи и отдаёт его одним ударом": ["The crystal holds a charge longer than any battery and releases it in a single strike", "Кристал тримає заряд довше за будь-яку батарею і віддає його одним ударом", "El cristal guarda la carga más que cualquier batería y la libera de un solo golpe", "Kristal, şarjı her bataryadan uzun tutar ve tek vuruşta boşaltır", "O cristal guarda a carga por mais tempo que qualquer bateria e a libera num só golpe"], "Поднят из самых глубоких цехов, внутри гудит чужая энергия": ["Recovered from the deepest workshops, alien energy hums inside", "Піднятий із найглибших цехів, усередині гуде чужа енергія", "Rescatado de los talleres más profundos, en su interior zumba una energía ajena", "En derin atölyelerden çıkarıldı, içinde yabancı bir enerji uğulduyor", "Resgatado das oficinas mais profundas, uma energia estranha vibra em seu interior"], "Гасит вибрацию брони и разгоняет приводы до предела": ["Dampens armor vibration and pushes actuators to the limit", "Гасить вібрацію броні й розганяє приводи до межі", "Amortigua la vibración del blindaje y lleva los actuadores al límite", "Zırh titreşimini söndürür ve sürücüleri sınırına kadar hızlandırır", "Amortece a vibração da blindagem e leva os atuadores ao limite"], "Сдаётся в Кодекс → «Самоцветы» за вечный бонус": ["Turn it in at Codex → “Gems” for a permanent bonus", "Здається в Кодекс → «Самоцвіти» за вічний бонус", "Se entrega en Códice → «Gemas» a cambio de un bono permanente", "Kodeks → «Mücevherler» bölümüne verilir, kalıcı bonus kazandırır", "Entregue no Códex → «Gemas» por um bônus permanente"], "продаётся на маркете за GRAM": ["sold on the market for GRAM", "продається на маркеті за GRAM", "se vende en el mercado por GRAM", "pazarda GRAM karşılığında satılır", "vendido no mercado por GRAM"], "Наборы": ["Sets", "Набори", "Conjuntos", "Setler", "Conjuntos"], "Самоцветы": ["Gems", "Самоцвіти", "Gemas", "Mücevherler", "Gemas"], "Самоцвет": ["Gem", "Самоцвіт", "Gema", "Mücevher", "Gema"], "Частый · шанс как у медной сферы": ["Common · same chance as a copper sphere", "Частий · шанс як у мідної сфери", "Común · misma probabilidad que una esfera de cobre", "Yaygın · bakır küre ile aynı şans", "Comum · mesma chance de uma esfera de cobre"], "Редкий · шанс как у титановой сферы": ["Rare · same chance as a titanium sphere", "Рідкісний · шанс як у титанової сфери", "Raro · misma probabilidad que una esfera de titanio", "Nadir · titanyum küre ile aynı şans", "Raro · mesma chance de uma esfera de titânio"], "из {n}": ["of {n}", "з {n}", "de {n}", "/{n}", "de {n}"], "До порога {n}: ещё {m}": ["To threshold {n}: {m} more", "До порогу {n}: ще {m}", "Hasta el umbral {n}: faltan {m}", "{n} eşiğine: {m} kaldı", "Até o limiar {n}: faltam {m}"], "Все пороги собраны": ["All thresholds reached", "Усі пороги зібрано", "Todos los umbrales alcanzados", "Tüm eşiklere ulaşıldı", "Todos os limiares alcançados"], "СКОР. АТАКИ": ["ATK SPD", "ШВ. АТАКИ", "VEL. ATQ", "SAL. HIZI", "VEL. ATQ"], "В сумке и на складе: {n}": ["In bag and storage: {n}", "У сумці та на складі: {n}", "En la bolsa y el almacén: {n}", "Çantada ve depoda: {n}", "Na bolsa e no armazém: {n}"], "Нет в сумке и на складе": ["None in bag or storage", "Немає в сумці та на складі", "No hay en la bolsa ni en el almacén", "Çantada ve depoda yok", "Nada na bolsa nem no armazém"], "не учтено сервером: {n}": ["not registered by the server: {n}", "не враховано сервером: {n}", "no registradas por el servidor: {n}", "sunucuda kayıtlı değil: {n}", "não registradas pelo servidor: {n}"], "Сдать 1": ["Turn in 1", "Здати 1", "Entregar 1", "1 ver", "Entregar 1"], "Сдать все": ["Turn in all", "Здати всі", "Entregar todas", "Hepsini ver", "Entregar todas"], "Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне, Сезонной зоне и в Мире. Каждый вид собирается отдельно, до {n} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.": ["Gems drop from enemies in the Lower Works, Deep Workshops, Farm zone, Season zone and the World. Each kind is collected separately, up to {n}. Threshold bonuses stack and stay forever; turned-in gems are gone.", "Самоцвіти падають з ворогів у Нижніх і Глибинних цехах, Фарм-зоні, Сезонній зоні та у Світі. Кожен вид збирається окремо, до {n} штук. Бонуси порогів складаються й лишаються назавжди, здані камені зникають.", "Las gemas caen de los enemigos en los Talleres inferiores, los Talleres profundos, la Zona de farmeo, la Zona de temporada y el Mundo. Cada tipo se reúne por separado, hasta {n}. Los bonos de umbral se suman y son permanentes; las gemas entregadas desaparecen.", "Mücevherler Alt atölyelerde, Derin Atölyelerde, Kasma bölgesinde, Sezon bölgesinde ve Dünya'da düşmanlardan düşer. Her tür ayrı toplanır, en fazla {n} adet. Eşik bonusları toplanır ve kalıcıdır; verilen taşlar yok olur.", "Gemas caem de inimigos nas Oficinas inferiores, Oficinas profundas, Zona de farm, Zona da temporada e no Mundo. Cada tipo é coletado separadamente, até {n}. Os bônus de limiar se somam e são permanentes; as gemas entregues desaparecem."], "Бонус самоцветов": ["Gem bonus", "Бонус самоцвітів", "Bono de gemas", "Mücevher bonusu", "Bônus de gemas"], "Самоцветы можно продавать и покупать на маркете — не дешевле {n} GRAM за штуку.": ["Gems can be bought and sold on the market — at least {n} GRAM each.", "Самоцвіти можна продавати й купувати на маркеті — не дешевше {n} GRAM за штуку.", "Las gemas se compran y venden en el mercado, a partir de {n} GRAM cada una.", "Mücevherler pazarda alınıp satılabilir — tanesi en az {n} GRAM.", "Gemas podem ser compradas e vendidas no mercado — a partir de {n} GRAM cada."], "Самоцветы — не дешевле {n} GRAM за штуку": ["Gems — at least {n} GRAM each", "Самоцвіти — не дешевше {n} GRAM за штуку", "Gemas: mínimo {n} GRAM cada una", "Mücevherler — tanesi en az {n} GRAM", "Gemas — mínimo de {n} GRAM cada"], "за лот от {n} GRAM": ["from {n} GRAM per lot", "за лот від {n} GRAM", "desde {n} GRAM por lote", "lot başına en az {n} GRAM", "a partir de {n} GRAM por lote"], "Собрано максимум: {n}": ["Maximum collected: {n}", "Зібрано максимум: {n}", "Máximo reunido: {n}", "En fazla toplandı: {n}", "Máximo coletado: {n}"], "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете": ["Only server-registered gems can be turned in: ones dropped by enemies or bought on the market", "Здати можна лише самоцвіти, враховані сервером: ті, що випали з ворогів або куплені на маркеті", "Solo se pueden entregar gemas registradas por el servidor: las que sueltan los enemigos o compradas en el mercado", "Yalnızca sunucuda kayıtlı mücevherler verilebilir: düşmanlardan düşenler veya pazardan alınanlar", "Só é possível entregar gemas registradas pelo servidor: as que caem de inimigos ou compradas no mercado"], "Порог {n}": ["Threshold {n}", "Поріг {n}", "Umbral {n}", "Eşik {n}", "Limiar {n}"], "Сдано в Кодекс": ["Turned in to the Codex", "Здано в Кодекс", "Entregado al Códice", "Kodeks'e verildi", "Entregue ao Códex"], "— сдай его в Кодекс": ["— turn it in to the Codex", "— здай його в Кодекс", "— entrégala en el Códice", "— onu Kodeks'e ver", "— entregue-a no Códex"], "Самоцветы для Кодекса": ["Gems for the Codex", "Самоцвіти для Кодексу", "Gemas para el Códice", "Kodeks için mücevherler", "Gemas para o Códex"], "сданные в Кодекс": ["turned in to the Codex", "здані в Кодекс", "entregadas al Códice", "Kodeks'e verilenler", "entregues ao Códex"], "Собрано полностью": ["Fully collected", "Зібрано повністю", "Completado", "Tamamen toplandı", "Coletado por completo"], "Это не самоцвет": ["That's not a gem", "Це не самоцвіт", "Eso no es una gema", "Bu bir mücevher değil", "Isso não é uma gema"], "Нет учтённых самоцветов: сдать можно только выпавшие с врагов или купленные на маркете": ["No registered gems: only ones dropped by enemies or bought on the market can be turned in", "Немає врахованих самоцвітів: здати можна лише ті, що випали з ворогів або куплені на маркеті", "No hay gemas registradas: solo se pueden entregar las que sueltan los enemigos o compradas en el mercado", "Kayıtlı mücevher yok: yalnızca düşmanlardan düşenler veya pazardan alınanlar verilebilir", "Sem gemas registradas: só é possível entregar as que caem de inimigos ou compradas no mercado"], "Самоцветы как раз изменились, попробуй ещё раз": ["The gems just changed, try again", "Самоцвіти якраз змінилися, спробуй ще раз", "Las gemas acaban de cambiar, inténtalo de nuevo", "Mücevherler az önce değişti, tekrar dene", "As gemas acabaram de mudar, tente de novo"], "Учтённых самоцветов только {n}: остальные нельзя продать за GRAM": ["Only {n} gems are registered: the rest can't be sold for GRAM", "Врахованих самоцвітів лише {n}: решту не можна продати за GRAM", "Solo hay {n} gemas registradas: el resto no se puede vender por GRAM", "Yalnızca {n} mücevher kayıtlı: kalanlar GRAM karşılığı satılamaz", "Só {n} gemas estão registradas: o resto não pode ser vendido por GRAM"], "За GRAM можно продавать только снаряжение, сферы, осколки и самоцветы с мобов, руны, дронов, артефакты, крылья и плащи": ["Only gear, spheres, shards and gems from monsters, runes, drones, artifacts, wings and cloaks can be sold for GRAM", "За GRAM можна продавати лише спорядження, сфери, уламки й самоцвіти з мобів, руни, дронів, артефакти, крила та плащі", "Por GRAM solo se pueden vender equipo, esferas, fragmentos y gemas de monstruos, runas, drones, artefactos, alas y capas", "GRAM karşılığında yalnızca ekipman, canavarlardan düşen küreler, parçalar ve mücevherler, rünler, dronlar, eserler, kanatlar ve pelerinler satılabilir", "Por GRAM só é possível vender equipamento, esferas, fragmentos e gemas de monstros, runas, drones, artefatos, asas e capas"]});
 // Ремонтник: лечащие умения бьют монстров
 Object.assign(I18N, {"Лечение · урон": ["Healing · damage", "Лікування · шкода", "Curación · daño", "İyileştirme · hasar", "Cura · dano"], "вспышка по монстрам (радиус {n}): {m}% атаки": ["flash on monsters (radius {n}): {m}% attack", "спалах по монстрах (радіус {n}): {m}% атаки", "destello contra monstruos (radio {n}): {m}% de ataque", "canavarlara parlama (yarıçap {n}): {m}% saldırı", "clarão nos monstros (raio {n}): {m}% de ataque"], "монстрам внутри: {n}% атаки в секунду": ["monsters inside: {n}% attack per second", "монстрам усередині: {n}% атаки за секунду", "monstruos dentro: {n}% de ataque por segundo", "içerideki canavarlar: saniyede {n}% saldırı", "monstros dentro: {n}% de ataque por segundo"]});
 // окно «Обновления» и «Гайд»
 Object.assign(I18N, {"Обновления": ["Updates", "Оновлення", "Novedades", "Güncellemeler", "Atualizações"], "Гайд": ["Guide", "Гайд", "Guía", "Rehber", "Guia"]});
+Object.assign(I18N, {"Открытый мир · с 35 уровня · монстры 40–59 на 10 спотах · опыт ×3": ["Open world · from level 35 · monsters 40–59 on 10 spots · XP ×3", "Відкритий світ · з 35 рівня · монстри 40–59 на 10 спотах · досвід ×3", "Mundo abierto · desde el nivel 35 · monstruos 40–59 en 10 spots · experiencia ×3", "Açık dünya · 35. seviyeden · 10 spotta 40–59 seviye canavarlar · deneyim ×3", "Mundo aberto · a partir do nível 35 · monstros 40–59 em 10 spots · experiência ×3"], "Открытый мир": ["Open world", "Відкритий світ", "Mundo abierto", "Açık dünya", "Mundo aberto"], "PvP-зона": ["PvP zone", "PvP-зона", "Zona PvP", "PvP bölgesi", "Zona PvP"], "Луг": ["Meadow", "Луг", "Pradera", "Çayır", "Prado"], "Лес": ["Forest", "Ліс", "Bosque", "Orman", "Floresta"], "Выжженные пустоши": ["Scorched Wastes", "Випалені пустища", "Páramos calcinados", "Kavrulmuş Çorak Topraklar", "Ermos calcinados"], "Трон Владыки": ["Overlord's Throne", "Трон Володаря", "Trono del Señor", "Hükümdarın Tahtı", "Trono do Senhor"], "Лоу-споты · монстры 40–45 сами не нападают": ["Low spots · monsters 40–45 don't attack first", "Лоу-споти · монстри 40–45 самі не нападають", "Spots bajos · los monstruos 40–45 no atacan primero", "Düşük spotlar · 40–45 seviye canavarlar kendileri saldırmaz", "Spots baixos · monstros 40–45 não atacam primeiro"], "Мид-споты · пачки бросаются, если подойти близко": ["Mid spots · packs charge if you get close", "Мід-споти · зграї кидаються, якщо підійти близько", "Spots medios · los grupos atacan si te acercas", "Orta spotlar · yaklaşırsan sürüler saldırır", "Spots médios · os grupos atacam se você chegar perto"], "Топ-споты · монстры 53–59": ["Top spots · monsters 53–59", "Топ-споти · монстри 53–59", "Spots altos · monstruos 53–59", "Yüksek spotlar · 53–59 seviye canavarlar", "Spots altos · monstros 53–59"], "Каменная площадь за кольцом колонн": ["A stone plaza behind a ring of columns", "Кам'яна площа за кільцем колон", "Una plaza de piedra tras un anillo de columnas", "Sütun halkasının ardında taş bir meydan", "Uma praça de pedra atrás de um anel de colunas"], "Заросшая трасса": ["Overgrown Highway", "Заросла траса", "Carretera invadida", "Otla Kaplı Yol", "Rodovia Invadida"], "Тихая поляна": ["Quiet Glade", "Тиха галявина", "Claro tranquilo", "Sessiz Açıklık", "Clareira Tranquila"], "Старый ветряк": ["Old Windmill", "Старий вітряк", "Viejo molino", "Eski Yel Değirmeni", "Velho Moinho"], "Сырые овраги": ["Damp Ravines", "Сирі яри", "Barrancos húmedos", "Nemli Yarlar", "Ravinas Úmidas"], "Ржавая роща": ["Rusted Grove", "Іржавий гай", "Arboleda oxidada", "Paslı Koru", "Bosque Enferrujado"], "Склепы энергопийц": ["Crypts of the Energy Leeches", "Склепи енергопивців", "Criptas de los chupaenergía", "Enerji Emicilerin Mahzenleri", "Criptas dos Sugadores de Energia"], "Каменный круг": ["Stone Circle", "Кам'яне коло", "Círculo de piedra", "Taş Çember", "Círculo de Pedra"], "Око бездны": ["Eye of the Abyss", "Око безодні", "Ojo del abismo", "Uçurumun Gözü", "Olho do Abismo"], "Чёрный утёс": ["Black Cliff", "Чорна скеля", "Acantilado negro", "Kara Kayalık", "Penhasco Negro"], "Преддверие трона": ["Throne Approach", "Переддвер'я трону", "Antesala del trono", "Taht Eşiği", "Antessala do Trono"], "Лоу-спот": ["Low spot", "Лоу-спот", "Spot bajo", "Düşük spot", "Spot baixo"], "Мид-спот": ["Mid spot", "Мід-спот", "Spot medio", "Orta spot", "Spot médio"], "Топ-спот": ["Top spot", "Топ-спот", "Spot alto", "Yüksek spot", "Spot alto"], "пачки по {n}": ["packs of {n}", "зграї по {n}", "grupos de {n}", "{n} canavarlık sürüler", "grupos de {n}"], "сами не нападают": ["don't attack first", "самі не нападають", "no atacan primero", "kendileri saldırmaz", "não atacam primeiro"], "бросаются, если подойти близко": ["charge if you get close", "кидаються, якщо підійти близько", "atacan si te acercas", "yaklaşırsan saldırır", "atacam se você chegar perto"], "Споты": ["Spots", "Споти", "Spots", "Spotlar", "Spots"], "Заросший Шагоход": ["Overgrown Walker", "Зарослий Крокохід", "Caminante enmalezado", "Sarmaşıklı Yürüteç", "Andador Coberto de Mato"], "Мшистый Краулер": ["Mossy Crawler", "Мохастий Краулер", "Reptador musgoso", "Yosunlu Sürüngen", "Rastejador Musgoso"], "Луговой Дрон": ["Meadow Drone", "Луговий Дрон", "Dron de pradera", "Çayır Drone'u", "Drone do Prado"], "Ветряной Страж": ["Wind Guardian", "Вітряний Вартовий", "Guardián del viento", "Rüzgâr Muhafızı", "Guardião do Vento"], "Овражный Шагоход": ["Ravine Walker", "Яружний Крокохід", "Caminante de barranco", "Yar Yürüteci", "Andador da Ravina"], "Сырой Краулер": ["Damp Crawler", "Сирий Краулер", "Reptador húmedo", "Nemli Sürüngen", "Rastejador Úmido"], "Ржавый Дрон": ["Rusty Drone", "Іржавий Дрон", "Dron oxidado", "Paslı Drone", "Drone Enferrujado"], "Лесной Страж": ["Forest Guardian", "Лісовий Вартовий", "Guardián del bosque", "Orman Muhafızı", "Guardião da Floresta"], "Гнилой Шагоход": ["Rotten Walker", "Гнилий Крокохід", "Caminante podrido", "Çürük Yürüteç", "Andador Podre"], "Склепный Краулер": ["Crypt Crawler", "Склепний Краулер", "Reptador de cripta", "Mahzen Sürüngeni", "Rastejador da Cripta"], "Мертвенный Дрон": ["Deathly Drone", "Мертвотний Дрон", "Dron mortecino", "Cansız Drone", "Drone Mortiço"], "Каменный Страж": ["Stone Guardian", "Кам'яний Вартовий", "Guardián de piedra", "Taş Muhafız", "Guardião de Pedra"], "Рунный Шагоход": ["Rune Walker", "Рунний Крокохід", "Caminante rúnico", "Runik Yürüteç", "Andador Rúnico"], "Бездонный Краулер": ["Abyssal Crawler", "Бездонний Краулер", "Reptador abisal", "Dipsiz Sürüngen", "Rastejador Abissal"], "Пепельный Дрон": ["Ashen Drone", "Попелястий Дрон", "Dron ceniciento", "Kül Drone'u", "Drone Cinzento"], "Чёрный Страж": ["Black Guardian", "Чорний Вартовий", "Guardián negro", "Kara Muhafız", "Guardião Negro"], "Утёсный Шагоход": ["Cliff Walker", "Скелястий Крокохід", "Caminante del acantilado", "Kayalık Yürüteci", "Andador do Penhasco"], "Тронный Краулер": ["Throne Crawler", "Тронний Краулер", "Reptador del trono", "Taht Sürüngeni", "Rastejador do Trono"], "Венценосный Дрон": ["Crowned Drone", "Вінценосний Дрон", "Dron coronado", "Taçlı Drone", "Drone Coroado"], "Владычий Страж": ["Overlord's Guardian", "Володарів Вартовий", "Guardián del Señor", "Hükümdar Muhafızı", "Guardião do Senhor"]});   // Мир: локация, края, споты и монстры
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
 // в тексте страницы, подсказках полей, уведомлениях и надписях на карте.
@@ -16720,6 +16731,765 @@ setInterval(() => {
   if(ph === "done" && r.result && r.result.win && left <= 0 && p && !p.dead && now > CPZ.homeT){ CPZ.homeT = now + 5; travel("lobby"); }
 }, 200);
 
+// ===================== МИР: ОТКРЫТАЯ ЛОКАЦИЯ С 35 УРОВНЯ (как «Мир» в LIBERTY, патч 17 октября) =====================
+// Телепорт в ангаре → «Мир». С запада на восток: луг с перелесками и лоу-спотами → река с тремя мостами →
+// лес с мид-спотами → скальная гряда с тремя перевалами → выжженные пустоши с топ-спотами → Трон Владыки за кольцом колонн.
+// Монстры 40–59 стоят пачками на 10 спотах (W_SPOTS): лоу — по 3 и сами не нападают, мид — по 4, топ — по 5, эти
+// бросаются, если подойти близко. Ударил одного — идёт вся пачка. Увёл моба от спота дальше WORLD.LEASH — он возвращается.
+// Опыт ×3 — втрое больше, чем в фарм-зонах, как в LIBERTY (сервер засчитывает столько же: items.WORLD_XP).
+// Мобы общие (mobworld): раскладка детерминирована — у всех телефонов моб №N стоит в одном месте; прочность, смерть
+// и возрождение считает сервер (mobguard знает монстров wm40…wm59 только в локации «world»).
+// Земля, дороги, река, мосты, гряда, деревья и постройки спотов не двигаются: они рисуются один раз кусками 400×400
+// и дальше только копируются, в памяти — не больше WORLD.CHUNKS кусков. Деревья и постройки — кружки в rocks со своей
+// сеткой (иначе каждый моб каждый кадр перебирал бы ~1000 деревьев), река и гряда — полосы x = f(y) с мостами и перевалами.
+const WORLD = {KEY:"world", W:7200, H:2800, MIN:35, XP:3, LO:40, HI:59, GEAR_LV:50, CH:400, CHUNKS:28, CELL:200, PACK0:1000,
+  spawn:{x:360, y:1400}, portal:{x:210, y:1400}, LEASH:200, AGGRO:70,
+  river:{w:150, bridges:[560, 1400, 2240], bw:116},
+  ridge:{w:230, passes:[650, 1400, 2150], pw:210},
+  throne:{x:6820, y:1400, R:300, gap:0.62},
+  chunks:new Map(), grid:null, trees:[], decor:[], paths:null, mini:null, zone:"", built:false, mapScroll:false};
+const wRiverX = y => 2450 + 70*Math.sin(y/310 + 0.7) + 40*Math.sin(y/127 + 2.1);
+const wRidgeX = y => 4960 + 80*Math.sin(y/380 + 1.3) + 34*Math.sin(y/150 + 0.4);
+// ярусы спотов: цвет подписи над спотом — ярус (как в LIBERTY)
+const W_TIERS = [
+  {name:"Лоу-спот", pack:3, aggro:false, col:"#8FDB6A"},
+  {name:"Мид-спот", pack:4, aggro:true, col:"#F2C14B"},
+  {name:"Топ-спот", pack:5, aggro:true, col:"#FF6A5A"}];
+const W_SPOTS = [
+  {id:"tract",  name:"Заросшая трасса",   tier:0, lo:40, hi:42, x:980,  y:660,  r:260, packs:5},
+  {id:"glade",  name:"Тихая поляна",      tier:0, lo:40, hi:42, x:1010, y:2120, r:260, packs:5},
+  {id:"mill",   name:"Старый ветряк",     tier:0, lo:43, hi:45, x:1800, y:1020, r:260, packs:5},
+  {id:"ravine", name:"Сырые овраги",      tier:0, lo:43, hi:45, x:1780, y:1960, r:260, packs:5},
+  {id:"grove",  name:"Ржавая роща",       tier:1, lo:46, hi:49, x:3200, y:820,  r:260, packs:4},
+  {id:"crypts", name:"Склепы энергопийц", tier:1, lo:49, hi:52, x:3950, y:2000, r:260, packs:4},
+  {id:"circle", name:"Каменный круг",     tier:1, lo:49, hi:52, x:4230, y:880,  r:290, packs:4},
+  {id:"eye",    name:"Око бездны",        tier:2, lo:53, hi:56, x:5680, y:720,  r:270, packs:4},
+  {id:"cliff",  name:"Чёрный утёс",       tier:2, lo:53, hi:56, x:5640, y:2100, r:270, packs:4},
+  {id:"gate",   name:"Преддверие трона",  tier:2, lo:57, hi:59, x:6230, y:1400, r:250, packs:4}];
+const W_ZONES = {
+  meadow:{name:"Луг", sub:"Лоу-споты · монстры 40–45 сами не нападают", amb:{tint:"rgba(190,255,140,.035)", kind:"dust", n:26, c:["#EAF7A6", "#BFE88A"]}},
+  forest:{name:"Лес", sub:"Мид-споты · пачки бросаются, если подойти близко", amb:{tint:"rgba(40,120,80,.07)", kind:"mist", n:12, c:["#BFF0D0", "#8FD8B0"]}},
+  waste:{name:"Выжженные пустоши", sub:"Топ-споты · монстры 53–59", amb:{tint:"rgba(255,110,50,.06)", kind:"ember", n:40, c:["#FFB070", "#FF6A3A"]}},
+  throne:{name:"Трон Владыки", sub:"Каменная площадь за кольцом колонн", amb:{tint:"rgba(242,193,75,.06)", kind:"ember", n:30, c:["#FFE08A", "#F2C14B"]}}};
+const wBridgeEnd = (b, side) => [Math.round(wRiverX(b) + side*(WORLD.river.w/2 + 46)), b];
+const wPassEnd = (b, side) => [Math.round(wRidgeX(b) + side*(WORLD.ridge.w/2 + 56)), b];
+// дороги между спотами: через мосты и перевалы (по ним проще ориентироваться, деревья вдоль них не растут)
+const W_ROADS = [
+  [[WORLD.spawn.x, 1400], [900, 1400], [1500, 1440], wBridgeEnd(1400, -1), wBridgeEnd(1400, 1), [3000, 1430], [3700, 1380], [4300, 1420],
+    wPassEnd(1400, -1), wPassEnd(1400, 1), [5600, 1440], [6000, 1420], [6230, 1400], [6500, 1400]],
+  [[900, 1400], [930, 1000], [980, 660]],
+  [[900, 1400], [960, 1820], [1010, 2120]],
+  [[1500, 1440], [1800, 1020], [2140, 760], wBridgeEnd(560, -1)],
+  [[1500, 1440], [1780, 1960], [2140, 2140], wBridgeEnd(2240, -1)],
+  [wBridgeEnd(560, 1), [2850, 640], [3200, 820], [3700, 860], [4230, 880], [4560, 700], wPassEnd(650, -1)],
+  [wBridgeEnd(2240, 1), [2900, 2260], [3500, 2150], [3950, 2000], [4450, 2080], wPassEnd(2150, -1)],
+  [[3700, 1380], [3800, 1700], [3950, 2000]], [[3700, 1380], [3700, 860]],
+  [wPassEnd(650, 1), [5400, 680], [5680, 720], [6000, 1000], [6230, 1400]],
+  [wPassEnd(2150, 1), [5400, 2120], [5640, 2100], [6000, 1800], [6230, 1400]]];
+function wSegDist(px, py, a, b){
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy, t = l2 ? Math.max(0, Math.min(1, ((px - a[0])*dx + (py - a[1])*dy)/l2)) : 0;
+  return Math.hypot(px - a[0] - t*dx, py - a[1] - t*dy);
+}
+function wRoadDist(x, y){ let d = Infinity; for(const L of W_ROADS) for(let i = 1; i < L.length; i++) d = Math.min(d, wSegDist(x, y, L[i - 1], L[i])); return d; }
+// край, в котором точка (для подсказки при переходе, фона и звука)
+function wZone(x, y){
+  const T = WORLD.throne;
+  if(Math.hypot(x - T.x, y - T.y) < T.R + 40) return "throne";
+  const rx = wRiverX(y);
+  if(Math.abs(x - rx) <= WORLD.river.w/2) return "river";
+  if(x < rx) return "meadow";
+  const gx = wRidgeX(y);
+  if(Math.abs(x - gx) <= WORLD.ridge.w/2) return "ridge";
+  return x < gx ? "forest" : "waste";
+}
+const wSpotAt = (x, y, pad) => W_SPOTS.find(s => Math.hypot(x - s.x, y - s.y) < s.r + (pad || 0));
+
+// ---- монстры wm40…wm59: как монстры подземелья (та же формула; mob_hp на сервере), свои названия и цвета по краям ----
+const W_PREFIX = ["Заросший", "Мшистый", "Луговой", "Ветряной", "Овражный", "Сырой", "Ржавый", "Лесной", "Гнилой", "Склепный",
+  "Мертвенный", "Каменный", "Рунный", "Бездонный", "Пепельный", "Чёрный", "Утёсный", "Тронный", "Венценосный", "Владычий"];
+const wMobColor = L => L <= 42 ? "#8FD46A" : L <= 45 ? "#5FC9B0" : L <= 48 ? "#D9893A" : L <= 52 ? "#B07CFF" : L <= 56 ? "#FF5A4A" : "#F2C14B";
+for(let L = WORLD.LO; L <= WORLD.HI; L++){
+  const [base, noun] = DG_BASE[(L - 1) % 4], b = NPCS[base], k = L - 1;
+  NPCS["wm" + L] = {name:W_PREFIX[L - WORLD.LO] + " " + noun, lvl:L, base, world:true, gearLv:Math.min(L, WORLD.GEAR_LV),
+    hp:Math.round((20 + 14*L + 0.25*L*L)*(base === "war_walker" ? 1.25 : 1)),
+    atk:Math.round(4 + 1.2*L + 0.01*L*L), def:Math.floor(L/2),
+    exp:Math.round(5 + 3*k + 0.2*k*k), scrap:[L + 1, 2*L + 4],
+    color:wMobColor(L), r:b.r, speed:b.speed + Math.min(40, Math.floor(k/2)), range:b.range, ranged:b.ranged,
+    loot:Object.fromEntries(Object.entries(b.loot).map(([id, c]) => [id, +(c*0.6).toFixed(3)]))};
+}
+LOCS[WORLD.KEY] = {name:"Мир", min:WORLD.MIN, world:true, named:true, levels:"40–59", ground:"#2F4A2A", rock:"#5A5048", npcs:[], count:0,
+  desc:"Открытый мир · с 35 уровня · монстры 40–59 на 10 спотах · опыт ×3"};
+
+// ---- раскладка: деревья, камни, постройки спотов и пачки (у всех игроков одинаковая — свои зёрна) ----
+// постройки спотов, которые мешают пройти (кружки): x, y относительно центра спота, r — радиус
+const W_SOLID = {
+  tract:[[-120, 60, 26], [110, -50, 24], [40, 130, 18]],                           // ржавые машины на трассе
+  mill:[[0, -10, 30], [-170, 150, 22]],                                            // башня ветряка и будка
+  crypts:[[-130, -90, 40], [120, -100, 40], [0, 120, 40]],                         // склепы
+  // кольцо камней по краю спота, проходы с запада и востока (там дорога), алтарь — чуть к северу от центра
+  circle:[...Array.from({length:12}, (_, i) => (i + 0.5)/12*Math.PI*2).filter(a => Math.abs(Math.cos(a)) < 0.9)
+    .map(a => [Math.round(Math.cos(a)*250), Math.round(Math.sin(a)*205), 18]), [0, -40, 28]],
+  eye:[[0, 0, 70]],                                                                // кратер с оком
+  cliff:[[-150, -40, 52], [130, -120, 46], [160, 90, 50], [-60, 150, 40]],         // чёрные глыбы
+  gate:[[-90, -110, 22], [-90, 110, 22], [90, -110, 22], [90, 110, 22]]};           // колонны преддверия
+function wBuild(){
+  if(WORLD.built) return;
+  WORLD.built = true;
+  const R = seeded(91117), trees = [], decor = [], T = WORLD.throne, W0 = WORLD.W, H0 = WORLD.H;
+  const nearSpot = (x, y, pad) => W_SPOTS.some(s => Math.hypot(x - s.x, y - s.y) < s.r + pad);
+  const inWater = (x, y, pad) => Math.abs(x - wRiverX(y)) < WORLD.river.w/2 + pad;
+  const onRidge = (x, y, pad) => Math.abs(x - wRidgeX(y)) < WORLD.ridge.w/2 + pad;
+  const nearSpawn = (x, y, pad) => Math.hypot(x - WORLD.spawn.x, y - WORLD.spawn.y) < pad;
+  const nearThrone = (x, y, pad) => Math.hypot(x - T.x, y - T.y) < T.R + pad;
+  const free = (x, y, r) => !nearSpot(x, y, 60 + r) && !inWater(x, y, 40 + r) && !onRidge(x, y, 30 + r) && !nearSpawn(x, y, 280) &&
+    !nearThrone(x, y, 90 + r) && wRoadDist(x, y) > 62 + r && !trees.some(t => Math.hypot(t.x - x, t.y - y) < t.r + r + 10);
+  const kindAt = (x, y) => { const z = wZone(x, y); return z === "waste" || z === "throne" ? "dead" : z === "forest" ? (Math.hypot(x - 3200, y - 820) < 520 ? "rust" : "pine") : "oak"; };
+  const add = (x, y, r, kind) => trees.push({x:Math.round(x), y:Math.round(y), r, kind:kind || kindAt(x, y), v:Math.floor(R()*4)});
+  // 1) край карты: два ряда деревьев (в пустошах — сухие стволы и валуны)
+  for(let x = 30; x < W0; x += 56) for(const y0 of [36, 98, H0 - 36, H0 - 98]){
+    const x1 = x + (R() - .5)*20, y1 = y0 + (R() - .5)*20; if(!inWater(x1, y1, 30) && !onRidge(x1, y1, 10)) add(x1, y1, 22 + R()*8);
+  }
+  for(let y = 150; y < H0 - 150; y += 56) for(const x0 of [36, 98, W0 - 36, W0 - 98]){
+    const x1 = x0 + (R() - .5)*20, y1 = y + (R() - .5)*20;
+    if(!nearSpawn(x1, y1, 190) && Math.hypot(x1 - WORLD.portal.x, y1 - WORLD.portal.y) > 170) add(x1, y1, 22 + R()*8);
+  }
+  // 2) перелески на лугу: кучки по 4–7 деревьев
+  for(let c = 0, t = 0; c < 16 && t < 400; t++){
+    const cx = 300 + R()*(wRiverX(1400) - 520), cy = 220 + R()*(H0 - 440);
+    if(!free(cx, cy, 70)) continue;
+    c++; const n = 4 + Math.floor(R()*4);
+    for(let i = 0; i < n; i++){ const a = R()*Math.PI*2, d = 30 + R()*70, x = cx + Math.cos(a)*d, y = cy + Math.sin(a)*d*0.8, r = 20 + R()*10; if(free(x, y, r)) add(x, y, r); }
+  }
+  // 3) лес между рекой и грядой: густо, с поляной у каждого спота и просеками вдоль дорог
+  for(let y = 150; y < H0 - 150; y += 112) for(let x = 2300; x < 5000; x += 112){
+    const x1 = x + (R() - .5)*70, y1 = y + (R() - .5)*70, r = 22 + R()*10;
+    if(wZone(x1, y1) === "forest" && free(x1, y1, r)) add(x1, y1, r);
+  }
+  // 4) пустоши: редкие сухие деревья
+  for(let i = 0, t = 0; i < 70 && t < 900; t++){
+    const x = 5150 + R()*(W0 - 5300), y = 160 + R()*(H0 - 320), r = 16 + R()*8;
+    if(wZone(x, y) === "waste" && free(x, y, r + 20)) { add(x, y, r, "dead"); i++; }
+  }
+  // постройки спотов
+  for(const s of W_SPOTS) for(const [dx, dy, r] of W_SOLID[s.id] || []) decor.push({x:s.x + dx, y:s.y + dy, r, spot:s.id});
+  // кольцо колонн вокруг Трона: проход с запада
+  for(let i = 0; i < 22; i++){
+    const a = Math.PI + (i + 0.5)/22*Math.PI*2;
+    const off = Math.abs(Math.atan2(Math.sin(a - Math.PI), Math.cos(a - Math.PI)));
+    if(off < T.gap) continue;
+    decor.push({x:Math.round(T.x + Math.cos(a)*T.R), y:Math.round(T.y + Math.sin(a)*T.R), r:22, column:true});
+  }
+  decor.push({x:T.x + 150, y:T.y, r:46, throne:true});                       // сам трон у восточной стены
+  WORLD.trees = trees; WORLD.decor = decor;
+  // полосы краёв для заливки земли: лес — от реки до гряды, пустоши — от гряды до восточного края
+  const strip = (fx0, fx1) => { const P2 = new Path2D(); P2.moveTo(fx0(-40), -40); for(let y = 0; y <= H0 + 40; y += 40) P2.lineTo(fx0(y), y);
+    for(let y = H0 + 40; y >= -40; y -= 40) P2.lineTo(fx1(y), y); P2.closePath(); return P2; };
+  WORLD.paths = {forest:strip(wRiverX, wRidgeX), waste:strip(wRidgeX, () => W0 + 40)};
+}
+// пачки: центры на споте не ближе 150 друг к другу и к постройкам, с запада слабее (ближе к входу)
+function wPacks(){
+  const out = [], R = seeded(170417);
+  let pack = 0;
+  for(const s of W_SPOTS){
+    const T0 = W_TIERS[s.tier], centers = [], solid = W_SOLID[s.id] || [], pad = 70;
+    for(let t = 0; centers.length < s.packs && t < 5000; t++){
+      const a = R()*Math.PI*2, d = Math.sqrt(R())*(s.r - pad), x = s.x + Math.cos(a)*d, y = s.y + Math.sin(a)*d*0.85;
+      if(solid.some(([dx, dy, r]) => Math.hypot(s.x + dx - x, s.y + dy - y) < r + 64)) continue;
+      if(centers.every(([cx, cy]) => Math.hypot(cx - x, cy - y) >= (t < 3000 ? 150 : 118))) centers.push([x, y]);
+    }
+    centers.sort((a, b) => a[0] - b[0]);
+    centers.forEach(([cx, cy], j) => {
+      const lv = s.lo + Math.min(s.hi - s.lo, Math.floor(j*(s.hi - s.lo + 1)/centers.length)), type = "wm" + lv, n = T0.pack;
+      for(let q = 0; q < n; q++){
+        const a = q/n*Math.PI*2 + R()*0.6, r = 30 + R()*12, x = Math.round(cx + Math.cos(a)*r), y = Math.round(cy + Math.sin(a)*r*0.8);
+        out.push({type, x, y, pack:WORLD.PACK0 + pack, spot:s});
+      }
+      pack++;
+    });
+  }
+  return out;
+}
+// сетка препятствий для столкновений: ячейка 200 px, кружок попадает во все ячейки, которые задевает
+function wGrid(){
+  const G = new Map(), c = WORLD.CELL;
+  for(const k of rocks){
+    if(k.rw) continue;
+    for(let gy = Math.floor((k.y - k.r)/c); gy <= Math.floor((k.y + k.r)/c); gy++)
+      for(let gx = Math.floor((k.x - k.r)/c); gx <= Math.floor((k.x + k.r)/c); gx++){ const key = gx + gy*1000; let l = G.get(key); if(!l) G.set(key, l = []); l.push(k); }
+  }
+  WORLD.grid = G;
+}
+function respawnSpot(e){
+  const k = NPCS[e.type];
+  Object.assign(e, {x:e.hx, y:e.hy, tx:e.hx, ty:e.hy, hp:k.hp, max:k.hp, dead:false, chase:false, stun:0, flash:0, cd:1});
+}
+// ударили одного или подошли к пачке — бросается вся пачка (кроме монстров, которых ведёт другой игрок)
+function wakePack(e){
+  const me = typeof NET !== "undefined" ? NET.id : 0;
+  for(const o of enemies) if(o.pack === e.pack && !o.dead && !o.chase && (!o.owner || o.owner === me)) o.chase = true;
+}
+{ const _blW = buildLoc;
+  buildLoc = function(key){
+    if(key !== WORLD.KEY) return _blW(key);
+    locKey = key; rocks = []; enemies = []; npcs = []; bolts = []; beams = []; drops = []; texts = [];
+    W = WORLD.W; H = WORLD.H;
+    wBuild();
+    for(const t of WORLD.trees) rocks.push({x:t.x, y:t.y, r:Math.round(t.r*0.5), deco:true, tree:true});   // мешает ствол, крона — над ним
+    for(const d of WORLD.decor) rocks.push({x:d.x, y:d.y, r:d.r, deco:true});
+    wGrid();
+    for(const m of wPacks()){ const k = NPCS[m.type];
+      enemies.push({type:m.type, x:m.x, y:m.y, hx:m.x, hy:m.y, tx:m.x, ty:m.y, hp:k.hp, max:k.hp, cd:0, ang:(m.x*7 + m.y*13) % 628/100, chase:false, dead:false,
+        respawn:0, flash:0, wanderT:0, lunge:0, pack:m.pack, spot:m.spot}); }
+    enemies.forEach((e, i) => e.idx = i);
+    npcs = [{kind:"back", x:WORLD.portal.x, y:WORLD.portal.y}];
+    WORLD.zone = "";
+    return {x:WORLD.spawn.x, y:WORLD.spawn.y};
+  }; }
+// ---- столкновения: деревья и постройки — по сетке, река и гряда — полосы с мостами и перевалами ----
+function wWater(o, r){
+  const hw = WORLD.river.w/2, dx = o.x - wRiverX(o.y);
+  if(Math.abs(dx) >= hw + r) return;
+  const B = WORLD.river.bridges.find(b => Math.abs(o.y - b) < WORLD.river.bw/2 + r);
+  if(B !== undefined){                                            // на мосту: держимся между перилами
+    const lim = WORLD.river.bw/2 - r*0.6;
+    if(o.y > B + lim) o.y = B + lim; else if(o.y < B - lim) o.y = B - lim;
+    return;
+  }
+  o.x = o.x - dx + (dx < 0 ? -1 : 1)*(hw + r);                    // в воду не заходим: к ближнему берегу
+}
+function wRidge(o, r){
+  const hw = WORLD.ridge.w/2, dx = o.x - wRidgeX(o.y);
+  if(Math.abs(dx) >= hw + r) return;
+  const P0 = WORLD.ridge.passes.find(q => Math.abs(o.y - q) < WORLD.ridge.pw/2 + r);
+  if(P0 !== undefined){
+    const lim = WORLD.ridge.pw/2 - r*0.6;
+    if(o.y > P0 + lim) o.y = P0 + lim; else if(o.y < P0 - lim) o.y = P0 - lim;
+    return;
+  }
+  o.x = o.x - dx + (dx < 0 ? -1 : 1)*(hw + r);
+}
+{ const _poW = pushOut;
+  pushOut = function(o, r){
+    if(locKey !== WORLD.KEY || !WORLD.grid) return _poW(o, r);
+    const c = WORLD.CELL, ix = Math.floor(o.x/c), iy = Math.floor(o.y/c);
+    for(let gy = iy - 1; gy <= iy + 1; gy++) for(let gx = ix - 1; gx <= ix + 1; gx++){
+      const list = WORLD.grid.get(gx + gy*1000); if(!list) continue;
+      for(const k of list){ const dx = o.x - k.x, dy = o.y - k.y, d = Math.hypot(dx, dy), m = k.r + r; if(d < m && d > 0){ o.x = k.x + dx/d*m; o.y = k.y + dy/d*m; } }
+    }
+    wWater(o, r); wRidge(o, r);
+    o.x = Math.max(r, Math.min(W - r, o.x)); o.y = Math.max(r, Math.min(H - r, o.y));
+  }; }
+// ---- вид: пиксельные текстуры краёв, деревья, река, гряда, постройки спотов ----
+const W_PAL = {
+  meadow:["#3D6A33", "#355D2D", "#4A7C3C", "#2A4923"], glade:["#4E8040", "#457337", "#5C914B", "#365C2C"],
+  forest:["#22402A", "#1D3724", "#2B4F31", "#15291B"], rustg:["#4A3A26", "#413220", "#59472F", "#2E2416"],
+  waste:["#4B3A2F", "#403128", "#594538", "#2C211B"], ash:["#2E2A2C", "#272326", "#38333A", "#1C191C"],
+  plaza:["#4C5059", "#42464E", "#5A5F69", "#30343B"], road:["#76623F", "#685636", "#86714D", "#4F412A"],
+  sand:["#8E7C55", "#7F6E4A", "#A08C62", "#5F5236"], rubble:["#5A5552", "#4D4946", "#68635F", "#383432"],
+  rock:["#3A3634", "#322E2C", "#46413E", "#221F1E"], water:["#1F4E6E", "#1A4562", "#26597C", "#143A52"],
+  asphalt:["#3A3D42", "#33363B", "#45484E", "#25272B"]};
+const W_TILES = {};
+function wTile(kind){
+  if(W_TILES[kind]) return W_TILES[kind];
+  const P0 = W_PAL[kind] || W_PAL.meadow, n = 64, ps = 2, c = document.createElement("canvas"); c.width = c.height = n*ps;
+  const g = c.getContext("2d"), px = (x, y, col) => { g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  g.fillStyle = P0[0]; g.fillRect(0, 0, c.width, c.height);
+  let seed = [...kind].reduce((a, ch) => a*31 + ch.charCodeAt(0), 7) >>> 0;
+  const rnd = () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296;
+  for(let i = 0; i < 360; i++) px(Math.floor(rnd()*n), Math.floor(rnd()*n), rnd() < .5 ? P0[1] : P0[3]);
+  for(let i = 0; i < 24; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); px(x, y, P0[2]); px((x + 1) % n, y, P0[2]); }
+  if(kind === "meadow" || kind === "forest" || kind === "glade") for(let i = 0; i < 70; i++){ const x = Math.floor(rnd()*n), y = Math.floor(rnd()*(n - 2)); px(x, y, P0[2]); px(x, y + 1, P0[1]); }   // травинки
+  if(kind === "plaza") for(let y = 0; y < n; y += 8) for(let x = 0; x < n; x++){ px(x, y, P0[3]); if((x + (y/8 % 2)*8) % 16 === 0) for(let j = 1; j < 8; j++) px(x, (y + j) % n, P0[3]); }   // швы плит
+  if(kind === "water") for(let i = 0; i < 40; i++){ const x = Math.floor(rnd()*(n - 3)), y = Math.floor(rnd()*n); px(x, y, P0[2]); px(x + 1, y, P0[2]); px(x + 2, y, P0[2]); }
+  if(kind === "waste" || kind === "ash") for(let i = 0; i < 10; i++){ let x = Math.floor(rnd()*n), y = Math.floor(rnd()*n); for(let j = 0; j < 5; j++){ px(x % n, y % n, "#1A1412"); x += rnd() < .6 ? 1 : 0; y += 1; } }   // трещины
+  return W_TILES[kind] = c;
+}
+// деревья: крона пятнами со светом сверху-слева, у сухих — голые ветки (как валуны rockSprite, по пикселю 2×2)
+const W_TREE_PAL = {oak:["#62A84A", "#4C8E3B", "#376C2B", "#254A1E"], pine:["#3F7B46", "#306439", "#234A2B", "#17331E"],
+  rust:["#DB8B3B", "#BA6C2D", "#8B4C23", "#5B3119"], dead:["#6A5A4E", "#54473D", "#3E342C", "#2A231E"]};
+const W_TREE = new Map();
+function wTreeSprite(kind, r, v){
+  const key = kind + "|" + r + "|" + v; let c = W_TREE.get(key); if(c) return c;
+  const ps = 2, n = Math.max(6, Math.ceil(r/ps)), w = n*2 + 6, h = n*3 + 4;
+  c = document.createElement("canvas"); c.width = w*ps; c.height = h*ps;
+  const g = c.getContext("2d"), px = (x, y, col, a) => { g.globalAlpha = a == null ? 1 : a; g.fillStyle = col; g.fillRect(x*ps, y*ps, ps, ps); };
+  const P0 = W_TREE_PAL[kind] || W_TREE_PAL.oak, cx = w/2, base = n*2 + 2, cy = base - n*1.05;
+  let seed = r*131 + v*977 + kind.length*7 + 1; const rnd = () => (seed = (seed*1103515245 + 12345) >>> 0)/4294967296;
+  for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){ const d = ((x - cx - 2)/(n*0.9))**2 + ((y - base)/(n*0.3))**2; if(d < 1) px(x, y, "#000", .3); }   // тень
+  const tw = Math.max(2, Math.round(n*0.2));
+  for(let y = Math.round(cy); y <= base; y++) for(let x = Math.round(cx - tw/2); x < cx + tw/2; x++) px(x, y, x < cx ? "#4A3424" : "#3A281B");   // ствол
+  if(kind === "dead"){
+    for(let b = 0; b < 5; b++){ let x = cx, y = cy + n*0.3, a = -Math.PI/2 + (rnd() - .5)*2.4;
+      for(let i = 0; i < n*0.95; i++){ x += Math.cos(a); y += Math.sin(a); a += (rnd() - .5)*.45; px(Math.round(x), Math.round(y), i < n*0.4 ? "#4A3C32" : "#5E4E42"); } }
+    g.globalAlpha = 1; W_TREE.set(key, c); c._bx = cx; c._by = base; return c;
+  }
+  const blobs = kind === "pine" ? [[0, n*0.05, 1], [0, -n*0.4, .74], [0, -n*0.78, .48]] : [[0, -n*0.05, 1], [-n*0.48, n*0.12, .66], [n*0.48, n*0.08, .66], [0, -n*0.5, .62]];
+  for(const [bx, by, k] of blobs){
+    const rr2 = n*k*0.9;
+    for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
+      const dx = x - (cx + bx), dy = y - (cy + by), d = Math.hypot(dx, dy*(kind === "pine" ? 1.2 : 1)) + (rnd() - .5)*1.3;
+      if(d > rr2) continue;
+      const l = (-dx - dy)/(rr2*1.4);
+      px(x, y, l > .38 ? P0[0] : l > -.05 ? P0[1] : l > -.45 ? P0[2] : P0[3]);
+    }
+  }
+  for(let i = 0; i < n; i++){ const x = Math.round(cx + (rnd() - .65)*n*0.8), y = Math.round(cy + (rnd() - .7)*n*0.8); px(x, y, mix(P0[0], "#FFFFFF", .3), .8); }
+  g.globalAlpha = 1; c._bx = cx; c._by = base; W_TREE.set(key, c); return c;
+}
+function wDrawTree(g, t){
+  const img = wTreeSprite(t.kind, Math.round(t.r), t.v), ps = 2;
+  g.drawImage(img, Math.round(t.x - img._bx*ps), Math.round(t.y - img._by*ps));
+}
+// полосы реки и гряды (точки через 20 px) и зубчатые края гряды — строятся один раз
+function wPaths(){
+  if(WORLD.paths.river) return;
+  const H0 = WORLD.H, river = new Path2D(); river.moveTo(wRiverX(-60), -60);
+  for(let y = -40; y <= H0 + 60; y += 20) river.lineTo(wRiverX(y), y);
+  WORLD.paths.river = river;
+  // гряда: куски между перевалами, край неровный
+  const R = seeded(5151), ridge = new Path2D(), cuts = [-80, ...WORLD.ridge.passes, H0 + 80], hw = WORLD.ridge.w/2;
+  for(let i = 0; i < cuts.length - 1; i++){
+    const y0 = cuts[i] + (i ? WORLD.ridge.pw/2 : 0), y1 = cuts[i + 1] - (i < cuts.length - 2 ? WORLD.ridge.pw/2 : 0);
+    const L = [], Rt = [];
+    for(let y = y0; y <= y1; y += 16){ L.push([wRidgeX(y) - hw - R()*22, y]); Rt.push([wRidgeX(y) + hw + R()*22, y]); }
+    L.push([wRidgeX(y1) - hw, y1]); Rt.push([wRidgeX(y1) + hw, y1]);
+    ridge.moveTo(L[0][0], L[0][1]); for(const [x, y] of L) ridge.lineTo(x, y); for(const [x, y] of Rt.reverse()) ridge.lineTo(x, y); ridge.closePath();
+  }
+  WORLD.paths.ridge = ridge;
+  const rocks2 = [];                                         // валуны по гряде (только картинка — мешает сама полоса)
+  for(let y = -20; y <= H0 + 20; y += 58){
+    if(WORLD.ridge.passes.some(p => Math.abs(y - p) < WORLD.ridge.pw/2 + 30)) continue;
+    for(const off of [-80, -12, 62]) rocks2.push({x:Math.round(wRidgeX(y) + off + (R() - .5)*26), y:Math.round(y + (R() - .5)*30), r:Math.round(40 + R()*26), v:Math.floor(R()*5)});
+  }
+  WORLD.ridgeRocks = rocks2;
+}
+// постройки спотов (неподвижная часть; огни и лопасти — в wDrawLive)
+const W_DECOR = {
+  tract(g, s){
+    g.save(); g.translate(s.x, s.y); g.rotate(-0.16);
+    g.fillStyle = g.createPattern(wTile("asphalt"), "repeat"); g.fillRect(-300, -46, 600, 92);
+    g.fillStyle = "rgba(0,0,0,.3)"; g.fillRect(-300, -50, 600, 4); g.fillRect(-300, 46, 600, 4);
+    g.fillStyle = "#C9B26A"; for(let x = -290; x < 300; x += 46) if((x*7) % 5 !== 0) g.fillRect(x, -2, 22, 4);    // стёртая разметка
+    g.fillStyle = "#3D6A33"; for(let i = 0; i < 70; i++){ const x = -300 + ((i*73) % 600), y = -44 + ((i*37) % 88); g.fillRect(x, y, 4, 2); g.fillRect(x + 1, y - 2, 2, 2); }   // трава сквозь асфальт
+    g.restore();
+    for(const [dx, dy, r] of W_SOLID.tract){ const x = s.x + dx, y = s.y + dy, w = r*2.4, h = r*1.3;   // ржавые машины
+      g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x - w/2 + 4, y - h/2 + 6, w, h);
+      g.fillStyle = "#7A4A2E"; g.fillRect(x - w/2, y - h/2, w, h); g.fillStyle = "#94603C"; g.fillRect(x - w/2, y - h/2, w, 4);
+      g.fillStyle = "#1B232C"; g.fillRect(x - w*0.28, y - h/2 + 4, w*0.56, h*0.38);
+      g.fillStyle = "#2A1A12"; for(const ex of [-w*0.32, w*0.32]) for(const ey of [-h/2 - 2, h/2 - 2]) g.fillRect(x + ex - 5, y + ey, 10, 5);
+      g.fillStyle = "#B8573A"; g.fillRect(x - w/2 + 6, y + 2, 6, 4); g.fillRect(x + w/2 - 14, y - 6, 8, 3); }
+  },
+  glade(g, s){
+    g.fillStyle = g.createPattern(wTile("glade"), "repeat"); g.beginPath(); g.ellipse(s.x, s.y, s.r - 10, (s.r - 10)*0.86, 0, 0, Math.PI*2); g.fill();
+    const R = seeded(77);
+    for(let i = 0; i < 260; i++){ const a = R()*Math.PI*2, d = Math.sqrt(R())*(s.r - 24), x = Math.round(s.x + Math.cos(a)*d), y = Math.round(s.y + Math.sin(a)*d*0.86);
+      g.fillStyle = ["#F2E8D0", "#F2C14B", "#E88AB0", "#B8D8FF"][i % 4]; g.fillRect(x, y, 2, 2); g.fillStyle = "#2A4923"; g.fillRect(x, y + 2, 2, 2); }
+  },
+  mill(g, s){
+    const [dx, dy] = W_SOLID.mill[0], x = s.x + dx, y = s.y + dy;
+    g.fillStyle = "rgba(0,0,0,.35)"; g.beginPath(); g.ellipse(x + 10, y + 8, 40, 14, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = "#56616D"; g.beginPath(); g.moveTo(x - 22, y); g.lineTo(x + 22, y); g.lineTo(x + 8, y - 110); g.lineTo(x - 8, y - 110); g.closePath(); g.fill();   // башня
+    g.strokeStyle = "#3A4652"; g.lineWidth = 2; for(let k = 0; k < 6; k++){ const y0 = y - k*18, w0 = 22 - k*2.4; g.beginPath(); g.moveTo(x - w0, y0); g.lineTo(x + w0 - 2.4, y0 - 18); g.moveTo(x + w0, y0); g.lineTo(x - w0 + 2.4, y0 - 18); g.stroke(); }
+    g.fillStyle = "#8A96A3"; g.fillRect(x - 14, y - 124, 28, 16);                  // гондола
+    const [hx, hy] = W_SOLID.mill[1]; g.fillStyle = "#4A3424"; g.fillRect(s.x + hx - 26, s.y + hy - 22, 52, 40); g.fillStyle = "#6B5236"; g.fillRect(s.x + hx - 30, s.y + hy - 30, 60, 12);
+    g.fillStyle = "#F2C14B"; g.fillRect(s.x + hx - 6, s.y + hy - 8, 10, 10);
+  },
+  ravine(g, s){
+    const R = seeded(313);
+    for(let k = 0; k < 4; k++){
+      let x = s.x - 200 + k*110, y = s.y - 160 + R()*60, a = 1.3 + (R() - .5)*.6;
+      g.lineCap = "round";
+      for(let i = 0; i < 22; i++){ const nx = x + Math.cos(a)*16, ny = y + Math.sin(a)*16; a += (R() - .5)*.5;
+        g.strokeStyle = "#1A2A1F"; g.lineWidth = 14; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+        g.strokeStyle = "#26404A"; g.lineWidth = 6; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke(); x = nx; y = ny; }
+    }
+    for(let i = 0; i < 9; i++){ const x = s.x + (R() - .5)*380, y = s.y + (R() - .5)*320; g.fillStyle = "#1F4E6E"; g.beginPath(); g.ellipse(x, y, 16 + R()*14, 7 + R()*5, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = "rgba(190,230,255,.35)"; g.fillRect(x - 6, y - 2, 8, 2); }
+  },
+  grove(g, s){
+    g.fillStyle = g.createPattern(wTile("rustg"), "repeat"); g.globalAlpha = .55; g.beginPath(); g.ellipse(s.x, s.y, s.r + 60, (s.r + 60)*0.86, 0, 0, Math.PI*2); g.fill(); g.globalAlpha = 1;
+    const R = seeded(999); for(let i = 0; i < 26; i++){ const x = s.x + (R() - .5)*480, y = s.y + (R() - .5)*400; g.fillStyle = ["#8A4B2A", "#B86A2C", "#5A646E"][i % 3]; g.fillRect(x, y, 4 + R()*5, 2 + R()*3); }
+  },
+  crypts(g, s){
+    for(const [dx, dy] of W_SOLID.crypts){ const x = s.x + dx, y = s.y + dy;
+      g.fillStyle = "rgba(0,0,0,.4)"; g.fillRect(x - 46, y - 26, 100, 64);
+      g.fillStyle = "#4A4650"; g.fillRect(x - 50, y - 34, 100, 62); g.fillStyle = "#5C5866"; g.fillRect(x - 54, y - 44, 108, 14);
+      g.fillStyle = "#383540"; for(let k = 0; k < 4; k++) g.fillRect(x - 46 + k*26, y - 30, 2, 54);
+      g.fillStyle = "#120B1A"; g.fillRect(x - 13, y - 18, 26, 46); }                           // вход (свет — в wDrawLive)
+    const R = seeded(4242); for(let i = 0; i < 18; i++){ const x = s.x + (R() - .5)*440, y = s.y + (R() - .5)*380; g.fillStyle = "#4A4650"; g.fillRect(x, y, 6 + R()*8, 4 + R()*4); }
+  },
+  circle(g, s){
+    g.strokeStyle = "rgba(160,200,255,.12)"; g.lineWidth = 6; g.beginPath(); g.ellipse(s.x, s.y, 250, 205, 0, 0, Math.PI*2); g.stroke();
+    for(const [dx, dy, r] of W_SOLID.circle){ const x = s.x + dx, y = s.y + dy;
+      if(r === 28){ g.fillStyle = "#5A5F69"; g.fillRect(x - 30, y - 18, 60, 36); g.fillStyle = "#6C727D"; g.fillRect(x - 30, y - 18, 60, 6); continue; }   // алтарь
+      g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x - 10, y + 6, 24, 8);
+      g.fillStyle = "#5A5F69"; g.fillRect(x - 12, y - 46, 24, 54); g.fillStyle = "#6C727D"; g.fillRect(x - 12, y - 46, 6, 54); g.fillStyle = "#43474F"; g.fillRect(x + 6, y - 46, 6, 54); }
+  },
+  eye(g, s){
+    g.fillStyle = g.createPattern(wTile("ash"), "repeat"); g.beginPath(); g.ellipse(s.x, s.y, s.r, s.r*0.86, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = "#0B0710"; g.beginPath(); g.ellipse(s.x, s.y, 96, 64, 0, 0, Math.PI*2); g.fill();
+    g.strokeStyle = "#2A2228"; g.lineWidth = 10; g.stroke();
+    const R = seeded(616); for(let i = 0; i < 16; i++){ const a = i/16*Math.PI*2, x = s.x + Math.cos(a)*(108 + R()*10), y = s.y + Math.sin(a)*(74 + R()*8);
+      const img = rockSprite(10 + Math.round(R()*8), "#3A3036", i % 5); g.drawImage(img, Math.round(x - img.width/2), Math.round(y - img.height/2)); }
+  },
+  cliff(g, s){
+    g.fillStyle = g.createPattern(wTile("ash"), "repeat"); g.beginPath(); g.ellipse(s.x, s.y, s.r + 30, (s.r + 30)*0.86, 0, 0, Math.PI*2); g.fill();
+    for(const [dx, dy, r] of W_SOLID.cliff){ const img = rockSprite(r, "#262228", (dx + dy) & 3); g.drawImage(img, Math.round(s.x + dx - img.width/2), Math.round(s.y + dy - img.height/2)); }
+  },
+  gate(g, s){
+    g.fillStyle = g.createPattern(wTile("plaza"), "repeat"); g.fillRect(s.x - 260, s.y - 150, 520, 300);
+    g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(s.x - 260, s.y - 150, 520, 6); g.fillRect(s.x - 260, s.y + 144, 520, 6);
+    for(const [dx, dy, r] of W_SOLID.gate){ const x = s.x + dx, y = s.y + dy, h0 = 40 + ((dx*dy) & 15);
+      g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x - 14, y + 4, 34, 10);
+      g.fillStyle = "#5A5F69"; g.fillRect(x - 16, y - h0, 32, h0 + 8); g.fillStyle = "#6C727D"; g.fillRect(x - 16, y - h0, 8, h0 + 8);
+      g.fillStyle = "#43474F"; g.fillRect(x - 20, y + 2, 40, 8); }
+    for(const dy of [-52, 52]){ g.fillStyle = "#3A3036"; g.fillRect(s.x + 190, s.y + dy - 10, 20, 20); g.fillStyle = "#1A1214"; g.fillRect(s.x + 194, s.y + dy - 14, 12, 6); }   // жаровни
+  }};
+function wDrawThrone(g){
+  const T = WORLD.throne;
+  g.fillStyle = g.createPattern(wTile("plaza"), "repeat"); g.beginPath(); g.arc(T.x, T.y, T.R + 34, 0, Math.PI*2); g.fill();
+  g.strokeStyle = "#B9862E"; g.lineWidth = 4; g.beginPath(); g.arc(T.x, T.y, T.R - 40, 0, Math.PI*2); g.stroke();
+  g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 8; g.beginPath(); g.arc(T.x, T.y, T.R + 34, 0, Math.PI*2); g.stroke();
+  // знак в центре площади: два золотых кольца и восьмиконечная звезда, врезанные в камень
+  g.save(); g.globalAlpha = .4; g.strokeStyle = "#B9862E";
+  g.lineWidth = 3; g.beginPath(); g.arc(T.x, T.y, 92, 0, Math.PI*2); g.stroke();
+  g.lineWidth = 2; g.beginPath(); g.arc(T.x, T.y, 78, 0, Math.PI*2); g.stroke();
+  g.beginPath(); for(let i = 0; i <= 16; i++){ const a = -Math.PI/2 + i*Math.PI/8, r = i % 2 ? 32 : 78; g.lineTo(T.x + Math.cos(a)*r, T.y + Math.sin(a)*r); } g.stroke();
+  g.restore();
+  // трон у восточной стены: помост в две ступени, сиденье с подушкой, подлокотники, высокая спинка с навершием
+  const x = T.x + 150, y = T.y, R2 = (c, a, b, w, h) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
+  R2("rgba(0,0,0,.35)", -58, 16, 132, 14);                                                        // тень
+  R2("#4C5059", -64, -4, 128, 10); R2("#33373E", -64, 6, 128, 12); R2("#B9862E", -64, 6, 128, 2);  // нижняя ступень
+  R2("#565B65", -48, -20, 96, 10); R2("#3A3E46", -48, -10, 96, 8);                                // верхняя ступень
+  R2("#2A2E35", -30, -132, 60, 100); R2("#3A3E46", -24, -126, 48, 92);                            // спинка
+  R2("#8A2A2A", -12, -112, 24, 74); R2("#A8382F", -12, -112, 6, 74);
+  R2("#B9862E", -30, -132, 60, 4); R2("#B9862E", -30, -132, 4, 100); R2("#B9862E", 26, -132, 4, 100);
+  R2("#2A2E35", -30, -146, 12, 14); R2("#2A2E35", -8, -158, 16, 26); R2("#2A2E35", 18, -146, 12, 14);   // навершие: три зубца
+  R2("#B9862E", -30, -146, 12, 3); R2("#B9862E", -8, -158, 16, 3); R2("#B9862E", 18, -146, 12, 3); R2("#F2C14B", -4, -150, 8, 8);
+  R2("#43474F", -34, -44, 68, 24); R2("#8A2A2A", -24, -42, 48, 14); R2("#A8382F", -24, -42, 48, 4);   // сиденье и подушка
+  R2("#4C5059", -40, -62, 12, 42); R2("#4C5059", 28, -62, 12, 42); R2("#B9862E", -40, -62, 12, 3); R2("#B9862E", 28, -62, 12, 3);   // подлокотники
+}
+function wDrawColumn(g, d){
+  const x = d.x, y = d.y;
+  g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x - 18, y + 6, 40, 12);
+  g.fillStyle = "#43474F"; g.fillRect(x - 22, y - 2, 44, 14);
+  g.fillStyle = "#5A5F69"; g.fillRect(x - 16, y - 74, 32, 76); g.fillStyle = "#6C727D"; g.fillRect(x - 16, y - 74, 8, 76); g.fillStyle = "#4C5059"; g.fillRect(x + 8, y - 74, 8, 76);
+  g.fillStyle = "#6C727D"; g.fillRect(x - 21, y - 84, 42, 12); g.fillStyle = "#B9862E"; g.fillRect(x - 21, y - 74, 42, 3);
+}
+// кусок 400×400: всё неподвижное, у всех игроков одинаково
+function wChunk(ix, iy){
+  const key = ix + iy*100, C = WORLD.chunks;
+  let c = C.get(key);
+  if(c){ C.delete(key); C.set(key, c); return c; }
+  wPaths();
+  const S0 = WORLD.CH; c = document.createElement("canvas"); c.width = c.height = S0;
+  const g = c.getContext("2d"), ox = ix*S0, oy = iy*S0;
+  g.imageSmoothingEnabled = false; g.translate(-ox, -oy);
+  const vis = (x, y, m) => x + m > ox && x - m < ox + S0 && y + m > oy && y - m < oy + S0;
+  const pat = k => g.createPattern(wTile(k), "repeat");
+  g.fillStyle = pat("meadow"); g.fillRect(ox, oy, S0, S0);
+  g.fillStyle = pat("forest"); g.fill(WORLD.paths.forest);
+  g.fillStyle = pat("waste"); g.fill(WORLD.paths.waste);
+  // мелочь земли: цветы на лугу, шишки и папоротник в лесу, угли и трещины в пустошах (у куска своё зерно, целиком внутри)
+  const R = seeded(ix*7919 + iy*104729 + 3);
+  for(let i = 0; i < 46; i++){
+    const x = Math.round(ox + 6 + R()*(S0 - 12)), y = Math.round(oy + 6 + R()*(S0 - 12)), z = wZone(x, y);
+    if(z === "meadow"){ g.fillStyle = ["#F2E8D0", "#F2C14B", "#8FDB6A", "#B8D8FF"][i % 4]; g.fillRect(x, y, 2, 2); }
+    else if(z === "forest"){ g.fillStyle = i % 2 ? "#3F6E3A" : "#5A3E2A"; g.fillRect(x, y, 4, 2); g.fillRect(x + 1, y - 2, 2, 2); }
+    else if(z === "waste"){ g.fillStyle = i % 3 ? "#1A1412" : "#FF6A3A"; g.fillRect(x, y, i % 3 ? 4 : 2, 2); }
+  }
+  for(const s of W_SPOTS) if(vis(s.x, s.y, s.r + 320) && W_DECOR[s.id] && ["glade", "grove", "eye", "cliff", "gate"].includes(s.id)) W_DECOR[s.id](g, s);
+  if(vis(WORLD.throne.x, WORLD.throne.y, WORLD.throne.R + 60)) wDrawThrone(g);
+  // дороги
+  g.lineCap = "round"; g.lineJoin = "round";
+  for(const L of W_ROADS){
+    if(!L.some((q, i) => i && wSegDist(ox + S0/2, oy + S0/2, L[i - 1], q) < S0*0.75 + 60)) continue;
+    const P2 = new Path2D(); P2.moveTo(L[0][0], L[0][1]); for(const q of L) P2.lineTo(q[0], q[1]);
+    g.strokeStyle = "rgba(30,22,12,.5)"; g.lineWidth = 84; g.stroke(P2);
+    g.strokeStyle = pat("road"); g.lineWidth = 70; g.stroke(P2);
+  }
+  // река: песчаный берег, вода, глубина посередине, блики
+  if(Math.abs(ox + S0/2 - wRiverX(oy + S0/2)) < S0 + 200){
+    g.strokeStyle = pat("sand"); g.lineWidth = WORLD.river.w + 30; g.stroke(WORLD.paths.river);
+    g.strokeStyle = pat("water"); g.lineWidth = WORLD.river.w; g.stroke(WORLD.paths.river);
+    g.strokeStyle = "rgba(8,26,44,.35)"; g.lineWidth = WORLD.river.w*0.45; g.stroke(WORLD.paths.river);
+    for(let i = 0; i < 40; i++){ const y = Math.round(oy + 4 + R()*(S0 - 8)), x = Math.round(wRiverX(y) + (R() - .5)*(WORLD.river.w - 30));
+      if(x > ox + 4 && x < ox + S0 - 12){ g.fillStyle = "rgba(200,235,255,.25)"; g.fillRect(x, y, 8, 2); } }
+    for(const b of WORLD.river.bridges){
+      const bw = WORLD.river.bw, x0 = Math.round(wRiverX(b) - WORLD.river.w/2 - 30), x1 = Math.round(wRiverX(b) + WORLD.river.w/2 + 30), y0 = b - bw/2;
+      if(!vis((x0 + x1)/2, b, 160)) continue;
+      g.fillStyle = "rgba(0,0,0,.4)"; g.fillRect(x0 + 6, y0 + 8, x1 - x0, bw);
+      for(let x = x0; x < x1; x += 12){ g.fillStyle = ((x - x0)/12) % 2 ? "#7E6242" : "#735A3C"; g.fillRect(x, y0, 10, bw); g.fillStyle = "rgba(0,0,0,.28)"; g.fillRect(x + 10, y0, 2, bw); }
+      g.fillStyle = "#56616D"; g.fillRect(x0 - 6, y0 - 8, x1 - x0 + 12, 8); g.fillRect(x0 - 6, y0 + bw, x1 - x0 + 12, 8);
+      g.fillStyle = "#8A96A3"; g.fillRect(x0 - 6, y0 - 8, x1 - x0 + 12, 2); g.fillRect(x0 - 6, y0 + bw, x1 - x0 + 12, 2);
+      for(let x = x0; x <= x1; x += 30){ g.fillStyle = "#3A4652"; g.fillRect(x - 3, y0 - 14, 6, 16); g.fillRect(x - 3, y0 + bw - 4, 6, 16); }
+    }
+  }
+  // гряда: каменная полоса с перевалами (в перевале — осыпь), валуны
+  if(Math.abs(ox + S0/2 - wRidgeX(oy + S0/2)) < S0 + 260){
+    g.fillStyle = "rgba(0,0,0,.35)"; g.save(); g.translate(8, 10); g.fill(WORLD.paths.ridge); g.restore();
+    g.fillStyle = pat("rock"); g.fill(WORLD.paths.ridge);
+    for(const q of WORLD.ridge.passes){ const hw = WORLD.ridge.w/2 + 26;
+      g.fillStyle = pat("rubble"); g.beginPath(); g.moveTo(wRidgeX(q - WORLD.ridge.pw/2) - hw, q - WORLD.ridge.pw/2); g.lineTo(wRidgeX(q - WORLD.ridge.pw/2) + hw, q - WORLD.ridge.pw/2);
+      g.lineTo(wRidgeX(q + WORLD.ridge.pw/2) + hw, q + WORLD.ridge.pw/2); g.lineTo(wRidgeX(q + WORLD.ridge.pw/2) - hw, q + WORLD.ridge.pw/2); g.closePath(); g.fill(); }
+    for(const k of WORLD.ridgeRocks){ if(!vis(k.x, k.y, k.r + 10)) continue;
+      const img = rockSprite(k.r, k.v % 2 ? "#4E4844" : "#5A5048", k.v); g.drawImage(img, Math.round(k.x - img.width/2), Math.round(k.y - img.height/2)); }
+  }
+  for(const s of W_SPOTS) if(vis(s.x, s.y, s.r + 320) && W_DECOR[s.id] && !["glade", "grove", "eye", "cliff", "gate"].includes(s.id)) W_DECOR[s.id](g, s);
+  // ярус спота: пунктирное кольцо на земле
+  for(const s of W_SPOTS){ if(!vis(s.x, s.y, s.r + 10)) continue;
+    g.save(); g.strokeStyle = W_TIERS[s.tier].col; g.globalAlpha = .22; g.lineWidth = 3; g.setLineDash([14, 12]);
+    g.beginPath(); g.ellipse(s.x, s.y, s.r - 6, (s.r - 6)*0.86, 0, 0, Math.PI*2); g.stroke(); g.restore(); }
+  // деревья и колонны — сверху вниз, чтобы ближние перекрывали дальние
+  const items = [];
+  for(const t of WORLD.trees) if(vis(t.x, t.y - t.r, t.r*2 + 20)) items.push([t.y, 0, t]);
+  for(const d of WORLD.decor) if(d.column && vis(d.x, d.y - 40, 110)) items.push([d.y, 1, d]);
+  items.sort((a, b) => a[0] - b[0]);
+  for(const [, kind, o] of items) kind ? wDrawColumn(g, o) : wDrawTree(g, o);
+  C.set(key, c);
+  while(C.size > WORLD.CHUNKS) C.delete(C.keys().next().value);
+  return c;
+}
+// земля мира: видимые куски; пока свободно — дорисовываем по одному соседнему куску за кадр (чтобы при движении не было рывка)
+function wDrawGround(cx, cy, t){
+  const S0 = WORLD.CH, nx = Math.ceil(WORLD.W/S0) - 1, ny = Math.ceil(WORLD.H/S0) - 1;
+  const x0 = Math.max(0, Math.floor(cx/S0)), x1 = Math.min(nx, Math.floor((cx + vw)/S0)), y0 = Math.max(0, Math.floor(cy/S0)), y1 = Math.min(ny, Math.floor((cy + vh)/S0));
+  ctx.fillStyle = "#16261A"; ctx.fillRect(cx, cy, vw, vh);
+  ctx.imageSmoothingEnabled = false;
+  let fresh = 0;
+  for(let iy = y0; iy <= y1; iy++) for(let ix = x0; ix <= x1; ix++){ if(!WORLD.chunks.has(ix + iy*100)) fresh++; ctx.drawImage(wChunk(ix, iy), ix*S0, iy*S0); }
+  if(!fresh) for(let iy = Math.max(0, y0 - 1); iy <= Math.min(ny, y1 + 1); iy++) for(let ix = Math.max(0, x0 - 1); ix <= Math.min(nx, x1 + 1); ix++)
+    if(!WORLD.chunks.has(ix + iy*100)){ if(WORLD.chunks.size < WORLD.CHUNKS - 2) wChunk(ix, iy); iy = ny + 9; break; }
+  wDrawLive(cx, cy, t);
+}
+// живые детали: блики реки, лопасти ветряка, свет склепов, руны алтаря, око бездны, жаровни, отблеск трона
+function wDrawLive(cx, cy, t){
+  const on = (x, y, m) => x + m > cx && x - m < cx + vw && y + m > cy && y - m < cy + vh;
+  // течение: светлые штрихи плывут на юг
+  for(let y = Math.floor(cy/60)*60 - 60; y < cy + vh + 60; y += 60){
+    const yy = y + ((t*28) % 60), x = wRiverX(yy) + Math.sin(y*0.37)*(WORLD.river.w/2 - 26);
+    if(WORLD.river.bridges.some(b => Math.abs(yy - b) < WORLD.river.bw/2 + 8) || !on(x, yy, 20)) continue;
+    ctx.fillStyle = "rgba(210,240,255,.35)"; ctx.fillRect(Math.round(x), Math.round(yy), 10, 2); ctx.fillRect(Math.round(x) + 14, Math.round(yy) + 4, 6, 2);
+  }
+  for(const s of W_SPOTS){
+    if(!on(s.x, s.y, s.r + 140)) continue;
+    if(s.id === "crypts") for(const [dx, dy] of W_SOLID.crypts){ const a = .35 + Math.sin(t*2.2 + dx)*.18;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(176,124,255,${a})`; ctx.fillRect(s.x + dx - 11, s.y + dy - 16, 22, 42);
+      ctx.fillStyle = `rgba(176,124,255,${a*.35})`; ctx.beginPath(); ctx.ellipse(s.x + dx, s.y + dy + 34, 30, 10, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+    if(s.id === "circle"){ const a = .25 + Math.sin(t*1.6)*.15;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = `rgba(95,212,232,${a})`; ctx.lineWidth = 2;
+      for(let i = 0; i < 4; i++){ const r = 10 + i*5; ctx.beginPath(); ctx.arc(s.x, s.y - 44, r, t*.6 + i, t*.6 + i + 2.4); ctx.stroke(); } ctx.restore(); }
+    if(s.id === "eye"){ const pu = (Math.sin(t*1.8) + 1)/2;
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      const gr = ctx.createRadialGradient(s.x, s.y, 4, s.x, s.y, 90); gr.addColorStop(0, `rgba(255,60,90,${.45 + pu*.3})`); gr.addColorStop(1, "rgba(255,60,90,0)");
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(s.x, s.y, 90, 60, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(255,200,120,${.7 + pu*.3})`; ctx.beginPath(); ctx.ellipse(s.x, s.y, 26, 12 + pu*4, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#1A0610"; ctx.beginPath(); ctx.ellipse(s.x + Math.sin(t*.7)*6, s.y, 5, 10 + pu*3, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+    if(s.id === "gate") for(const dy of [-52, 52]){ const x = s.x + 200, y = s.y + dy - 14;
+      for(let i = 0; i < 5; i++){ const h = 9 + Math.sin(t*9 + i*1.7 + dy)*5 + (i % 2)*3; ctx.fillStyle = i % 2 ? "#F2A93B" : "#E0463A"; ctx.fillRect(x - 9 + i*4, y - h, 3, h); }
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; const gr = ctx.createRadialGradient(x, y, 0, x, y, 70); gr.addColorStop(0, "rgba(255,140,60,.25)"); gr.addColorStop(1, "rgba(255,140,60,0)");
+      ctx.fillStyle = gr; ctx.fillRect(x - 70, y - 70, 140, 140); ctx.restore(); }
+  }
+  const TH = WORLD.throne;                                               // не T: T() — перевод подписей ниже
+  if(on(TH.x + 150, TH.y - 60, 140)){ ctx.save(); ctx.globalCompositeOperation = "lighter"; const pu = (Math.sin(t*1.2) + 1)/2, gx = TH.x + 150, gy = TH.y - 60;
+    const gr = ctx.createRadialGradient(gx, gy, 6, gx, gy, 120); gr.addColorStop(0, `rgba(242,193,75,${.16 + pu*.12})`); gr.addColorStop(1, "rgba(242,193,75,0)");
+    ctx.fillStyle = gr; ctx.fillRect(gx - 120, gy - 120, 240, 240); ctx.restore(); }
+  // имя спота лежит на земле под кольцом: роботы и монстры проходят поверх, своего робота оно не закрывает
+  WORLD.lbl = [];
+  for(const s of W_SPOTS){
+    const ly = s.y + s.r*0.86 + 22; if(!on(s.x, ly, 160)) continue;
+    const name = T(s.name), sub = T(wSpotSub(s)), w = Math.max(wTextW(name, W_F.spot), wTextW(sub, W_F.sub));
+    nameText(name, s.x, ly, W_TIERS[s.tier].col, W_F.spot);
+    nameText(sub, s.x, ly + 15, "#C9D1D8", W_F.sub);
+    WORLD.lbl.push([s.x - w/2, ly - 13, s.x + w/2, ly + 19]);
+  }
+}
+// ---- подписи: споты — под кольцом (пачки стоят внутри, их подписи — над монстрами, так они не встречаются);
+// пачки — «Имя ×4» и уровень над верхним монстром. Ближние к роботу подписываются первыми; если место занято
+// (свой робот, чужие, выбранная цель, другая пачка), подпись уходит под пачку, а если и там тесно — прячется ----
+const W_F = {spot:"700 14px Rubik, sans-serif", sub:"11px Rubik, sans-serif", pack:"600 11px Rubik, sans-serif", lvl:"10px Rubik, sans-serif", nick:"600 13px Rubik, sans-serif", sel:"13px Rubik, sans-serif"};
+const W_TW = {w:new Map(), g:null};
+function wTextW(s, font){                                               // ширина подписи меряется один раз
+  const key = font + "|" + s; let w = W_TW.w.get(key);
+  if(w === undefined){
+    const g = W_TW.g || (W_TW.g = document.createElement("canvas").getContext("2d"));
+    g.font = font; w = Math.ceil(g.measureText(s).width) + 8;
+    if(W_TW.w.size > 400) W_TW.w.clear();
+    W_TW.w.set(key, w);
+  }
+  return w;
+}
+const wSpotSub = s => "Ур. " + s.lo + "–" + s.hi + " · " + W_TIERS[s.tier].name + " · пачки по " + W_TIERS[s.tier].pack;
+const wDanger = lvl => S.level >= lvl ? "#E4DED1" : S.level + 3 >= lvl ? "#F2A93B" : "#E0694A";
+// прямоугольники, которые подписи пачек не закрывают: [x0, y0, x1, y1]
+function wBusy(cx, cy){
+  const B = [], bars = unitBars(), top = (bars ? 64 : 56);              // ник стоит на 51 (с полосками) или 43 px над ногами
+  const add = (x, y, w, up, down) => B.push([x - w/2, y - up, x + w/2, y + down]);
+  if(p && !p.dead) add(p.x, p.y, Math.max(64, wTextW((window.NET_ADMIN ? "[ADM] " : "") + S.name, W_F.nick)), top + (typeof gCur !== "undefined" && gCur ? 36 : 0), 10);
+  if(typeof NET !== "undefined") for(const o of NET.others.values()){
+    if(o.dead || o.rx < cx - 90 || o.rx > cx + vw + 90 || o.ry < cy - 40 || o.ry > cy + vh + 160) continue;
+    add(o.rx, o.ry, Math.max(64, wTextW("◆ " + String(o.nick || "Пилот").slice(0, 16) + " · " + (+o.lvl || 1), W_F.nick)), top + (o.gt ? 36 : 0), 10);
+  }
+  const sel = new Set([p.target, typeof lockedEnemy === "function" ? lockedEnemy() : null]);
+  for(const e of sel){
+    if(!e || e.dead || !NPCS[e.type]) continue;
+    const rv = NPCS[e.type].r*MOB_K; add(e.x, e.y, Math.max(70, wTextW(T(NPCS[e.type].name), W_F.sel)), rv + 44, rv);
+  }
+  return B;
+}
+function wPackLabels(cx, cy, busy){
+  const G = new Map(), sel = typeof lockedEnemy === "function" ? lockedEnemy() : null;
+  for(const e of enemies){
+    if(e.dead || e.pack == null || !e.spot) continue;
+    let g = G.get(e.pack);
+    if(!g) G.set(e.pack, g = {top:e, bot:e, n:0, sx:0, x0:e.x, x1:e.x, sel:false});
+    g.n++; g.sx += e.x;
+    if(e.y < g.top.y) g.top = e;
+    if(e.y > g.bot.y) g.bot = e;
+    if(e.x < g.x0) g.x0 = e.x;
+    if(e.x > g.x1) g.x1 = e.x;
+    if(e === p.target || e === sel) g.sel = true;
+  }
+  const list = [];
+  for(const g of G.values()){
+    if(g.sel || g.x1 < cx - 100 || g.x0 > cx + vw + 100 || g.bot.y < cy - 60 || g.top.y > cy + vh + 100) continue;   // у выбранной пачки своя подпись над целью
+    g.d = Math.hypot(g.sx/g.n - p.x, (g.top.y + g.bot.y)/2 - p.y); list.push(g);
+  }
+  list.sort((a, b) => a.d - b.d);
+  const free = r => !busy.some(b => r[0] < b[2] && r[2] > b[0] && r[1] < b[3] && r[3] > b[1]);
+  for(const g of list){
+    const k = NPCS[g.top.type], rv = k.r*MOB_K, name = T(k.name) + (g.n > 1 ? " ×" + g.n : ""), lvl = T("Уровень") + " " + k.lvl;
+    const w = Math.max(wTextW(name, W_F.pack), wTextW(lvl, W_F.lvl));
+    for(const [m, y] of [[g.top, g.top.y - rv - 20], [g.bot, g.bot.y + rv*1.1 + 24]]){       // над пачкой, иначе под ней
+      const lx = g.n > 1 && g.x0 > m.x - 120 && g.x1 < m.x + 120 ? g.sx/g.n : m.x;              // пачка разбежалась — подпись у крайнего монстра
+      const r = [lx - w/2, y - 23, lx + w/2, y + 4];
+      if(!free(r)) continue;
+      busy.push(r);
+      nameText(name, lx, y, wDanger(k.lvl), W_F.pack);
+      nameText(lvl, lx, y - 13, "#93A0AC", W_F.lvl);
+      break;
+    }
+  }
+}
+// над роботами: лопасти ветряка (высокая башня) и подписи пачек
+function wDrawTop(t){
+  const cx = window.camX || 0, cy = window.camY || 0, on = (x, y, m) => x + m > cx && x - m < cx + vw && y + m > cy && y - m < cy + vh;
+  const mill = W_SPOTS.find(s => s.id === "mill"), [mx, my] = W_SOLID.mill[0], hx = mill.x + mx, hy = mill.y + my - 116;
+  if(on(hx, hy, 80)){
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(t*0.9);
+    for(let i = 0; i < 3; i++){ ctx.rotate(Math.PI*2/3); ctx.fillStyle = "#C9D1D8"; ctx.fillRect(-3, -62, 6, 58); ctx.fillStyle = "#8A96A3"; ctx.fillRect(1, -62, 2, 58); ctx.fillStyle = "#E0694A"; ctx.fillRect(-3, -62, 6, 6); }
+    ctx.fillStyle = "#56616D"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  }
+  wPackLabels(cx, cy, wBusy(cx, cy).concat(WORLD.lbl || []));
+}
+{ const _dfW = drawField;
+  drawField = function(cx, cy){ if(locKey !== WORLD.KEY) return _dfW(cx, cy); wDrawGround(cx, cy, performance.now()/1000); }; }
+{ const _plW = drawPvpLayer;
+  drawPvpLayer = function(t, dt){ _plW(t, dt); if(locKey === WORLD.KEY) wDrawTop(t); }; }
+// ---- мини-карта и вкладка «Карта»: цветной план мира (1 px = 20 px мира), споты подписаны цветом яруса ----
+function wMini(){
+  if(WORLD.mini) return WORLD.mini;
+  wPaths();
+  const k = 1/20, c = document.createElement("canvas"); c.width = Math.ceil(WORLD.W*k); c.height = Math.ceil(WORLD.H*k);
+  const g = c.getContext("2d"); g.scale(k, k);
+  g.fillStyle = "#3E6B34"; g.fillRect(0, 0, WORLD.W, WORLD.H);
+  g.fillStyle = "#24452C"; g.fill(WORLD.paths.forest);
+  g.fillStyle = "#5A4232"; g.fill(WORLD.paths.waste);
+  g.fillStyle = "#1E3A22"; for(const t of WORLD.trees) if(wZone(t.x, t.y) !== "waste") g.fillRect(t.x - 24, t.y - 24, 48, 48);   // лесные массивы темнее
+  g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#A08A5C"; g.lineWidth = 56;
+  for(const L of W_ROADS){ g.beginPath(); g.moveTo(L[0][0], L[0][1]); for(const q of L) g.lineTo(q[0], q[1]); g.stroke(); }
+  g.strokeStyle = "#3A8CC4"; g.lineWidth = WORLD.river.w + 30; g.stroke(WORLD.paths.river);
+  g.fillStyle = "#8A6B45"; for(const b of WORLD.river.bridges) g.fillRect(wRiverX(b) - WORLD.river.w/2 - 40, b - WORLD.river.bw/2, WORLD.river.w + 80, WORLD.river.bw);
+  g.fillStyle = "#26221F"; g.fill(WORLD.paths.ridge);
+  const T0 = WORLD.throne; g.fillStyle = "#6A6F7A"; g.beginPath(); g.arc(T0.x, T0.y, T0.R + 34, 0, Math.PI*2); g.fill();
+  g.fillStyle = "#B9862E"; for(const d of WORLD.decor) if(d.column || d.throne){ g.beginPath(); g.arc(d.x, d.y, d.throne ? 60 : 34, 0, Math.PI*2); g.fill(); }
+  for(const s of W_SPOTS){ const col = W_TIERS[s.tier].col;
+    g.globalAlpha = .35; g.fillStyle = col; g.beginPath(); g.ellipse(s.x, s.y, s.r, s.r*0.86, 0, 0, Math.PI*2); g.fill();
+    g.globalAlpha = 1; g.strokeStyle = col; g.lineWidth = 30; g.stroke(); }
+  return WORLD.mini = c;
+}
+{ const _mmW = drawMinimap;
+  drawMinimap = function(){
+    if(locKey !== WORLD.KEY) return _mmW();
+    const size = vw <= 400 ? 72 : 92, x = vw - size - 8, y = 8, view = 2400, s = size/view, k = 1/20, m = wMini();
+    ctx.fillStyle = "rgba(20,27,34,.85)"; rr(x - 3, y - 3, size + 6, size + 6, 10); ctx.fill();
+    ctx.save(); rr(x, y, size, size, 7); ctx.clip();
+    const vx = Math.max(0, Math.min(WORLD.W - view, p.x - view/2)), vy = Math.max(0, Math.min(WORLD.H - view, p.y - view/2));
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(m, vx*k, vy*k, view*k, view*k, x, y, size, size);
+    const X = wx => x + (wx - vx)*s, Y = wy => y + (wy - vy)*s;
+    for(const n of npcs){ ctx.fillStyle = "#9B7BFF"; circle(X(n.x), Y(n.y), 3.5); ctx.fill(); }
+    ctx.fillStyle = "#E0694A";
+    for(const e of enemies) if(!e.dead && Math.abs(e.x - p.x) < 900 && Math.abs(e.y - p.y) < 900) ctx.fillRect(X(e.x) - 1, Y(e.y) - 1, 2.5, 2.5);
+    if(typeof NET !== "undefined"){ ctx.fillStyle = "#7BC98A"; for(const o of NET.others.values()){ circle(X(o.rx), Y(o.ry), 2.5); ctx.fill(); } }
+    ctx.fillStyle = "#fff"; circle(X(p.x), Y(p.y), 3); ctx.fill();
+    ctx.restore();
+  }; }
+const wSpotHint = s => s.tier ? "бросаются, если подойти близко" : "сами не нападают";
+{ const _rmW = renderMapScreen;
+  renderMapScreen = function(){
+    if(locKey !== WORLD.KEY) return _rmW();
+    const el = $("scrMap"), alive = enemies.filter(e => !e.dead).length;
+    const types = [...new Set(enemies.map(e => e.type))].sort((a, b) => (NPCS[a].lvl || 0) - (NPCS[b].lvl || 0));
+    WORLD.mapScroll = false;
+    el.innerHTML = `<div class="ghead"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--faction)" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg><h1>Карта</h1><span class="maploc">${LOCS[WORLD.KEY].name} · врагов: ${alive}</span></div>
+      <section class="mapbox"><div class="wmap"><canvas id="mapCv"></canvas></div><div class="maplegend"><span><i style="background:#7BC98A"></i>Ты</span><span><i style="background:#E0694A"></i>Враги</span><span><i style="background:#F2C14B"></i>Портал</span>${typeof NET !== "undefined" && NET.others.size ? `<span><i style="background:#5FD4E8"></i>Игроки</span>` : ""}</div></section>
+      <h3 class="maph">Споты</h3>
+      <div class="wspots">${W_SPOTS.map(s => { const T0 = W_TIERS[s.tier];
+        return `<div class="wspot" style="--c:${T0.col}"><b>${s.name}</b><small>${wSpotSub(s)} · ${wSpotHint(s)}</small></div>`; }).join("")}</div>
+      <h3 class="maph">Монстры</h3>
+      <div class="moblist">${types.map(mobCard).join("")}</div>`;
+    drawMapCanvas();
+  }; }
+{ const _dmW = drawMapCanvas;
+  drawMapCanvas = function(){
+    if(locKey !== WORLD.KEY) return _dmW();
+    const cv = $("mapCv"); if(!cv || !p) return;
+    const k = 0.11, w = Math.round(WORLD.W*k), hh = Math.round(WORLD.H*k), dpr2 = Math.min(2, window.devicePixelRatio || 1);
+    if(cv.width !== w*dpr2){ cv.style.width = w + "px"; cv.style.height = hh + "px"; cv.width = w*dpr2; cv.height = hh*dpr2; }
+    const g = cv.getContext("2d"); g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+    g.imageSmoothingEnabled = true; g.drawImage(wMini(), 0, 0, w, hh);
+    const X = x => x*k, Y = y => y*k, txt = (s, x, y, col, font) => { g.font = font; g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,.75)"; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y); };
+    g.textAlign = "center"; g.lineJoin = "round";
+    for(const s of W_SPOTS){ const col = W_TIERS[s.tier].col;
+      txt(T(s.name), X(s.x), Y(s.y - s.r*0.86) - 4, col, "700 10px Rubik, sans-serif");
+      txt(s.lo + "–" + s.hi, X(s.x), Y(s.y) + 4, "#E4DED1", "700 10px Rubik, sans-serif"); }
+    txt(T("Трон Владыки"), X(WORLD.throne.x), Y(WORLD.throne.y + WORLD.throne.R) + 16, "#F2C14B", "700 10px Rubik, sans-serif");   // под кольцом: сверху — подпись соседнего спота
+    const dot = (x, y, c, r) => { g.fillStyle = c; g.beginPath(); g.arc(X(x), Y(y), r, 0, Math.PI*2); g.fill(); };
+    for(const e of enemies) if(!e.dead) dot(e.x, e.y, mapOpenType === e.type ? "#FFE08A" : "#E0694A", mapOpenType === e.type ? 2.4 : 1.4);
+    for(const n of npcs) dot(n.x, n.y, "#F2C14B", 3.4);
+    if(typeof NET !== "undefined") for(const o of NET.others.values()) dot(o.rx, o.ry, "#5FD4E8", 2.6);
+    dot(p.x, p.y, "#7BC98A", 4); g.strokeStyle = "#fff"; g.lineWidth = 1; g.beginPath(); g.arc(X(p.x), Y(p.y), 5.5, 0, Math.PI*2); g.stroke();
+    const wrap = cv.parentElement;
+    if(!WORLD.mapScroll && wrap && wrap.clientWidth){ wrap.scrollLeft = Math.max(0, X(p.x) - wrap.clientWidth/2); WORLD.mapScroll = true; }
+  }; }
+// ---- край под ногами: подсказка при переходе (луг → лес → пустоши → трон) и своя атмосфера у каждого края ----
+AMB[WORLD.KEY] = W_ZONES.meadow.amb;
+setInterval(() => {
+  if(typeof locKey === "undefined" || locKey !== WORLD.KEY || !p || p.dead){ if(typeof locKey !== "undefined" && locKey !== WORLD.KEY) WORLD.zone = ""; return; }
+  const z = wZone(p.x, p.y);
+  if(!W_ZONES[z] || z === WORLD.zone) return;
+  const first = !WORLD.zone; WORLD.zone = z;
+  AMB[WORLD.KEY] = W_ZONES[z].amb; if(typeof AMBP !== "undefined") AMBP.key = "";
+  if(first) return;                                                     // при входе подпись локации уже показал переход
+  const tag = $("zoneTag"); if(!tag) return;
+  tag.innerHTML = W_ZONES[z].name + "<small>" + W_ZONES[z].sub + "</small>";
+  tag.classList.add("show"); clearTimeout(tag._h); tag._h = setTimeout(() => tag.classList.remove("show"), 2600);
+}, 500);
+// табличка при входе: что это за место, а не «Враги рядом»
+{ const _trW = travel;
+  travel = function(key){
+    const r = _trW(key);
+    if(key === WORLD.KEY) setTimeout(() => { if(locKey === WORLD.KEY && S.level >= LOCS[WORLD.KEY].min) $("zoneTag").innerHTML = LOCS[WORLD.KEY].name + "<small>Открытый мир · PvP-зона</small>"; }, 380);
+    return r;
+  }; }
+// ---- над выбранным монстром мира к имени добавляется уровень (цвет — насколько он опасен); подписи пачек — в wPackLabels ----
+{ const _deW = drawEnemy;
+  drawEnemy = function(e, t){
+    const r = _deW(e, t), k = NPCS[e.type];
+    if(!k || !k.world || locKey !== WORLD.KEY) return r;
+    if(p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e)) nameText(T("Уровень") + " " + k.lvl, e.x, e.y - k.r*MOB_K - 34, wDanger(k.lvl), W_F.lvl);
+    return r;
+  }; }
 // ---- перевод страницы ----
 const trOrig = new WeakMap(), trDone = new WeakMap();
 const skip = el => !el || el.closest("[data-notr],script,style,textarea");
