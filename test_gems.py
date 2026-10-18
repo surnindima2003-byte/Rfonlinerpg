@@ -74,7 +74,7 @@ class ServerMatchesGame(unittest.TestCase):
     def test_registered_and_tradeable(self):
         for gid in items.GEMS:
             self.assertIn(gid, items.REG_IDS)                                  # учёт штуками: маркет и Кодекс
-        self.assertIn("...SHARD_IDS, ...GEM_IDS]", GAME)                       # и у телефона (REG_IDS игры)
+        self.assertIn("...SHARD_IDS, ...GEM_IDS, ...BP_IDS]", GAME)            # и у телефона (REG_IDS игры)
         self.assertIn('["gem", "Самоцветы"]', GAME)                             # раздел маркета
 
     def test_ids_fit_balance_column(self):
@@ -135,8 +135,9 @@ class Codex(unittest.TestCase):
     def test_endpoint_is_atomic(self):
         op = ITEMS_SRC[ITEMS_SRC.index('if op == "gem":'):ITEMS_SRC.index('if op == "craft":')]
         self.assertIn("take_spheres(s, uid, gid, k)", op)                      # списание учтённых — атомарно
-        self.assertIn("SphereBal.n + k <= GEM_MAX", op)                        # счётчик не перевалит за 500 даже при гонке
-        self.assertIn("given, have = min(GEM_MAX, cx.n or 0), bal.n or 0", op)  # прочитано до отката
+        self.assertIn("cap = gem_cap(gid)", op)                                # предел вида: 500 камней, 200 монет
+        self.assertIn("SphereBal.n + k <= cap", op)                            # счётчик не перевалит за предел даже при гонке
+        self.assertIn("given, have = min(cap, cx.n or 0), bal.n or 0", op)      # прочитано до отката
         self.assertIn('"gemcx": gemcx', ITEMS_SRC)                             # вход: счётчики сервера
 
 
@@ -222,7 +223,7 @@ process.stdout.write(out + "\n");
     def test_bonus(self):
         self.assertEqual(self.r["twenty"], {"atk": 15, "def": 10, "hp": 0, "rate": 0})
         self.assertEqual(self.r["all"], {"atk": 770, "def": 620, "hp": 16000, "rate": 0.8})
-        self.assertEqual(self.r["dirty"], [500, 0, 0, 0])
+        self.assertEqual(self.r["dirty"], [500, 0, 0, 0, 0])
 
     def test_stats(self):
         # плоский бонус до множителей класса: у Стража броня ×1,45 и прочность ×1,3
@@ -230,20 +231,20 @@ process.stdout.write(out + "\n");
 
     def test_map_and_no_local_drop(self):
         d = self.r["drops"]
-        self.assertEqual(d["gems"], list(items.GEMS))
+        self.assertEqual(d["gems"], list(items.GEMS_COMMON + items.GEMS_RARE))     # Монета удачи — только в Мире
         self.assertEqual(d["inItems"], 0)                     # rollDrops их не бросает: только сервер
         self.assertEqual(d["fields"], 0)
         self.assertTrue(d["boss"])
 
     def test_codex_window(self):
-        self.assertEqual(self.r["html"], {"cards": 4, "next": True, "ruby": True})
+        self.assertEqual(self.r["html"], {"cards": 5, "next": True, "ruby": True})     # 4 камня и Монета удачи
 
     def test_give(self):
         self.assertEqual(self.r["offline"], [17, 0, 0])      # без сервера: сумка, затем склад
         self.assertEqual(self.r["capped"], [500, 8])         # больше 500 не принимается
 
     def test_item_types(self):
-        self.assertEqual(self.r["types"], ["gem:true:gem:res"] * 4)
+        self.assertEqual(self.r["types"], ["gem:true:gem:res"] * len(items.GEMS))
         self.assertTrue(self.r["icons"])
 
 

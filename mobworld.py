@@ -55,10 +55,28 @@ LVL_GAP = 12                         # как в items.process_kills: моб с�
 # Лут и опыт за такого моба items.process_kills по-прежнему не засчитает — правило LVL_GAP там не тронуто.
 NO_RESPAWN = 6 * 3600
 _rules = {}
+# Особые мобы со своими правилами по префиксу типа (worldthrone.py — босс трона в Мире). У правила:
+#   alive(loc, номер) — моб сейчас есть (босс ещё не вернулся — удары по нему не принимаются);
+#   killed(loc, номер, моб, победитель, время, hub) -> (когда вернётся, поля для mdie, кому засчитать бой) —
+#     у босса добыча не одному победителю, а каждому, кто снёс заметную долю прочности;
+#   regen_after — через сколько секунд без ударов моб восстанавливается (у босса дольше: успеть вернуться после гибели).
+_type_rules = {}
 
 
 def set_rules(prefix, allow, killed):
     _rules[prefix] = (allow, killed)
+
+
+def set_type_rule(prefix, rule):
+    _type_rules[prefix] = rule
+
+
+def _trule(typ):
+    if isinstance(typ, str):
+        for pre, r in _type_rules.items():
+            if typ.startswith(pre):
+                return r
+    return None
 
 
 def _rule(loc):
@@ -90,6 +108,9 @@ def _mob(loc, i, typ):
     m = _mobs.setdefault(loc, {}).get(i)
     if m is not None:
         return m if m["type"] == typ else None
+    tr = _trule(typ)
+    if tr and not tr.alive(loc, i):
+        return None                                           # босс ещё не вернулся (например, после перезапуска сервера)
     hp = mobguard.mob_hp(typ)
     if hp is None:
         return None
@@ -207,17 +228,24 @@ def _free(loc, i, hub):
 def _kill(loc, i, m, hub, now):
     winner = max(m["dmg"].items(), key=lambda kv: kv[1])[0]
     iid = next(_iid)
-    # засчитываем победителю «виденный» бой, чтобы его обычная заявка на убийство прошла проверку
-    fights = mobguard._fights.setdefault(winner, {})
-    if len(fights) >= mobguard.MAX_FIGHTS:
-        fights.pop(next(iter(fights)))
-    fights[iid] = [m["type"], m["max"], now, now]
-    rule = _rule(loc)
-    m["dead_until"] = now + (NO_RESPAWN if rule else RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN_ELITE if m["type"].startswith("el") else RESPAWN)
+    rule, tr, extra, credit = _rule(loc), _trule(m["type"]), {}, [winner]
+    if tr:
+        dead_until, extra, credit = tr.killed(loc, i, m, winner, now, hub)
+    else:
+        dead_until = now + (NO_RESPAWN if rule else RESPAWN_BOSS if mobguard.is_boss(m["type"]) else RESPAWN_ELITE if m["type"].startswith("el") else RESPAWN)
+    # засчитываем «виденный» бой победителю (у особых мобов — каждому, кому положена добыча),
+    # чтобы его обычная заявка на убийство прошла проверку. Номер моба в бою — для добычи, которая зависит от места
+    # (чертежи спотов Мира: mobguard.fight_idx); телефон его не подделает — бой записывает только сервер
+    for uid in credit:
+        fights = mobguard._fights.setdefault(uid, {})
+        if len(fights) >= mobguard.MAX_FIGHTS:
+            fights.pop(next(iter(fights)))
+        fights[iid] = [m["type"], m["max"], now, now, i]
+    m["dead_until"] = dead_until
     m["dmg"] = {}
     m["hp"] = m["max"]
     _dirty.get(loc, set()).discard(i)
-    hub.to_loc(loc, {"t": "mdie", "loc": loc, "i": i, "by": winner, "iid": iid})
+    hub.to_loc(loc, {**extra, "t": "mdie", "loc": loc, "i": i, "by": winner, "iid": iid})
     _own.get(loc, {}).pop(i, None)
     _moved.get(loc, set()).discard(i)
     metrics.inc("mobs.shared_kill")
@@ -253,7 +281,7 @@ def tick(hub):
                     m["dead_until"] = 0
                     hub.to_loc(loc, {"t": "mres", "loc": loc, "i": i})
                     mobs.pop(i, None)
-            elif m["hp"] < m["max"] and now - m["last"] > REGEN_AFTER and not _rule(loc):   # монстры события не лечатся
+            elif m["hp"] < m["max"] and now - m["last"] > _regen_after(m["type"]) and not _rule(loc):   # монстры события не лечатся
                 m["hp"], m["dmg"] = m["max"], {}
                 _dirty.setdefault(loc, set()).add(i)
         dirty = _dirty.pop(loc, None)
@@ -265,6 +293,11 @@ def tick(hub):
                 m = mobs.get(i)
                 if m and not m["dead_until"] and m["hp"] >= m["max"]:
                     mobs.pop(i, None)
+
+
+def _regen_after(typ):
+    tr = _trule(typ)
+    return getattr(tr, "regen_after", REGEN_AFTER) if tr else REGEN_AFTER
 
 
 def state(loc):

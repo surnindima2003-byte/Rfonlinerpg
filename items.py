@@ -128,28 +128,49 @@ CLOAKS = ("ck_canvas", "ck_mesh", "ck_scout", "ck_bastion", "ck_royal", "ck_nigh
 # осколки (как в game.html → SHARD): выпадают с мобов от 15 уровня по решению сервера, из них Кузнец собирает
 # уникальные сеты классов. Учитываются штуками, продаются на маркете за GRAM.
 SHARDS = ("sh_plasma", "sh_ion", "sh_solar", "sh_void", "sh_magma", "sh_cryo", "sh_toxin", "sh_blood")
+# чертежи классов (как «свитки классов» в LIBERTY, патч 17 октября «Мир»; зеркало game.html → BP): по чертежу Кузнец
+# собирает любую вещь уникального сета этого класса без осколков — нужны только лом и ядра (craft_uniq с bp).
+# Падают только в Мире, с монстров спотов, у каждого спота свои (WORLD_BP, roll_world). Учитываются штуками
+# и продаются на маркете за GRAM: поднять чертёж может робот любого класса. Порядок — как у CLASS_SHARDS
+BLUEPRINTS = ("bp_guard", "bp_reaper", "bp_sniper", "bp_techno", "bp_ghost", "bp_glyph", "bp_medic")
 # самоцветы (как в game.html → GEMS, «Кодекс самоцветов» LIBERTY): четыре вида, падают с врагов в Нижних и Глубинных
 # цехах, Фарм-зоне, Сезонной зоне и в Мире по решению сервера (roll_gems) — только в живой игре. Учитываются штуками,
 # продаются на маркете за GRAM (не дешевле GEM_MIN_PRICE за штуку — webserver.api_market). В Кодексе их сдают
 # до GEM_MAX штук каждого вида (op "gem"): сданные списываются с учёта игрока навсегда, а счётчик сданных лежит
 # в той же таблице балансов под «cx:<id>» (влезает в 12 символов столбца) — его не нарисовать на телефоне.
-GEMS = ("gm_emer", "gm_ruby", "gm_abys", "gm_jade")
+# Пятая — Монета удачи (LUCK, патч LIBERTY 17 октября «Мир»): сдаётся в тот же Кодекс рядом с камнями, но падает только
+# в Мире — с любого монстра с шансом LUCK_PCT (с босса трона чаще: ×BOSS_LOOT, как весь ценный дроп главаря), — и
+# принимается до LUCK_MAX штук (gem_cap); свои пороги — GEM_STEPS["l"]
+GEMS = ("gm_emer", "gm_ruby", "gm_abys", "gm_jade", "gm_luck")
 GEMS_COMMON = ("gm_emer", "gm_ruby")            # шанс как у медной сферы (обычная заточка)
 GEMS_RARE = ("gm_abys", "gm_jade")              # шанс как у титановой сферы (безопасная заточка)
+LUCK, LUCK_MAX, LUCK_PCT = "gm_luck", 200, 0.003
 GEM_LOCS = ("sector1", "sector2", "farm1", "season1", "world")
 GEM_MAX = 500
 GEM_MIN_PRICE = 0.4                             # GRAM за штуку на маркете (как GEM_MIN_PRICE в игре)
 GEM_CX = "cx:"
-# пороги Кодекса: (сколько сдать, бонус) — зеркало game.html → GEM_STEPS (сверяет test_gems.py). «c» — частые, «r» — редкие
+# пороги Кодекса: (сколько сдать, бонус) — зеркало game.html → GEM_STEPS (сверяет test_gems.py). «c» — частые, «r» — редкие,
+# «l» — Монета удачи: 30 → +40 атаки, 80 → ещё +70, 200 → ещё +110 (всего +220)
 GEM_STEPS = {
     "c": [(1, {"atk": 5}), (10, {"atk": 5, "def": 5}), (20, {"atk": 5, "def": 5}), (50, {"atk": 10}), (100, {"atk": 10, "def": 10}),
           (300, {"atk": 30, "def": 30, "hp": 3000}), (500, {"atk": 50, "def": 50, "rate": 0.2})],
     "r": [(1, {"atk": 10}), (10, {"atk": 10, "def": 10}), (30, {"atk": 20}), (60, {"atk": 20, "def": 20}), (100, {"atk": 30}),
           (150, {"atk": 30, "def": 30}), (300, {"atk": 50, "def": 50, "hp": 5000}), (500, {"atk": 100, "def": 100, "rate": 0.2})],
+    "l": [(30, {"atk": 40}), (80, {"atk": 70}), (200, {"atk": 110})],
 }
 _gem_cx = {}                                    # uid -> {самоцвет: сдано} игроков в сети (заполняют op "state" и "gem")
-REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS + SHARDS + GEMS      # всё, что учитывается штуками (без номера)
+REG_IDS = SPHERES + RUNES + DRONES + ARTIFACTS + WINGS + CLOAKS + SHARDS + GEMS + BLUEPRINTS      # всё, что учитывается штуками (без номера)
 SOCKET_PREFIX = "s:"            # учёт рун, вставленных в вещи (строка «s:r_fortune» влезает в 12 символов столбца)
+
+
+def gem_kind(gid):
+    """Чьи пороги у этого вида: «c» — частый камень, «r» — редкий, «l» — Монета удачи."""
+    return "l" if gid == LUCK else "c" if gid in GEMS_COMMON else "r"
+
+
+def gem_cap(gid):
+    """Сколько штук этого вида принимает Кодекс: камней — GEM_MAX, Монет удачи — LUCK_MAX."""
+    return LUCK_MAX if gid == LUCK else GEM_MAX
 
 
 def gem_bonus(cx):
@@ -157,7 +178,7 @@ def gem_bonus(cx):
     out = {"atk": 0, "def": 0, "hp": 0, "rate": 0.0}
     for gid in GEMS:
         n = (cx or {}).get(gid, 0) or 0
-        for need, bon in GEM_STEPS["c" if gid in GEMS_COMMON else "r"]:
+        for need, bon in GEM_STEPS[gem_kind(gid)]:
             if n >= need:
                 for k, v in bon.items():
                     out[k] += v
@@ -188,7 +209,7 @@ async def load_gem_cx(s, uid):
     for item, n in rows:
         g = str(item)[len(GEM_CX):]
         got[g] = got.get(g, 0) + (n or 0)                 # дубли строк (старая гонка) складываются, как в sph_row
-    cx = {g: min(GEM_MAX, got.get(g, 0)) for g in GEMS}
+    cx = {g: min(gem_cap(g), got.get(g, 0)) for g in GEMS}
     remember_gems(uid, cx)
     return cx
 
@@ -322,12 +343,21 @@ def _take_any(S, item_id, n):
                 store.pop(i)
 
 
-def uniq_check(S, item_id, level):
+def uniq_need(item_id, bp=False):
+    """Что берёт Кузнец за уникальную вещь: лом, ядра и по n каждого из трёх осколков класса — или, по чертежу (bp),
+    те же лом и ядра и один чертёж этого класса вместо осколков (как BP_NEED в игре)."""
+    need = UNIQ[item_id][1]
+    if not bp:
+        return need
+    return {"scrap": need["scrap"], "cores": need["cores"], "bp_" + item_id.split("_")[1]: 1}
+
+
+def uniq_check(S, item_id, level, bp=False):
     """Можно ли собрать уникальную вещь по данным сохранения. Текст ошибки или None (S не меняется)."""
-    lvl, need = UNIQ[item_id]
+    lvl = UNIQ[item_id][0]
     if level < lvl:
         return f"Нужен {lvl} уровень"
-    for k, n in need.items():
+    for k, n in uniq_need(item_id, bp).items():
         have = S.get(k, 0) if k in ("scrap", "cores") else _have_any(S, k)
         if not isinstance(have, (int, float)) or have < n:
             return "Сервер не видит нужных ресурсов. Подожди пару секунд и попробуй ещё раз"
@@ -336,9 +366,9 @@ def uniq_check(S, item_id, level):
     return None
 
 
-def uniq_spend(S, item_id):
-    """Списать в сохранении лом, ядра и осколки за уникальную вещь (после uniq_check)."""
-    for k, n in UNIQ[item_id][1].items():
+def uniq_spend(S, item_id, bp=False):
+    """Списать в сохранении лом, ядра и осколки (или чертёж) за уникальную вещь (после uniq_check)."""
+    for k, n in uniq_need(item_id, bp).items():
         if k in ("scrap", "cores"):
             S[k] = S.get(k, 0) - n
         else:
@@ -351,6 +381,16 @@ SEASON_DROP = {"season1": 1.5}                  # сезонная зона: +50
 # Снаряжение с монстров выше 50 ур. — как с 50-го (gearLv в игре): старшее поколение вещей — 45 ур., и без этого
 # с топ-спотов (53–59) вещи не падали бы вовсе
 WORLD_XP, WORLD_GEAR_LV = 3, 50
+# босс трона «Железный Наместник» (worldthrone.py): добыча — как с главаря (шансы ×BOSS_LOOT), и каждому, кто её получил,
+# ещё камни заточки: 4–6 медных сфер и с шансом 35% титановая. Долю опыта союзникам по пати босс не даёт —
+# свою добычу и опыт получает каждый, кто снёс хотя бы 1% его прочности
+THRONE_GIFT = (("sph_cu", 4, 6, 1.0), ("sph_ti", 1, 1, 0.35))
+# чертежи классов на спотах Мира (как свитки классов в LIBERTY): у каждого спота свои — зеркало W_SPOTS → bp в игре.
+# Шанс каждого чертежа — BP_PCT за монстра (с теми же множителями, что у сфер: VIP, билет, усталость лута)
+WORLD_BP = {"tract": ("guard",), "glade": ("reaper",), "mill": ("sniper",), "ravine": ("techno",), "grove": ("medic",),
+            "crypts": ("glyph",), "circle": ("ghost",), "eye": ("guard", "reaper", "sniper"), "cliff": ("techno", "medic"),
+            "gate": ("glyph", "ghost")}
+BP_PCT = 0.003
 ENCH_CHANCE = [100, 100, 100, 75, 65, 55, 45, 38, 32, 26, 20, 15, 10, 7, 5]   # как в игре
 P = lambda pct: pct / 100.0
 
@@ -396,24 +436,56 @@ def roll(lv, mult=1, shard_mult=None, gear_lv=None):
     return out
 
 
+def roll_throne():
+    """Камни заточки с босса трона — сверх обычного броска."""
+    return [{"kind": "sph", "id": sid, "n": random.randint(lo, hi)} for sid, lo, hi, ch in THRONE_GIFT if random.random() < ch]
+
+
 def roll_gems(lv, mult=1):
-    """Самоцветы за одного убитого моба (вызывается только в GEM_LOCS). Каждый вид бросается отдельно:
-    частые — с шансом медной сферы, редкие — титановой; mult — те же множители, что у сфер (главарь, VIP, билет)."""
+    """Самоцветы за одного убитого моба (вызывается только в GEM_LOCS). Каждый камень бросается отдельно:
+    частые — с шансом медной сферы, редкие — титановой; mult — те же множители, что у сфер (главарь, VIP, билет).
+    Монета удачи — не здесь: она падает только в Мире (roll_world)."""
     s, out = lv - 1, []
     chance = {"c": P(0.0033 + 0.000036 * s), "r": P(0.00033 + 0.0000036 * s)}
-    for gid in GEMS:
+    for gid in GEMS_COMMON + GEMS_RARE:
         if random.random() < min(0.9, chance["c" if gid in GEMS_COMMON else "r"] * mult):
             out.append({"kind": "sph", "id": gid, "n": 1})
     return out
 
 
-def gem_give_amount(want, given, bal):
-    """Сколько самоцветов принять в Кодекс: просили want, уже сдано given, учтено у игрока bal."""
+def world_spot(idx):
+    """Спот Мира, на котором стоит общий моб номер idx: (id, ур. от, ур. до). None — не монстр спота (босс трона)."""
+    n0 = 0
+    for sid, n, lo, hi in mobguard.WORLD_SPOTS:
+        if n0 <= idx < n0 + n:
+            return sid, lo, hi
+        n0 += n
+    return None
+
+
+def roll_world(idx, lv, mult=1):
+    """Добыча Мира сверх обычной за монстра номер idx (номер — из боя, засчитанного сервером: mobguard.fight_idx).
+    Чертежи классов его спота — каждый со своим шансом BP_PCT, и Монета удачи — LUCK_PCT с любого монстра Мира.
+    mult — те же множители, что у сфер: у босса трона — ×BOSS_LOOT, поэтому монета с него падает чаще.
+    Уровень монстра должен подходить споту: тип моба присылает телефон, и под номером топ-спота «слабый» моб
+    чертёж не даст."""
+    out, spot = [], world_spot(idx)
+    if spot and spot[1] <= lv <= spot[2]:
+        for cls in WORLD_BP[spot[0]]:
+            if random.random() < min(0.9, P(BP_PCT) * mult):
+                out.append({"kind": "sph", "id": "bp_" + cls, "n": 1})
+    if random.random() < min(0.9, P(LUCK_PCT) * mult):
+        out.append({"kind": "sph", "id": LUCK, "n": 1})
+    return out
+
+
+def gem_give_amount(want, given, bal, cap=GEM_MAX):
+    """Сколько самоцветов принять в Кодекс: просили want, уже сдано given, учтено у игрока bal, предел вида cap."""
     try:
         want = int(want)
     except (TypeError, ValueError, OverflowError):
         want = 1
-    return max(0, min(max(1, want), GEM_MAX - max(0, int(given or 0)), max(0, int(bal or 0))))
+    return max(0, min(max(1, want), cap - max(0, int(given or 0)), max(0, int(bal or 0))))
 
 
 def new_uid():
@@ -546,32 +618,35 @@ async def api_items(request):
         if op == "state":
             items = (await s.execute(select(ItemInst).where(ItemInst.owner == uid, ItemInst.status == "inv"))).scalars().all()
             sph = {r.item: r.n for r in (await s.execute(select(SphereBal).where(SphereBal.owner == uid))).scalars().all()}
-            gemcx = {k: min(GEM_MAX, sph.get(GEM_CX + k, 0) or 0) for k in GEMS}
+            gemcx = {k: min(gem_cap(k), sph.get(GEM_CX + k, 0) or 0) for k in GEMS}
             remember_gems(uid, gemcx)
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
                                       "sph": {k: sph.get(k, 0) for k in REG_IDS}, "gemcx": gemcx})
 
         if op == "gem":
-            # Кодекс → «Самоцветы»: сданные камни списываются с учёта игрока и навсегда прибавляются к счётчику (до GEM_MAX).
-            # Принимаются только учтённые сервером (выпавшие с врагов или купленные на маркете), как и на маркете.
+            # Кодекс → «Самоцветы»: сданные камни списываются с учёта игрока и навсегда прибавляются к счётчику
+            # (до GEM_MAX, Монеты удачи — до LUCK_MAX). Принимаются только учтённые сервером (выпавшие с врагов
+            # или купленные на маркете), как и на маркете.
             gid = str(body.get("id", ""))
             if gid not in GEMS:
                 return web.json_response({"ok": False, "error": "Это не самоцвет"})
+            cap = gem_cap(gid)
             cx = await sph_row(s, uid, GEM_CX + gid)
             bal = await sph_row(s, uid, gid)
-            k = gem_give_amount(body.get("n", 1), cx.n, bal.n)
+            k = gem_give_amount(body.get("n", 1), cx.n, bal.n, cap)
             if k <= 0:
-                given, have = min(GEM_MAX, cx.n or 0), bal.n or 0          # прочитать до отката: он сбрасывает объекты сессии
+                given, have = min(cap, cx.n or 0), bal.n or 0          # прочитать до отката: он сбрасывает объекты сессии
                 await s.rollback()
                 return web.json_response({"ok": False, "cx": given, "sph": have,
-                                          "error": f"Собрано максимум: {GEM_MAX}" if given >= GEM_MAX else
+                                          "error": f"Собрано максимум: {cap}" if given >= cap else
+                                          "Нет учтённых монет: сдать можно только выпавшие в Мире или купленные на маркете" if gid == LUCK else
                                           "Нет учтённых самоцветов: сдать можно только выпавшие с врагов или купленные на маркете"})
             ok, bal = await take_spheres(s, uid, gid, k)
             if not ok:
                 await s.rollback()
                 return web.json_response({"ok": False, "error": "Самоцветы как раз изменились, попробуй ещё раз"})
-            # счётчик растёт, только если не перевалит за GEM_MAX: два одновременных запроса не сдадут лишнего
-            res = await s.execute(update(SphereBal).where(SphereBal.id == cx.id, SphereBal.n + k <= GEM_MAX).values(n=SphereBal.n + k)
+            # счётчик растёт, только если не перевалит за предел: два одновременных запроса не сдадут лишнего
+            res = await s.execute(update(SphereBal).where(SphereBal.id == cx.id, SphereBal.n + k <= cap).values(n=SphereBal.n + k)
                                   .returning(SphereBal.n).execution_options(synchronize_session=False))
             got = res.first()
             if got is None:
@@ -586,7 +661,7 @@ async def api_items(request):
             # руна или дрон собираются по последнему сохранению: ресурсы списываются там, вещь учитывается
             item_id = str(body.get("id", ""))
             if item_id in UNIQ:
-                return await craft_uniq(s, uid, user, item_id)
+                return await craft_uniq(s, uid, user, item_id, bool(body.get("bp")))
             if item_id not in CRAFT:
                 return web.json_response({"ok": False, "error": "Такое нельзя собрать"})
             import progress
@@ -707,9 +782,10 @@ async def api_items(request):
     raise web.HTTPBadRequest(text="bad op")
 
 
-async def craft_uniq(s, uid, user, item_id):
-    """Кузнец: уникальная вещь класса из осколков. Осколки списываются с серверного учёта (их нельзя нарисовать
-    на телефоне), лом и ядра — из последнего сохранения; вещь получает номер и пишется в сохранение."""
+async def craft_uniq(s, uid, user, item_id, bp=False):
+    """Кузнец: уникальная вещь класса из осколков — или по чертежу класса (bp). Осколки и чертёж списываются
+    с серверного учёта (их нельзя нарисовать на телефоне), лом и ядра — из последнего сохранения; вещь получает
+    номер и пишется в сохранение."""
     import progress
     import saveguard
     async with saveguard.player_lock(uid):
@@ -727,20 +803,22 @@ async def craft_uniq(s, uid, user, item_id):
             level = 1
         if not user.get("admin"):
             level = min(level, await progress.cap_of(s, uid))
-        err = uniq_check(S, item_id, level)
+        err = uniq_check(S, item_id, level, bp)
         if err:
             return web.json_response({"ok": False, "error": err})
-        for sh, n in UNIQ[item_id][1].items():
-            if sh in SHARDS:
+        for sh, n in uniq_need(item_id, bp).items():
+            if sh in SHARDS or sh in BLUEPRINTS:
                 ok, bal = await take_spheres(s, uid, sh, n)
                 if not ok:
                     await s.rollback()
+                    if sh in BLUEPRINTS:
+                        return web.json_response({"ok": False, "error": "Нет учтённого чертежа: он должен выпасть в Мире или быть куплен на маркете"})
                     return web.json_response({"ok": False, "error": f"Учтённых осколков ({sh}) только {bal.n or 0} из {n}. "
                                                                     "Осколки должны выпасть с мобов или быть куплены на маркете"})
         if not user.get("admin") and not await take_craft_slot(s, uid):
             await s.rollback()
             return web.json_response({"ok": False, "error": f"На сегодня собрано максимум ({CRAFT_DAILY_MAX}). Завтра можно снова"})
-        uniq_spend(S, item_id)
+        uniq_spend(S, item_id, bp)
         item = await mint_gear(s, uid, item_id, UNIQ_GRADE, 0, source="craft")
         S.setdefault("inv", []).append({"id": item_id, "n": 1, "g": UNIQ_GRADE, "e": 0, "uid": item["uid"]})
         try:
@@ -755,8 +833,8 @@ async def craft_uniq(s, uid, user, item_id):
             await s.rollback()
             return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
         await s.commit()
-    metrics.inc("craft.uniq")
-    log.info("Кузнец: игрок %s собрал %s (%s)", uid, item_id, item["uid"])
+    metrics.inc("craft.uniq_bp" if bp else "craft.uniq")
+    log.info("Кузнец: игрок %s собрал %s (%s)%s", uid, item_id, item["uid"], " по чертежу" if bp else "")
     return web.json_response({"ok": True, "id": item_id, "item": item, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0), "craftN": craft_n})
 
 
@@ -773,10 +851,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "самоцветов" if item["id"] in GEMS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
+            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "монет удачи" if item["id"] == LUCK else "самоцветов" if item["id"] in GEMS else "чертежей" if item["id"] in BLUEPRINTS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы, осколки и самоцветы с мобов, руны, дронов, артефакты, крылья и плащи"
+    return None, "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы и чертежи с мобов, руны, дронов, артефакты, крылья и плащи"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -810,9 +888,12 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         if not me or me.get("loc") != loc or lv is None or lv > (cap or 1) + 12 or not allow_kill(uid):
             metrics.inc("kill.rejected_basic")
             continue                                   # не в этой локации, слишком сильный моб или слишком часто
+        # Мир: номер монстра из боя, который засчитал сервер, — по нему спот и его чертежи (проверка ниже бой забудет).
+        # Без такого боя (повтор заявки, убийство «своими силами», когда сервер молчал) чертежей и монеты нет
+        widx = mobguard.fight_idx(uid, k.get("iid"), mob) if loc == WORLD_LOC else None
         if not mobguard.allow_kill(uid, k.get("iid"), mob):
             continue                                   # сервер не видел боя с этим мобом (режим MOB_GUARD=on)
-        boss = mob.startswith("db")
+        boss = mobguard.is_boss(mob)                  # главарь подземелья или босс трона в Мире
         mult = 1
         if boss:
             if time.time() - _boss_t.get(uid, 0) < BOSS_GAP:
@@ -821,7 +902,7 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         await pvp.mob_killed(uid, me)
         xm = WORLD_XP if loc == WORLD_LOC else 1
         cap = await progress.add_kill(s, uid, lv, boss, mult=xm)
-        if exp_out is not None:
+        if exp_out is not None and mob != mobguard.THRONE_BOSS:
             exp_out.append(progress.mob_exp(lv, boss) * xm)
         import seasonpts
         ctr = seasonpts.kill_counter(loc)
@@ -846,11 +927,22 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)
+        if mob == mobguard.THRONE_BOSS:                                 # босс трона: ещё и камни заточки
+            for d in roll_throne():
+                item = await add_spheres(s, uid, d["id"], d["n"])
+                item["i"] = i
+                drops.append(item)
         if loc in GEM_LOCS:                                             # самоцветы: цеха, Фарм-зона, Сезонная зона и Мир
             for d in roll_gems(lv, base_mult):
                 item = await add_spheres(s, uid, d["id"], d["n"])
                 item["i"] = i
                 drops.append(item)
+        if widx is not None:                                            # Мир: чертежи классов спота и Монета удачи
+            for d in roll_world(widx, lv, base_mult):
+                item = await add_spheres(s, uid, d["id"], d["n"])
+                item["i"] = i
+                drops.append(item)
+                metrics.inc("world.luck" if d["id"] == LUCK else "world.blueprint")
         metrics.inc("kill.ok")
         funnel.mark(uid, "kill1")
         if boss:

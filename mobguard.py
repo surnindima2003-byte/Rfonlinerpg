@@ -49,6 +49,14 @@ COOP_BOSS_HP = 40
 # «Мир» (открытый мир, 10 спотов): монстры wm40…wm59 водятся только в локации world. Прочность — по формуле моба
 # подземелья того же уровня (Шагоход ×1,25), как NPCS["wm…"] в игре; уровень — число в имени
 WORLD_LOC, WORLD_RANGE = "world", (40, 59)
+# раскладка Мира (wPacks в игре): споты по порядку и у каждого — сколько на нём монстров и каких уровней. Номер общего
+# моба в Мире — его место в раскладке: монстры идут спот за спотом (лоу — 5 пачек по 3, мид — 4 по 4, топ — 4 по 5),
+# так что по номеру видно, на каком споте он стоит (items.roll_world: у каждого спота свои чертежи классов)
+WORLD_SPOTS = (("tract", 15, 40, 42), ("glade", 15, 40, 42), ("mill", 15, 43, 45), ("ravine", 15, 43, 45),
+               ("grove", 16, 46, 49), ("crypts", 16, 49, 52), ("circle", 16, 49, 52),
+               ("eye", 20, 53, 56), ("cliff", 20, 53, 56), ("gate", 20, 57, 59))
+# босс трона в Мире «Железный Наместник» (worldthrone.py): один, 60 уровня, своя прочность (как NPCS.wt60 в игре)
+THRONE_BOSS, THRONE_LVL, THRONE_HP = "wt60", 60, 500_000
 
 
 def mob_level(mob, loc):
@@ -63,6 +71,8 @@ def mob_level(mob, loc):
     if m:
         lv = int(m.group(1))
         return lv if loc in ELITE_LOCS and ELITE_RANGE[0] <= lv <= ELITE_RANGE[1] else None
+    if mob == THRONE_BOSS:
+        return THRONE_LVL if loc == WORLD_LOC else None
     m = re.fullmatch(r"wm(\d{2})", mob or "")
     if m:
         lv = int(m.group(1))
@@ -81,7 +91,7 @@ def mob_level(mob, loc):
     return None
 DG_BASE = ("scrap_crawler", "rogue_drone", "sentry_bot", "war_walker")
 
-_fights = {}         # uid -> {iid: [mob, урон, первый удар, последний удар]}
+_fights = {}         # uid -> {iid: [mob, урон, первый удар, последний удар]} (+ номер моба — бой засчитал mobworld)
 _budget = {}         # uid -> [запас урона, время]
 _boss_last = {}      # (uid, mob) -> время засчитанного убийства главаря
 _rejects = {}        # uid -> число отказов за текущие сутки (для админа)
@@ -101,6 +111,8 @@ def mob_hp(mob):
     """Прочность моба — зеркало NPCS из игры. None — такого моба нет."""
     if mob in BASE_HP:
         return BASE_HP[mob]
+    if mob == THRONE_BOSS:
+        return THRONE_HP
     if len(mob) == 4 and mob[:2] == "wm" and mob[2:].isdigit():
         lv = int(mob[2:])
         return _dg_hp(lv) if WORLD_RANGE[0] <= lv <= WORLD_RANGE[1] else None
@@ -125,7 +137,7 @@ def mob_hp(mob):
 
 
 def is_boss(mob):
-    return mob.startswith("db")
+    return mob.startswith("db") or mob == THRONE_BOSS
 
 
 def dps_cap(lvl):
@@ -190,6 +202,20 @@ def check_kill(uid, iid, mob, now=None):
         if now - last < BOSS_RESPAWN:
             return "boss_respawn"
     return None
+
+
+def fight_idx(uid, iid, mob):
+    """Номер общего моба, бой с которым засчитал сам сервер (mobworld._kill), или None. Брать до allow_kill:
+    проверка убийства бой забывает. Номер выдаётся один раз — повтор той же заявки его уже не получит, даже
+    в режиме MOB_GUARD=off, где бой не забывается. Бой из ударов телефона (on_hits) номера не знает — по нему None."""
+    try:
+        f = _fights.get(uid, {}).get(int(iid))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not f or len(f) < 5 or f[0] != mob or f[4] is None:
+        return None
+    i, f[4] = f[4], None
+    return i
 
 
 def allow_kill(uid, iid, mob, now=None):

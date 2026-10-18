@@ -709,6 +709,12 @@ button.li{width:100%;font:inherit;color:inherit}
 .wspot{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c);border-radius:12px;padding:8px 12px}
 .wspot b{display:block;color:var(--c);font-weight:700}
 .wspot small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.wspot .wsp-bp{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:6px}
+.wsp-bp i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:#8FC8FF;font-size:12px}
+.wsp-bp i.me{color:#F2C14B;font-weight:600}
+.wsp-bp svg{width:18px;height:18px;flex:none}
+:root[data-theme="light"] .wsp-bp i{color:#1F5BB8}:root[data-theme="light"] .wsp-bp i.me{color:#9A6A08}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .wsp-bp i{color:#1F5BB8}:root:not([data-theme="dark"]) .wsp-bp i.me{color:#9A6A08}}
 .moblist{display:grid;gap:8px}
 .mobcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .mobcard.open{border-color:var(--faction)}
@@ -1013,6 +1019,12 @@ button.li{width:100%;font:inherit;color:inherit}
 .sm-craft{width:100%;border:0;border-radius:12px;padding:13px;font:15px 'Russo One',sans-serif;color:#fff;background:linear-gradient(180deg,#3A8FD0,#23679E);box-shadow:0 4px 0 #17476E}
 .sm-craft:active{transform:translateY(2px);box-shadow:0 2px 0 #17476E}
 .sm-craft:disabled{background:#1A2532;color:#5B6B7C;box-shadow:none}
+/* по чертежу: кнопка — «синька» в клетку, как сам чертёж */
+.sm-h.bp{color:#8FC8FF}
+.sm-craft.bp{border:1px solid #5E9FEA;background:repeating-linear-gradient(0deg,rgba(207,230,255,.08) 0 1px,transparent 1px 10px),repeating-linear-gradient(90deg,rgba(207,230,255,.08) 0 1px,transparent 1px 10px),linear-gradient(180deg,#2C64B8,#1A438A);box-shadow:0 4px 0 #0F2C5E}
+.sm-craft.bp:active{box-shadow:0 2px 0 #0F2C5E}
+.sm-craft.bp:disabled{border-color:#24364A;background:#1A2532;box-shadow:none}
+.sm-res .bp b{color:#8FC8FF}
 .sh-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .sh-card{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px;padding:12px 8px 10px;border-radius:14px;background:radial-gradient(circle at 50% 22%,color-mix(in srgb,var(--sc) 22%,#121A23),#0E141B 70%);border:1px solid color-mix(in srgb,var(--sc) 45%,#223041);overflow:hidden}
 .sh-ic{width:58px;height:58px;margin-bottom:4px}.sh-ic svg{width:100%;height:100%}
@@ -1345,6 +1357,8 @@ body.fear-run .tframe{top:calc(var(--hb, 120px) + 24px)}
 .cp-wait small{display:block;margin-top:4px;font-size:13px;color:#C9D1D8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @keyframes cpw{50%{opacity:.55}}
 .wb-bar.cp-bar{top:calc(var(--hb, 120px) + 58px)}.wb-bar.cp-bar b{color:#FFB09A}
+.wb-bar.wt-bar b{color:#F2C14B}.wt-bar .wb-hp{border-color:#7A5A22;background:rgba(40,28,10,.85)}.wt-bar .wb-hp i{background:linear-gradient(90deg,#A06A1C,#F2C14B)}
+.wt-pt{display:block;color:#F2C14B}.wt-card .wt-left{color:var(--text);font-weight:600}.wt-card .wt-res{margin-top:8px;min-height:34px;padding:6px 12px}
 body.cp-run.cp-boss .tframe{top:calc(var(--hb, 120px) + 104px)}
 body.cp-run .tframe{top:calc(var(--hb, 120px) + 40px)}
 .cp-res .cp-res-st{color:#C9D1D8;font-size:14px}.cp-res .cp-res-st b{font:inherit;font-weight:700;color:var(--text)}
@@ -1387,6 +1401,8 @@ body.cp-run .tframe{top:calc(var(--hb, 120px) + 40px)}
 .gm-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
 .gm-foot small{font-size:11.5px;color:var(--muted)}
 .gm-btns{display:flex;gap:6px;margin-left:auto}
+.gm-luck-h{margin:16px 0 8px}
+.gmcard.luck .gm-ic{border-radius:50%}
 :root[data-theme="light"] .gm-tx b{color:color-mix(in srgb,var(--gc) 62%,#14191F)}
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .gm-tx b{color:color-mix(in srgb,var(--gc) 62%,#14191F)}}
 .mklist{display:grid;gap:6px;margin-top:8px}
@@ -1894,22 +1910,29 @@ for(const id of SHARD_IDS) ITEMS[id] = {name:SHARD[id].name, type:"shard", sell:
 // бонусы порогов складываются (на 20 сданных действуют пороги 1, 10 и 20) и остаются навсегда, сданные камни исчезают.
 // Сколько сдано, хранит сервер (items.py → GEM_CX): телефон берёт счётчики при входе (regSync).
 // kind: "c" — частый (шанс как у медной сферы), "r" — редкий (как у титановой). shape — огранка на иконке.
+// Пятая в Кодексе — Монета удачи (kind "l", патч LIBERTY 17 октября «Мир»): падает только в Мире, с любого монстра
+// с шансом LUCK_PCT (с Железного Наместника — ×150, как весь ценный дроп главаря), сдаётся до LUCK_MAX, свои пороги.
 const GEM_MAX = 500, GEM_MIN_PRICE = 0.4;
+const LUCK = "gm_luck", LUCK_MAX = 200, LUCK_PCT = 0.003;
 const GEM_LOCS = ["sector1", "sector2", "farm1", "season1", "world"];
 const GEM_STEPS = {
   c:[[1, {atk:5}], [10, {atk:5, def:5}], [20, {atk:5, def:5}], [50, {atk:10}], [100, {atk:10, def:10}], [300, {atk:30, def:30, hp:3000}], [500, {atk:50, def:50, rate:0.2}]],
-  r:[[1, {atk:10}], [10, {atk:10, def:10}], [30, {atk:20}], [60, {atk:20, def:20}], [100, {atk:30}], [150, {atk:30, def:30}], [300, {atk:50, def:50, hp:5000}], [500, {atk:100, def:100, rate:0.2}]]
+  r:[[1, {atk:10}], [10, {atk:10, def:10}], [30, {atk:20}], [60, {atk:20, def:20}], [100, {atk:30}], [150, {atk:30, def:30}], [300, {atk:50, def:50, hp:5000}], [500, {atk:100, def:100, rate:0.2}]],
+  l:[[30, {atk:40}], [80, {atk:70}], [200, {atk:110}]]
 };
 const GEMS = {
   gm_emer:{name:"Изумрудная линза", kind:"c", col:"#3FE08A", lt:"#DAFFE8", dk:"#0E6A3A", shape:0, lore:"Линза из прицела древнего разведчика: сквозь неё видны слабые узлы брони"},
   gm_ruby:{name:"Рубиновый конденсатор", kind:"c", col:"#FF4D5E", lt:"#FFD9DE", dk:"#7A0E1E", shape:1, lore:"Кристалл держит заряд дольше любой батареи и отдаёт его одним ударом"},
   gm_abys:{name:"Кристалл бездны", kind:"r", col:"#A66BFF", lt:"#EEE2FF", dk:"#35137A", shape:2, lore:"Поднят из самых глубоких цехов, внутри гудит чужая энергия"},
-  gm_jade:{name:"Нефритовый резонатор", kind:"r", col:"#2FD6B5", lt:"#D6FFF5", dk:"#0A5C4F", shape:3, lore:"Гасит вибрацию брони и разгоняет приводы до предела"}
+  gm_jade:{name:"Нефритовый резонатор", kind:"r", col:"#2FD6B5", lt:"#D6FFF5", dk:"#0A5C4F", shape:3, lore:"Гасит вибрацию брони и разгоняет приводы до предела"},
+  gm_luck:{name:"Монета удачи", kind:"l", col:"#F2C14B", lt:"#FFF3C6", dk:"#7A5410", shape:4, lore:"Монета с зубчатым краем из казны Владыки: кто носит её в корпусе, бьёт вернее"}
 };
-const GEM_IDS = Object.keys(GEMS);
+const GEM_IDS = Object.keys(GEMS), GEM_STONES = GEM_IDS.filter(id => GEMS[id].kind !== "l");
 for(const id of GEM_IDS) ITEMS[id] = {name:GEMS[id].name, type:"gem", sell:0, nosell:true, desc:GEMS[id].lore + " · Сдаётся в Кодекс → «Самоцветы» за вечный бонус · продаётся на маркете за GRAM"};
+// сколько штук вида принимает Кодекс (камней — GEM_MAX, Монет удачи — LUCK_MAX; items.gem_cap на сервере)
+const gemCap = id => GEMS[id] && GEMS[id].kind === "l" ? LUCK_MAX : GEM_MAX;
 // сколько этого самоцвета сдано в Кодекс (S.gemCx; в живой игре счётчики присылает сервер)
-const gemCx = id => Math.max(0, Math.min(GEM_MAX, Math.floor(+(S.gemCx || {})[id] || 0)));
+const gemCx = id => Math.max(0, Math.min(gemCap(id), Math.floor(+(S.gemCx || {})[id] || 0)));
 // бонус одного вида: действуют все пороги до n включительно
 function gemStepBonus(kind, n){
   const b = {atk:0, def:0, hp:0, rate:0};
@@ -2132,6 +2155,18 @@ for(const [cls, U] of Object.entries(UNIQ_SETS)) for(const slot of UNIQ_SLOTS){
     need:{scrap, cores, ...Object.fromEntries(CLASS_SHARDS[cls].map(sh => [sh, n]))}};
   UNIQ_IDS.push(id);
 }
+// ===================== ЧЕРТЕЖИ КЛАССОВ (Мир, как «свитки классов» в LIBERTY, патч 17 октября) =====================
+// По чертежу Кузнец собирает любую вещь уникального сета этого класса без осколков: нужны только лом и ядра (BP_NEED).
+// Падают только в Мире, с монстров спотов, у каждого спота свои (W_SPOTS → bp): шанс каждого — BP_PCT за монстра.
+// Бросает их сервер (items.roll_world), учитывает штуками и даёт продать на маркете за GRAM — поднять чертёж может
+// робот любого класса. Порядок — как items.BLUEPRINTS.
+const BP_PCT = 0.003;
+const BP_OF = {guard:"Стража", reaper:"Жнеца", sniper:"Снайпера", techno:"Техноманта", ghost:"Призрака", glyph:"Глифоносца", medic:"Ремонтника"};
+const BP_IDS = Object.keys(UNIQ_SETS).map(c => "bp_" + c);
+for(const c of Object.keys(UNIQ_SETS)) ITEMS["bp_" + c] = {name:"Чертёж " + BP_OF[c], type:"bp", bp:c, sell:0, nosell:true,
+  desc:"Кузнец соберёт по нему любую вещь сета «" + UNIQ_SETS[c].set + "» без осколков · падает в Мире · продаётся на маркете за GRAM"};
+// что берёт Кузнец за вещь по чертежу: лом и ядра — как обычно, и один чертёж её класса вместо осколков (items.uniq_need)
+const BP_NEED = id => { const it = ITEMS[id]; return {scrap:it.need.scrap, cores:it.need.cores, ["bp_" + it.set]:1}; };
 
 // характеристики предмета с учётом грейда
 const ENCH_MAX = 15;
@@ -3120,12 +3155,25 @@ function update(dt){
     if(dist < 24 && !d.stuck){
       if(d.kind === "cores" && typeof ticketActive === "function" && ticketActive() && !d.x2){ d.amt *= 2; d.x2 = true; }   // билет сезона: ×2 ядер
       if(d.kind === "scrap" || d.kind === "cores"){ Sfx.play("pick"); S[d.kind] += d.amt; addText(p.x, p.y-40, "+" + d.amt + (d.kind === "scrap" ? " лома" : " ядро"), d.kind === "scrap" ? "#C9D1D8" : "#2FE0D0"); d.got = true; }
-      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); addText(p.x, p.y-40, ITEMS[d.kind].name + (SHARD[d.kind] && d.amt > 1 ? " ×" + d.amt : ""), d.g !== undefined ? gradeColor(d.g) : SHARD[d.kind] ? SHARD[d.kind].col : GEMS[d.kind] ? GEMS[d.kind].col : "#F2A93B"); if(d.g >= 2) toast("Найдено: " + ITEMS[d.kind].name + " (" + GRADES[d.g].name.toLowerCase() + ")"); if(GEMS[d.kind]){ toast("💎 Самоцвет: " + ITEMS[d.kind].name + " — сдай его в Кодекс"); Sfx.play("level"); } if(d.g === 3 && typeof chatAnnounce === "function") chatAnnounce(S.name + " нашёл легендарную вещь: " + ITEMS[d.kind].name); d.got = true; }
+      else if(addItem(S.inv, d.kind, d.amt, INV_MAX, d.g, d.e, d.uid)){ if(d.reg && typeof regAddSph === "function") regAddSph(d.kind, d.amt); pickNote(d); d.got = true; }
       else { d.stuck = true; d.mag = false; d.stuckT = now + 6; if(fullWarnT <= 0){ toast("Сумка заполнена. Освободи место на складе или продай"); fullWarnT = 4; } }
     }
   }
   drops = drops.filter(d => !d.got);
   droneTick(dt);
+}
+// подобранный предмет: надпись над роботом и, если находка редкая, — уведомление (и в чат — для самых редких)
+function pickNote(d){
+  const it = ITEMS[d.kind], G = GEMS[d.kind], bp = it.type === "bp";
+  addText(p.x, p.y-40, it.name + (SHARD[d.kind] && d.amt > 1 ? " ×" + d.amt : ""), d.g !== undefined ? gradeColor(d.g) : SHARD[d.kind] ? SHARD[d.kind].col : G ? G.col : bp ? "#8FC8FF" : "#F2A93B");
+  if(d.g >= 2) toast("Найдено: " + it.name + " (" + GRADES[d.g].name.toLowerCase() + ")");
+  if(G && G.kind === "l"){ toast("🪙 Монета удачи — сдай её в Кодекс → «Самоцветы»"); Sfx.play("level"); }
+  else if(G){ toast("💎 Самоцвет: " + it.name + " — сдай его в Кодекс"); Sfx.play("level"); }
+  if(bp){ toast("📐 " + it.name + ": по нему Кузнец соберёт вещь сета без осколков"); Sfx.play("level"); }
+  if(typeof chatAnnounce === "function"){
+    if(d.g === 3) chatAnnounce(S.name + " нашёл легендарную вещь: " + it.name);
+    else if(bp || (G && G.kind === "l")) chatAnnounce(S.name + " нашёл в Мире: " + it.name);
+  }
 }
 
 function updateEnemies(dt, st){
@@ -5508,7 +5556,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   let adm = {kind:"scrap", item:"g_rifle_10", grade:3};
   // все предметы игры, по группам (список строится при открытии панели — к этому моменту описаны все предметы)
   const ADM_GROUPS = [["gear:weapon", "Оружие"], ["gear:head", "Сенсоры"], ["gear:armor", "Корпуса"], ["gear:module", "Модули"], ["gear:core", "Реакторы"], ["gear:legs", "Ходовые"],
-    ["wings", "Крылья"], ["cloak", "Плащи"], ["artifact", "Артефакты"], ["drone", "Дроны"], ["rune", "Руны"], ["ench", "Сферы заточки"], ["gem", "Самоцветы"], ["book", "Книги"],
+    ["wings", "Крылья"], ["cloak", "Плащи"], ["artifact", "Артефакты"], ["drone", "Дроны"], ["rune", "Руны"], ["ench", "Сферы заточки"], ["gem", "Самоцветы"], ["bp", "Чертежи классов"], ["book", "Книги"],
     ["pot", "Зелья"], ["use", "Ремкомплекты"], ["mat", "Материалы"]];
   function admItemOptions(){
     const groups = new Map(ADM_GROUPS.map(([k]) => [k, []])), other = [];
@@ -8569,7 +8617,9 @@ function mobDrops(type, loc){
   const gl = k.gearLv || lv, pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= gl + 2 && (ITEMS[id].lvl || 1) >= gl - 10);
   out.gear = {pool, per:gearPer(gl)};
   // самоцветы: в цехах, Фарм-зоне, Сезонной зоне и в Мире. Бросает их сервер (items.roll_gems), здесь — шансы для карты
-  out.gems = GEM_LOCS.includes(loc) ? GEM_IDS.map(id => ({id, chance:P(GEMS[id].kind === "c" ? +(0.0033 + 0.000036*s).toFixed(6) : +(0.00033 + 0.0000036*s).toFixed(7))})) : [];
+  out.gems = GEM_LOCS.includes(loc) ? GEM_STONES.map(id => ({id, chance:P(GEMS[id].kind === "c" ? +(0.0033 + 0.000036*s).toFixed(6) : +(0.00033 + 0.0000036*s).toFixed(7))})) : [];
+  // Мир: ещё Монета удачи с любого монстра и чертежи классов со спотов (их тоже бросает сервер: items.roll_world)
+  if(loc === "world"){ out.gems.push({id:LUCK, chance:P(LUCK_PCT)}); out.bps = typeof wBpRows === "function" ? wBpRows(type) : []; }
   if(k.boss){                                            // главарь: шансы ценного лута ×150
     out.gems.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
     out.items.forEach(it => it.chance = Math.min(0.9, it.chance*BOSS_LOOT));
@@ -8869,6 +8919,7 @@ function mobCard(type){
     if(mats.length) h += `<div class="dsect">Материалы и расходники</div>` + mats.map(i => row(icon(i.id), ITEMS[i.id].name, (i.amt ? "×" + i.amt[0] + "–" + i.amt[1] : "×1") + " · " + pctF(i.chance))).join("");
     if(sph.length) h += `<div class="dsect">Сферы и ядра</div>` + sph.map(i => row(i.id === "cores" ? coreIcon("ci-m") : icon(i.id), i.id === "cores" ? "Энергоядро" : ITEMS[i.id].name, "×1 · " + pctF(i.chance))).join("");
     if(D.gems && D.gems.length) h += `<div class="dsect">Самоцветы для Кодекса</div>` + D.gems.map(i => row(icon(i.id), ITEMS[i.id].name, "×1 · " + pctF(i.chance), GEMS[i.id].col)).join("");
+    if(D.bps && D.bps.length) h += `<div class="dsect">Чертежи классов</div>` + D.bps.map(i => row(icon(i.id), `${ITEMS[i.id].name} <span class="muted">(${i.spot})</span>`, "×1 · " + pctF(i.chance), ITEMS[i.id].bp === S.cls ? "#F2C14B" : "#8FC8FF")).join("");
     const bookRow = i => { const it = ITEMS[i.id], cn = it.cls ? CLASSES[it.cls].name : "общая"; return row(icon(i.id), `${it.name} <span class="muted">(${cn})</span>`, "×1 · " + pctF(i.chance), it.cls === S.cls ? "#F2C14B" : ""); };
     const bk = D.items.filter(i => i.sect === "book"), bp = D.items.filter(i => i.sect === "bookp");
     const lateBooks = `${bk.length ? `<div class="dsect">Книги навыков (все классы)</div>` + bk.map(bookRow).join("") : ""}${bp.length ? `<div class="dsect">Книги пассивок (все классы)</div>` + bp.map(bookRow).join("") : ""}`;
@@ -9651,16 +9702,17 @@ const gemRedraw = () => { if(typeof sheetRender !== "undefined" && sheetRender =
 // сколько штук можно сдать: в живой игре — только учтённые сервером (выпавшие с врагов или купленные на маркете)
 function gemCanGive(id){
   const have = count(S.inv, id) + count(S.store, id);
-  return Math.min(GEM_MAX - gemCx(id), gemOnline() ? Math.min(have, REG.sph[id] || 0) : have);
+  return Math.min(gemCap(id) - gemCx(id), gemOnline() ? Math.min(have, REG.sph[id] || 0) : have);
 }
+const GEM_KIND_TX = {c:"Частый · шанс как у медной сферы", r:"Редкий · шанс как у титановой сферы", l:"Только в Мире · 0,003% с монстра, с Наместника чаще"};
 function gemCard(id){
   const G = GEMS[id], n = gemCx(id), steps = GEM_STEPS[G.kind], have = count(S.inv, id) + count(S.store, id), can = gemCanGive(id);
   const ni = steps.findIndex(([need]) => n < need), next = ni >= 0 ? steps[ni] : null, prev = ni > 0 ? steps[ni - 1][0] : 0;
   const pct = next ? Math.min(100, (n - prev)/(next[0] - prev)*100) : 100, free = gemOnline() ? have - Math.min(have, REG.sph[id] || 0) : 0;
-  return `<section class="gmcard ${next ? "" : "max"}" style="--gc:${G.col}">
+  return `<section class="gmcard${next ? "" : " max"}${G.kind === "l" ? " luck" : ""}" style="--gc:${G.col}">
     <div class="gm-head"><span class="gm-ic">${gemIcon(id, true)}</span>
-      <div class="gm-tx"><b>${G.name}</b><small>${G.kind === "c" ? "Частый · шанс как у медной сферы" : "Редкий · шанс как у титановой сферы"}</small></div>
-      <div class="gm-cnt"><b>${n}</b><small>из ${GEM_MAX}</small></div></div>
+      <div class="gm-tx"><b>${G.name}</b><small>${GEM_KIND_TX[G.kind]}</small></div>
+      <div class="gm-cnt"><b>${n}</b><small>из ${gemCap(id)}</small></div></div>
     <div class="gm-bar"><i style="width:${pct}%"></i></div>
     <p class="gm-next">${next ? `До порога ${next[0]}: ещё ${next[0] - n} · ${gemBonText(next[1])}` : "Все пороги собраны"}</p>
     <div class="gm-steps">${steps.map(([need, bon]) => `<span class="${n >= need ? "on" : next && next[0] === need ? "nx" : ""}"><b>${need}</b>${gemBonText(bon)}</span>`).join("")}</div>
@@ -9673,15 +9725,17 @@ function gemCodexHtml(){
   const b = gemBonus();
   return `<p class="hint" style="margin-top:0">Самоцветы падают с врагов в Нижних и Глубинных цехах, Фарм-зоне, Сезонной зоне и в Мире. Каждый вид собирается отдельно, до ${GEM_MAX} штук. Бонусы порогов складываются и остаются навсегда, сданные камни исчезают.</p>
     <div class="gm-tot"><b>Бонус самоцветов</b><span>${[`+${b.atk} АТК`, `+${b.def} ЗАЩ`, `+${b.hp} ПРОЧ`, `+${Math.round(b.rate*100)}% СКОР. АТАКИ`].map(s => `<i>${s}</i>`).join(" · ")}</span></div>
-    ${GEM_IDS.map(gemCard).join("")}
+    ${GEM_STONES.map(gemCard).join("")}
+    <p class="hint gm-luck-h">Монета удачи падает только в Мире, с любого монстра, и сдаётся рядом с самоцветами — до ${LUCK_MAX} штук. Её пороги тоже складываются.</p>
+    ${gemCard(LUCK)}
     <p class="hint">Самоцветы можно продавать и покупать на маркете — не дешевле ${String(GEM_MIN_PRICE).replace(".", ",")} GRAM за штуку.</p>`;
 }
 async function gemGive(id, all){
   const G = GEMS[id]; if(!G || gemBusy) return;
-  const n0 = gemCx(id), have = count(S.inv, id) + count(S.store, id);
-  if(n0 >= GEM_MAX){ toast("Собрано максимум: " + GEM_MAX); return; }
+  const n0 = gemCx(id), have = count(S.inv, id) + count(S.store, id), cap = gemCap(id);
+  if(n0 >= cap){ toast("Собрано максимум: " + cap); return; }
   let k = Math.min(all ? Infinity : 1, gemCanGive(id));
-  if(k <= 0){ toast(have ? "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете" : "Нет в сумке и на складе: " + G.name); return; }
+  if(k <= 0){ toast(have ? (G.kind === "l" ? "Сдать можно только монеты, учтённые сервером: выпавшие в Мире или купленные на маркете" : "Сдать можно только самоцветы, учтённые сервером: выпавшие с врагов или купленные на маркете") : "Нет в сумке и на складе: " + G.name); return; }
   if(gemOnline()){
     gemBusy = true; gemRedraw();
     let r; try{ r = await regApi("gem", {id, n:k}); }catch(e){ r = null; }
@@ -9716,8 +9770,8 @@ const mkOnline = () => typeof NET !== "undefined" && NET.on && NET.id;
 // Разделы — по тому, что сервер разрешает продавать (items.escrow_for_market): снаряжение, сферы, осколки, руны,
 // дроны, артефакты, крылья и плащи. Раньше были «Книги» и «Материалы» (их выставить нельзя — всегда пусто),
 // а дроны, крылья и плащи попадали в «Материалы». Пустые разделы не показываются (кроме выбранного).
-const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["art", "Артефакты"], ["rune", "Руны"], ["drone", "Дроны"], ["look", "Крылья и плащи"], ["shard", "Осколки"], ["gem", "Самоцветы"], ["ench", "Сферы"]];
-const MK_CAT_OF_TYPE = {ench:"ench", shard:"shard", gem:"gem", artifact:"art", rune:"rune", drone:"drone", wings:"look", cloak:"look"};
+const MK_CATS = [["all", "Все"], ["weapon", "Оружие"], ["gear", "Снаряжение"], ["art", "Артефакты"], ["rune", "Руны"], ["drone", "Дроны"], ["look", "Крылья и плащи"], ["shard", "Осколки"], ["gem", "Самоцветы"], ["bp", "Чертежи"], ["ench", "Сферы"]];
+const MK_CAT_OF_TYPE = {ench:"ench", shard:"shard", gem:"gem", bp:"bp", artifact:"art", rune:"rune", drone:"drone", wings:"look", cloak:"look"};
 const mkCatOf = id => { const it = ITEMS[id]; return it.type === "gear" ? (it.slot === "weapon" ? "weapon" : "gear") : MK_CAT_OF_TYPE[it.type] || "other"; };
 function mkLocal(){
   if(!S.mkLocal || !S.mkLocal.gram){
@@ -12037,7 +12091,7 @@ function drawCrimsonWarden(x, y, t, atk){
 // Продать за GRAM можно только такие вещи. Вещи без номера («привязанные») в игре работают как обычно.
 const REG = {on:false, sph:{sph_cu:0, sph_ti:0}, uids:new Set()};
 // учтённые сервером расходники: сферы, руны и дроны (их можно продать за GRAM). Сервер — items.py → REG_IDS
-const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS, ...DRONE_IDS, ...ART_IDS, ...WING_IDS, ...CLOAK_IDS, ...SHARD_IDS, ...GEM_IDS];
+const REG_IDS = ["sph_cu", "sph_ti", ...RUNE_IDS, ...DRONE_IDS, ...ART_IDS, ...WING_IDS, ...CLOAK_IDS, ...SHARD_IDS, ...GEM_IDS, ...BP_IDS];
 const regOnline = () => typeof NET !== "undefined" && NET.on && NET.id && NET.ws && NET.ws.readyState === 1;
 const regApi = (op, body) => NET.api("/api/items/" + op, body || {});
 
@@ -12048,7 +12102,7 @@ async function regSync(){
     const r = await regApi("state"); if(!r || !r.ok) return;
     REG.on = true; REG.uids = new Set(r.items.map(x => x.uid)); REG.sph = Object.fromEntries(REG_IDS.map(id => [id, +(r.sph || {})[id] || 0]));
     // сданные в Кодекс самоцветы считает сервер: его счётчики главнее сохранения на телефоне
-    if(r.gemcx) S.gemCx = Object.fromEntries(GEM_IDS.map(id => [id, Math.max(0, Math.min(GEM_MAX, +r.gemcx[id] || 0))]));
+    if(r.gemcx) S.gemCx = Object.fromEntries(GEM_IDS.map(id => [id, Math.max(0, Math.min(gemCap(id), +r.gemcx[id] || 0))]));
     // дроны и артефакты, которые сервер за игроком числит, но которых нет в сумке и на складе:
     // их стирала старая ошибка загрузки сохранения — возвращаем
     const back = [];
@@ -13910,7 +13964,13 @@ function uniqIcon(id, anim){
 
 // ---- иконки самоцветов: у каждого вида своя огранка и деталь «железа» ----
 // 0 — ступенчатая огранка с ободком линзы, 1 — круглый бриллиант с выводами конденсатора,
-// 2 — двуглавый кристалл с тёмным ядром, 3 — шестигранный кабошон с катушкой резонатора
+// 2 — двуглавый кристалл с тёмным ядром, 3 — шестигранный кабошон с катушкой резонатора,
+// 4 — Монета удачи: золотая, край — зубцы шестерни, на лицевой стороне чеканный клевер
+const cogPath = (cx, cy, r0, r1, n) => Array.from({length:n*4}, (_, i) => {
+  const a = (i + 0.5)/(n*4)*Math.PI*2, r = i % 4 === 1 || i % 4 === 2 ? r1 : r0;
+  return (i ? "L" : "M") + (cx + Math.cos(a)*r).toFixed(2) + " " + (cy + Math.sin(a)*r).toFixed(2);
+}).join("") + "Z";
+const COIN_COG = cogPath(16, 16, 12.4, 14.6, 18);
 function gemIcon(id, anim){
   const G = GEMS[id]; if(!G) return "";
   const u = "gmi" + (++svgUid), fill = `url(#${u})`, glow = anim ? `<animate attributeName="opacity" values=".5;1;.5" dur="2.4s" repeatCount="indefinite"/>` : "";
@@ -13930,8 +13990,14 @@ function gemIcon(id, anim){
     `<polygon points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="${fill}" stroke="${G.dk}" stroke-width="1.1"/>
      <circle cx="16" cy="16" r="7.6" fill="none" stroke="${G.lt}" stroke-width="1.2" stroke-dasharray="2.6 1.6" opacity=".9"/>
      <circle cx="16" cy="16" r="4.4" fill="url(#${u}t)" stroke="${G.dk}" stroke-width=".7"/>
-     <path d="M16 3V7M27 9.5 23.6 11.5M27 22.5 23.6 20.5M16 29V25M5 22.5 8.4 20.5M5 9.5 8.4 11.5" stroke="${G.dk}" stroke-width="1" opacity=".55"/>`
-  ][G.shape % 4];
+     <path d="M16 3V7M27 9.5 23.6 11.5M27 22.5 23.6 20.5M16 29V25M5 22.5 8.4 20.5M5 9.5 8.4 11.5" stroke="${G.dk}" stroke-width="1" opacity=".55"/>`,
+    `<path d="${COIN_COG}" fill="${fill}" stroke="${G.dk}" stroke-width="1"/>
+     <circle cx="16" cy="16" r="10" fill="url(#${u}t)" stroke="${G.dk}" stroke-width=".9"/>
+     <circle cx="16" cy="16" r="8.2" fill="none" stroke="${G.dk}" stroke-width=".6" stroke-dasharray="1.1 1.1" opacity=".6"/>
+     <g fill="${G.dk}" opacity=".78"><circle cx="16" cy="12.9" r="2.3"/><circle cx="19.1" cy="16" r="2.3"/><circle cx="16" cy="19.1" r="2.3"/><circle cx="12.9" cy="16" r="2.3"/></g>
+     <circle cx="16" cy="16" r="1.2" fill="${G.lt}"/>
+     <path d="M17.2 17.4Q18.4 20.2 20.6 21.6" stroke="${G.dk}" stroke-width="1.1" fill="none" stroke-linecap="round" opacity=".78"/>`
+  ][G.shape] || "";
   return `<svg viewBox="0 0 32 32" aria-hidden="true" class="gem-ic" style="overflow:visible">
     <defs><linearGradient id="${u}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${G.lt}"/><stop offset=".45" stop-color="${G.col}"/><stop offset="1" stop-color="${G.dk}"/></linearGradient>
     <radialGradient id="${u}t" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="${G.lt}"/><stop offset="1" stop-color="${G.col}"/></radialGradient>
@@ -13957,12 +14023,71 @@ function gemIcon(id, anim){
       const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, 22); rg.addColorStop(0, G.col + "B0"); rg.addColorStop(1, G.col + "00");
       ctx.globalAlpha = .75 + Math.sin(d.t*4)*.2; ctx.fillStyle = rg; circle(0, 0, 22); ctx.fill(); ctx.globalAlpha = 1;
       const gr = ctx.createLinearGradient(-8, -8, 8, 8); gr.addColorStop(0, G.lt); gr.addColorStop(.5, G.col); gr.addColorStop(1, G.dk);
+      if(G.kind === "l"){                                   // Монета удачи: вертится ребром, край — зубцы шестерни
+        const sx = Math.max(0.16, Math.abs(Math.cos(d.t*3)));
+        ctx.save(); ctx.scale(sx, 1);
+        ctx.fillStyle = gr; ctx.strokeStyle = G.dk; ctx.lineWidth = 1.2/sx; ctx.shadowColor = G.col; ctx.shadowBlur = 12;
+        ctx.beginPath(); for(let i = 0; i < 64; i++){ const a = (i + 0.5)/64*Math.PI*2, r = i % 4 === 1 || i % 4 === 2 ? 10.6 : 9.1; i ? ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r) : ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r); }
+        ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+        ctx.fillStyle = G.lt; circle(0, 0, 6.6); ctx.fill(); ctx.strokeStyle = G.dk; ctx.lineWidth = .9/sx; ctx.stroke();
+        if(sx > .45){ ctx.fillStyle = G.dk; ctx.globalAlpha = .75; for(const [x, y] of [[0, -2.4], [2.4, 0], [0, 2.4], [-2.4, 0]]){ circle(x, y, 1.8); ctx.fill(); } ctx.globalAlpha = 1; }
+        ctx.restore();
+        const tw = (Math.sin(d.t*6) + 1)/2; ctx.globalAlpha = tw; ctx.fillStyle = "#fff"; ctx.fillRect(8, -13, 1.6, 6); ctx.fillRect(6.2, -10.8, 5.2, 1.6); ctx.globalAlpha = 1;
+        ctx.restore(); continue;
+      }
       ctx.fillStyle = gr; ctx.strokeStyle = G.dk; ctx.lineWidth = 1.2; ctx.shadowColor = G.col; ctx.shadowBlur = 12;
       const pts = G.shape === 2 ? [[0, -11], [6, -5], [4, 8], [0, 11], [-4, 8], [-6, -5]] : G.shape === 3 ? [[0, -9], [8, -4.5], [8, 4.5], [0, 9], [-8, 4.5], [-8, -4.5]]
         : [[-4, -8], [4, -8], [8, -4], [8, 4], [4, 8], [-4, 8], [-8, 4], [-8, -4]];
       ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(1, -6); ctx.lineTo(-2, -1); ctx.closePath(); ctx.fill();
       const tw = (Math.sin(d.t*6) + 1)/2; ctx.globalAlpha = tw; ctx.fillStyle = "#fff"; ctx.fillRect(7, -12, 1.6, 6); ctx.fillRect(5.2, -9.8, 5.2, 1.6); ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+  };
+}
+
+// ---- чертёж класса: синий лист со схемой между двумя рулонами (как свиток) и печать цвета класса ----
+function bpIcon(id, anim){
+  const it = ITEMS[id]; if(!it || it.type !== "bp") return "";
+  const c = (CLASSES[it.bp] || {color:"#5FD4E8"}).color, u = "bpi" + (++svgUid);
+  const glow = anim ? `<animate attributeName="opacity" values=".45;.95;.45" dur="2.4s" repeatCount="indefinite"/>` : "";
+  return `<svg viewBox="0 0 32 32" aria-hidden="true" class="bp-ic" style="overflow:visible">
+    <defs><linearGradient id="${u}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4C9BFF"/><stop offset=".55" stop-color="#2463C9"/><stop offset="1" stop-color="#143B85"/></linearGradient>
+    <linearGradient id="${u}r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#CFE6FF"/><stop offset=".45" stop-color="#6AA8F0"/><stop offset="1" stop-color="#1D4C9A"/></linearGradient>
+    <radialGradient id="${u}g"><stop offset="0" stop-color="${c}" stop-opacity=".6"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="16" cy="16" r="16" fill="url(#${u}g)">${glow}</circle>
+    <rect x="6" y="6.5" width="20" height="19" fill="url(#${u})" stroke="#0C2558" stroke-width=".9"/>
+    <path d="M10 7v18M14 7v18M18 7v18M22 7v18M6.5 11h19M6.5 15h19M6.5 19h19" stroke="#CFE6FF" stroke-width=".35" opacity=".5"/>
+    <circle cx="14" cy="15.6" r="3.8" fill="none" stroke="#FFFFFF" stroke-width="1"/><circle cx="14" cy="15.6" r="1.2" fill="#FFFFFF"/>
+    <path d="M14 10.4v1.7M14 19.1v1.7M8.8 15.6h1.7M17.5 15.6h1.7M10.3 11.9l1.2 1.2M16.5 18.1l1.2 1.2M10.3 19.3l1.2-1.2M16.5 13.1l1.2-1.2" stroke="#FFFFFF" stroke-width="1.1" stroke-linecap="round"/>
+    <path d="M19.5 9.6h4.2v3.8M8.5 22.6h6" stroke="#FFFFFF" stroke-width=".8" fill="none" opacity=".75"/>
+    <rect x="4.5" y="4" width="23" height="4.2" rx="2.1" fill="url(#${u}r)" stroke="#0C2558" stroke-width=".9"/>
+    <rect x="4.5" y="23.8" width="23" height="4.2" rx="2.1" fill="url(#${u}r)" stroke="#0C2558" stroke-width=".9"/>
+    <circle cx="23.6" cy="21.4" r="4.2" fill="${c}" stroke="#FFFFFF" stroke-width="1.1"/>
+    <path d="M23.6 18.7 24.4 20.6 26.3 21.4 24.4 22.2 23.6 24.1 22.8 22.2 20.9 21.4 22.8 20.6Z" fill="#FFFFFF" opacity=".92"/>
+  </svg>`;
+}
+{ const _iconB = icon; icon = function(id, g){ const it = ITEMS[id]; if(it && it.type === "bp") return bpIcon(id); return _iconB(id, g); }; }
+// ---- чертёж на земле: свёрнутый в рулон синий лист с печатью цвета класса ----
+{
+  const _drawDropsB = drawDrops, isBp = d => ITEMS[d.kind] && ITEMS[d.kind].type === "bp";
+  drawDrops = function(){
+    const all = drops, bp = all.filter(isBp);
+    if(!bp.length) return _drawDropsB();
+    drops = all.filter(d => !isBp(d));
+    try{ _drawDropsB(); } finally { drops = all; }
+    for(const d of bp){
+      const c = (CLASSES[ITEMS[d.kind].bp] || {color:"#5FD4E8"}).color, bob = Math.sin(d.t*5)*3;
+      ctx.save(); ctx.translate(d.x, d.y + bob);
+      const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, 24); rg.addColorStop(0, c + "A0"); rg.addColorStop(1, c + "00");
+      ctx.globalAlpha = .7 + Math.sin(d.t*4)*.25; ctx.fillStyle = rg; circle(0, 0, 24); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.rotate(-0.4 + Math.sin(d.t*2)*.1);
+      const gr = ctx.createLinearGradient(0, -6, 0, 6); gr.addColorStop(0, "#CFE6FF"); gr.addColorStop(.45, "#4C8FE8"); gr.addColorStop(1, "#173E8A");
+      ctx.fillStyle = gr; ctx.strokeStyle = "#0C2558"; ctx.lineWidth = 1.2; ctx.shadowColor = "#6AA8F0"; ctx.shadowBlur = 10;
+      rr(-13, -5.5, 26, 11, 5.5); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-6, -5.2); ctx.lineTo(-6, 5.2); ctx.moveTo(6, -5.2); ctx.lineTo(6, 5.2); ctx.stroke();
+      ctx.fillStyle = c; circle(2, 5, 3.6); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke();
+      const tw = (Math.sin(d.t*6) + 1)/2; ctx.globalAlpha = tw; ctx.fillStyle = "#fff"; ctx.fillRect(10, -14, 1.6, 6); ctx.fillRect(8.2, -11.8, 5.2, 1.6); ctx.globalAlpha = 1;
       ctx.restore();
     }
   };
@@ -14005,10 +14130,13 @@ function uniqWorn(cls){ let n = 0; for(const e of Object.values(S.eq || {})){ co
 // ---- ресурсы и крафт уникальной вещи ----
 const haveAll = id => id === "scrap" ? S.scrap : id === "cores" ? S.cores : count(S.inv, id) + count(S.store, id);
 const shardTotal = () => SHARD_IDS.reduce((a, id) => a + haveAll(id), 0);
-const uniqCan = id => Object.entries(ITEMS[id].need).every(([k, n]) => haveAll(k) >= n);
+const bpTotal = () => BP_IDS.reduce((a, id) => a + haveAll(id), 0);
+// что нужно на уникальную вещь: из осколков (ITEMS[id].need) или по чертежу класса (BP_NEED)
+const uniqNeed = (id, bp) => bp ? BP_NEED(id) : ITEMS[id].need;
+const uniqCan = (id, bp) => Object.entries(uniqNeed(id, bp)).every(([k, n]) => haveAll(k) >= n);
 function takeAll(id, n){ const a = Math.min(n, count(S.inv, id)); if(a) removeItem(S.inv, id, a); if(n - a > 0) removeItem(S.store, id, n - a); }
-function uniqSpend(id, reg){
-  for(const [k, n] of Object.entries(ITEMS[id].need)){
+function uniqSpend(id, reg, bp){
+  for(const [k, n] of Object.entries(uniqNeed(id, bp))){
     if(k === "scrap" || k === "cores") S[k] -= n;
     else { takeAll(k, n); if(reg && typeof REG !== "undefined") REG.sph[k] = Math.max(0, (REG.sph[k] || 0) - n); }
   }
@@ -14021,19 +14149,19 @@ function uniqGot(id){
   Sfx.play("level"); try{ if(S.settings && S.settings.vibro && navigator.vibrate) navigator.vibrate([30, 40, 60]); }catch(e){}
   save();
 }
-async function craftUniq(id, btn){
+async function craftUniq(id, btn, bp){
   const it = ITEMS[id]; if(!it || !it.uniq || craftBusy) return;
   if(S.level < it.lvl && !window.NET_ADMIN){ toast("Нужен " + it.lvl + " уровень"); return; }
-  if(!uniqCan(id)){ toast("Не хватает ресурсов"); return; }
+  if(!uniqCan(id, bp)){ toast(bp && haveAll("bp_" + it.set) < 1 ? "Нет чертежа: " + ITEMS["bp_" + it.set].name : "Не хватает ресурсов"); return; }
   if(S.inv.length >= INV_MAX){ toast("Освободи место в сумке"); return; }
   const online = typeof REG !== "undefined" && REG.on && regOnline();
-  if(!online){ uniqSpend(id, false); addItem(S.inv, id, 1, INV_MAX, 3); uniqGot(id); if(sheetRender) sheetRender(); return; }
+  if(!online){ uniqSpend(id, false, bp); addItem(S.inv, id, 1, INV_MAX, 3); uniqGot(id); if(sheetRender) sheetRender(); return; }
   craftBusy = true; if(btn){ btn.disabled = true; btn.textContent = "…"; }
   try{
     if(NET.push) await NET.push(true);                // сервер должен видеть те же ресурсы, что и телефон
-    const r = await regApi("craft", {id});
+    const r = await regApi("craft", bp ? {id, bp:1} : {id});
     if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
-    uniqSpend(id, true);
+    uniqSpend(id, true, bp);
     const x = r.item || {};
     addItem(S.inv, id, 1, INV_MAX, 3, 0, x.uid); if(x.uid) REG.uids.add(x.uid);
     if(r.craftN) S.craftN = +r.craftN;
@@ -14047,11 +14175,11 @@ const smName = k => k === "scrap" ? "Лом" : k === "cores" ? "Энергояд
 const smIcon = k => k === "scrap" ? `<i class="sm-res-ic scrap">⚙</i>` : k === "cores" ? coreIcon("ci-m") : icon(k);
 const fmtK = v => v.toLocaleString("ru-RU");
 function smTile(id, kind, extra){
-  const it = ITEMS[id], lbl = it.uniq ? SLOT_NAME[it.slot] : it.name, can = it.uniq ? uniqCan(id) : RECIPES.find(r => r.id === id) && Object.entries(RECIPES.find(r => r.id === id).need).every(([k, n]) => have(k) >= n);
+  const it = ITEMS[id], lbl = it.uniq ? SLOT_NAME[it.slot] : it.name, can = it.uniq ? uniqCan(id) || uniqCan(id, true) : RECIPES.find(r => r.id === id) && Object.entries(RECIPES.find(r => r.id === id).need).every(([k, n]) => have(k) >= n);
   return `<button type="button" class="sm-tile ${extra || ""} ${can ? "can" : ""}" data-smsel="${kind}:${id}" aria-label="${it.name}"><span class="sm-tic">${icon(id, it.uniq ? 3 : 0)}</span><span class="sm-tl">${lbl}</span></button>`;
 }
 function smItems(){
-  let h = `<h4 class="sm-h gold">Уникальные сеты</h4><p class="sm-note">Собираются только из Осколков. Осколки падают с врагов от ${SHARD_MIN_LVL} уровня. Вещи сильнее Звёздного поколения и дают бонус сета.</p>`;
+  let h = `<h4 class="sm-h gold">Уникальные сеты</h4><p class="sm-note">Собираются из Осколков или по Чертежу класса. Осколки падают с врагов от ${SHARD_MIN_LVL} уровня, чертежи — в Мире. Вещи сильнее Звёздного поколения и дают бонус сета.</p>`;
   const order = Object.keys(UNIQ_SETS).sort((a, b) => (b === S.cls) - (a === S.cls));
   for(const cls of order){
     const C = CLASSES[cls], mine = cls === S.cls, U = UNIQ_SETS[cls];
@@ -14069,10 +14197,12 @@ function smDetail(){
   const lvlOk = !it.lvl || S.level >= it.lvl || window.NET_ADMIN, canRes = Object.entries(need).every(([k, n]) => hv(k) >= n);
   const C = it.cls && CLASSES[it.cls], other = uq && it.set !== S.cls;
   const sh = uq ? CLASS_SHARDS[it.set] : [];
-  const rows = Object.entries(need).sort(([a], [b]) => (SHARD[b] ? 1 : 0) - (SHARD[a] ? 1 : 0)).map(([k, n]) => {
-    const v = hv(k), ok = v >= n;
-    return `<div class="sm-req ${ok ? "ok" : "no"}"><span class="sm-ric">${smIcon(k)}</span><span class="sm-rn">${smName(k)}</span><b>${fmtK(Math.min(v, n))}/${fmtK(n)}</b>${SHARD[k] ? `<i class="sm-rbar"><u style="width:${Math.min(100, v/n*100)}%;background:${SHARD[k].col}"></u></i>` : ""}</div>`;
-  }).join("");
+  const isBp = k => ITEMS[k] && ITEMS[k].type === "bp", first = k => SHARD[k] || isBp(k) ? 1 : 0;
+  const reqRow = ([k, n]) => {
+    const v = hv(k), ok = v >= n, bar = SHARD[k] ? SHARD[k].col : isBp(k) ? "#6AA8F0" : "";
+    return `<div class="sm-req ${ok ? "ok" : "no"}"><span class="sm-ric">${smIcon(k)}</span><span class="sm-rn">${smName(k)}</span><b>${fmtK(Math.min(v, n))}/${fmtK(n)}</b>${bar ? `<i class="sm-rbar"><u style="width:${Math.min(100, v/n*100)}%;background:${bar}"></u></i>` : ""}</div>`;
+  };
+  const rows = Object.entries(need).sort(([a], [b]) => first(b) - first(a)).map(reqRow).join("");
   const desc = gearDesc(id, uq ? 3 : 0);
   let h = `<button type="button" class="sm-back" data-smback="1">← Назад</button>
     <div class="sm-head ${uq ? "uq" : ""} ${SM.just === id ? "just" : ""}" ${C ? `style="--cc:${C.color}"` : ""}>
@@ -14089,13 +14219,26 @@ function smDetail(){
     <div class="sm-chance">Шанс успеха: <b>100%</b>${uq ? "" : " · грейд случайный"}</div>
     <button type="button" class="sm-craft" ${uq ? `data-ucraft="${id}"` : `data-craft="${id}"`} ${lvlOk && canRes ? "" : "disabled"}>${!lvlOk ? "Нужен " + it.lvl + " уровень" : canRes ? "Скрафтить" : "Не хватает ресурсов"}</button>`;
   if(uq && !canRes) h += `<p class="sm-note c">Осколки выпадают с врагов от ${SHARD_MIN_LVL} уровня и продаются на маркете. ${sh.map(s => SHARD[s].name).join(", ")}.</p>`;
+  if(uq){
+    // второй путь — по чертежу класса: те же лом и ядра, а вместо осколков один чертёж (падает в Мире)
+    const bid = "bp_" + it.set, bn = BP_NEED(id), bpOk = Object.entries(bn).every(([k, n]) => hv(k) >= n);
+    h += `<h4 class="sm-h bp">Или по чертежу</h4><div class="sm-reqs">${Object.entries(bn).sort(([a], [b]) => first(b) - first(a)).map(reqRow).join("")}</div>
+      <button type="button" class="sm-craft bp" data-ucraft="${id}" data-bp="1" ${lvlOk && bpOk ? "" : "disabled"}>${!lvlOk ? "Нужен " + it.lvl + " уровень" : bpOk ? "Собрать по чертежу" : hv(bid) < 1 ? "Нет чертежа" : "Не хватает ресурсов"}</button>`;
+    if(hv(bid) < 1) h += `<p class="sm-note c">${ITEMS[bid].name} падает в Мире: ${bpSpots(it.set)}. Его можно купить на маркете.</p>`;
+  }
   return h;
 }
+// где в Мире падает чертёж класса: названия спотов через запятую
+const bpSpots = cls => W_SPOTS.filter(s => s.bp.includes(cls)).map(s => s.name).join(", ");
 function smShards(){
   const uses = id => Object.entries(CLASS_SHARDS).filter(([, a]) => a.includes(id)).map(([c]) => `<i style="color:${CLASSES[c].color}">${CLASSES[c].name}</i>`).join(", ");
   return `<p class="sm-note">Осколки выпадают с врагов от ${SHARD_MIN_LVL} уровня: чем выше уровень моба, тем чаще, а главари роняют целую пачку. Их можно продать и купить на маркете за GRAM.</p>
     <div class="sh-grid">${SHARD_IDS.map(id => { const H = SHARD[id], n = haveAll(id);
-      return `<div class="sh-card" style="--sc:${H.col}"><div class="sh-ic">${shardIcon(id, true)}</div><b style="color:${H.col}">${H.name}</b><span class="sh-n">${fmtK(n)}</span><small>${H.lore}</small><small class="sh-use">Сеты: ${uses(id)}</small></div>`; }).join("")}</div>`;
+      return `<div class="sh-card" style="--sc:${H.col}"><div class="sh-ic">${shardIcon(id, true)}</div><b style="color:${H.col}">${H.name}</b><span class="sh-n">${fmtK(n)}</span><small>${H.lore}</small><small class="sh-use">Сеты: ${uses(id)}</small></div>`; }).join("")}</div>
+    <h4 class="sm-h bp">Чертежи классов</h4>
+    <p class="sm-note">Падают только в Мире, у каждого спота свои, — шанс каждого 0,003% с монстра. По чертежу Кузнец соберёт любую вещь сета этого класса без осколков: нужны только лом и ядра. Чертежи продаются и покупаются на маркете за GRAM.</p>
+    <div class="sh-grid">${BP_IDS.map(id => { const c = ITEMS[id].bp, C = CLASSES[c], n = haveAll(id);
+      return `<div class="sh-card bp-card" style="--sc:${C.color}"><div class="sh-ic">${bpIcon(id, true)}</div><b style="color:${C.color}">${ITEMS[id].name}</b><span class="sh-n">${fmtK(n)}</span><small>Сет «${UNIQ_SETS[c].set}»</small><small class="sh-use">Мир: ${bpSpots(c)}</small></div>`; }).join("")}</div>`;
 }
 function smBody(){
   if(SM.tab === "items") return SM.sel ? smDetail() : smItems();
@@ -14105,7 +14248,8 @@ function smBody(){
 }
 renderCraft = function(){
   const tabs = [["items", "Предметы"], ["equip", "Экипировка"], ["runes", "Руны"], ["shards", "Осколки"]];
-  body().innerHTML = `<div class="sm-res"><span>⚙ Лом: <b>${fmtK(S.scrap)}</b></span><span class="cr">${coreIcon("ci-s")} Ядра: <b>${fmtK(S.cores)}</b></span><span class="sh">💠 Осколки: <b>${fmtK(shardTotal())}</b></span></div>
+  const bpn = bpTotal();
+  body().innerHTML = `<div class="sm-res"><span>⚙ Лом: <b>${fmtK(S.scrap)}</b></span><span class="cr">${coreIcon("ci-s")} Ядра: <b>${fmtK(S.cores)}</b></span><span class="sh">💠 Осколки: <b>${fmtK(shardTotal())}</b></span>${bpn ? `<span class="bp">📐 Чертежи: <b>${fmtK(bpn)}</b></span>` : ""}</div>
     <div class="sm-tabs">${tabs.map(([k, n]) => `<button type="button" data-smtab="${k}" aria-pressed="${SM.tab === k}">${n}</button>`).join("")}</div>
     <div class="sm-body">${smBody()}</div>`;
 };
@@ -14117,7 +14261,7 @@ $("shBody").addEventListener("click", e => {
   if(d.smtab){ SM.tab = d.smtab; SM.sel = null; }
   else if(d.smsel){ SM.sel = d.smsel; }
   else if(d.smback){ SM.sel = null; }
-  else if(d.ucraft){ craftUniq(d.ucraft, b); return; }
+  else if(d.ucraft){ craftUniq(d.ucraft, b, !!d.bp); return; }
   if(sheetRender) sheetRender();
   if(d.smsel || d.smback || d.smtab){ const cb = document.querySelector(".card-body"); if(cb) cb.scrollTop = 0; }
 });
@@ -14299,7 +14443,7 @@ $("shBody").addEventListener("click", async e => {
 // сумке не меняется), плитки 4 в ряд с названием и количеством. Одиночная вещь переносится сразу, у стопки
 // открывается окно «Положить/Забрать» со степпером, ползунком и кнопками 1 · ½ · Все.
 const ST_CATS = [["all", "Все"]];
-const stCatOf = id => { const t = (ITEMS[id] || {}).type; return t === "gear" ? "gear" : t === "mat" || t === "shard" || t === "gem" || t === "ench" ? "res" : t === "use" || t === "pot" || t === "tp" ? "cons" : "spec"; };
+const stCatOf = id => { const t = (ITEMS[id] || {}).type; return t === "gear" ? "gear" : t === "mat" || t === "shard" || t === "gem" || t === "bp" || t === "ench" ? "res" : t === "use" || t === "pot" || t === "tp" ? "cons" : "spec"; };
 const ST_SORTS = [["put", "Как положили"], ["type", "По типу"], ["rare", "По редкости"], ["name", "По названию"], ["qty", "По количеству"]];
 let stSortOpen = false;
 const stSortKey = () => (S.settings && S.settings.stSort) || "type";
@@ -15224,6 +15368,8 @@ Object.assign(I18N, {"Лечение · урон": ["Healing · damage", "Лік
 // окно «Обновления» и «Гайд»
 Object.assign(I18N, {"Обновления": ["Updates", "Оновлення", "Novedades", "Güncellemeler", "Atualizações"], "Гайд": ["Guide", "Гайд", "Guía", "Rehber", "Guia"]});
 Object.assign(I18N, {"Открытый мир · с 35 уровня · монстры 40–59 на 10 спотах · опыт ×3": ["Open world · from level 35 · monsters 40–59 on 10 spots · XP ×3", "Відкритий світ · з 35 рівня · монстри 40–59 на 10 спотах · досвід ×3", "Mundo abierto · desde el nivel 35 · monstruos 40–59 en 10 spots · experiencia ×3", "Açık dünya · 35. seviyeden · 10 spotta 40–59 seviye canavarlar · deneyim ×3", "Mundo aberto · a partir do nível 35 · monstros 40–59 em 10 spots · experiência ×3"], "Открытый мир": ["Open world", "Відкритий світ", "Mundo abierto", "Açık dünya", "Mundo aberto"], "PvP-зона": ["PvP zone", "PvP-зона", "Zona PvP", "PvP bölgesi", "Zona PvP"], "Луг": ["Meadow", "Луг", "Pradera", "Çayır", "Prado"], "Лес": ["Forest", "Ліс", "Bosque", "Orman", "Floresta"], "Выжженные пустоши": ["Scorched Wastes", "Випалені пустища", "Páramos calcinados", "Kavrulmuş Çorak Topraklar", "Ermos calcinados"], "Трон Владыки": ["Overlord's Throne", "Трон Володаря", "Trono del Señor", "Hükümdarın Tahtı", "Trono do Senhor"], "Лоу-споты · монстры 40–45 сами не нападают": ["Low spots · monsters 40–45 don't attack first", "Лоу-споти · монстри 40–45 самі не нападають", "Spots bajos · los monstruos 40–45 no atacan primero", "Düşük spotlar · 40–45 seviye canavarlar kendileri saldırmaz", "Spots baixos · monstros 40–45 não atacam primeiro"], "Мид-споты · пачки бросаются, если подойти близко": ["Mid spots · packs charge if you get close", "Мід-споти · зграї кидаються, якщо підійти близько", "Spots medios · los grupos atacan si te acercas", "Orta spotlar · yaklaşırsan sürüler saldırır", "Spots médios · os grupos atacam se você chegar perto"], "Топ-споты · монстры 53–59": ["Top spots · monsters 53–59", "Топ-споти · монстри 53–59", "Spots altos · monstruos 53–59", "Yüksek spotlar · 53–59 seviye canavarlar", "Spots altos · monstros 53–59"], "Каменная площадь за кольцом колонн": ["A stone plaza behind a ring of columns", "Кам'яна площа за кільцем колон", "Una plaza de piedra tras un anillo de columnas", "Sütun halkasının ardında taş bir meydan", "Uma praça de pedra atrás de um anel de colunas"], "Заросшая трасса": ["Overgrown Highway", "Заросла траса", "Carretera invadida", "Otla Kaplı Yol", "Rodovia Invadida"], "Тихая поляна": ["Quiet Glade", "Тиха галявина", "Claro tranquilo", "Sessiz Açıklık", "Clareira Tranquila"], "Старый ветряк": ["Old Windmill", "Старий вітряк", "Viejo molino", "Eski Yel Değirmeni", "Velho Moinho"], "Сырые овраги": ["Damp Ravines", "Сирі яри", "Barrancos húmedos", "Nemli Yarlar", "Ravinas Úmidas"], "Ржавая роща": ["Rusted Grove", "Іржавий гай", "Arboleda oxidada", "Paslı Koru", "Bosque Enferrujado"], "Склепы энергопийц": ["Crypts of the Energy Leeches", "Склепи енергопивців", "Criptas de los chupaenergía", "Enerji Emicilerin Mahzenleri", "Criptas dos Sugadores de Energia"], "Каменный круг": ["Stone Circle", "Кам'яне коло", "Círculo de piedra", "Taş Çember", "Círculo de Pedra"], "Око бездны": ["Eye of the Abyss", "Око безодні", "Ojo del abismo", "Uçurumun Gözü", "Olho do Abismo"], "Чёрный утёс": ["Black Cliff", "Чорна скеля", "Acantilado negro", "Kara Kayalık", "Penhasco Negro"], "Преддверие трона": ["Throne Approach", "Переддвер'я трону", "Antesala del trono", "Taht Eşiği", "Antessala do Trono"], "Лоу-спот": ["Low spot", "Лоу-спот", "Spot bajo", "Düşük spot", "Spot baixo"], "Мид-спот": ["Mid spot", "Мід-спот", "Spot medio", "Orta spot", "Spot médio"], "Топ-спот": ["Top spot", "Топ-спот", "Spot alto", "Yüksek spot", "Spot alto"], "пачки по {n}": ["packs of {n}", "зграї по {n}", "grupos de {n}", "{n} canavarlık sürüler", "grupos de {n}"], "сами не нападают": ["don't attack first", "самі не нападають", "no atacan primero", "kendileri saldırmaz", "não atacam primeiro"], "бросаются, если подойти близко": ["charge if you get close", "кидаються, якщо підійти близько", "atacan si te acercas", "yaklaşırsan saldırır", "atacam se você chegar perto"], "Споты": ["Spots", "Споти", "Spots", "Spotlar", "Spots"], "Заросший Шагоход": ["Overgrown Walker", "Зарослий Крокохід", "Caminante enmalezado", "Sarmaşıklı Yürüteç", "Andador Coberto de Mato"], "Мшистый Краулер": ["Mossy Crawler", "Мохастий Краулер", "Reptador musgoso", "Yosunlu Sürüngen", "Rastejador Musgoso"], "Луговой Дрон": ["Meadow Drone", "Луговий Дрон", "Dron de pradera", "Çayır Drone'u", "Drone do Prado"], "Ветряной Страж": ["Wind Guardian", "Вітряний Вартовий", "Guardián del viento", "Rüzgâr Muhafızı", "Guardião do Vento"], "Овражный Шагоход": ["Ravine Walker", "Яружний Крокохід", "Caminante de barranco", "Yar Yürüteci", "Andador da Ravina"], "Сырой Краулер": ["Damp Crawler", "Сирий Краулер", "Reptador húmedo", "Nemli Sürüngen", "Rastejador Úmido"], "Ржавый Дрон": ["Rusty Drone", "Іржавий Дрон", "Dron oxidado", "Paslı Drone", "Drone Enferrujado"], "Лесной Страж": ["Forest Guardian", "Лісовий Вартовий", "Guardián del bosque", "Orman Muhafızı", "Guardião da Floresta"], "Гнилой Шагоход": ["Rotten Walker", "Гнилий Крокохід", "Caminante podrido", "Çürük Yürüteç", "Andador Podre"], "Склепный Краулер": ["Crypt Crawler", "Склепний Краулер", "Reptador de cripta", "Mahzen Sürüngeni", "Rastejador da Cripta"], "Мертвенный Дрон": ["Deathly Drone", "Мертвотний Дрон", "Dron mortecino", "Cansız Drone", "Drone Mortiço"], "Каменный Страж": ["Stone Guardian", "Кам'яний Вартовий", "Guardián de piedra", "Taş Muhafız", "Guardião de Pedra"], "Рунный Шагоход": ["Rune Walker", "Рунний Крокохід", "Caminante rúnico", "Runik Yürüteç", "Andador Rúnico"], "Бездонный Краулер": ["Abyssal Crawler", "Бездонний Краулер", "Reptador abisal", "Dipsiz Sürüngen", "Rastejador Abissal"], "Пепельный Дрон": ["Ashen Drone", "Попелястий Дрон", "Dron ceniciento", "Kül Drone'u", "Drone Cinzento"], "Чёрный Страж": ["Black Guardian", "Чорний Вартовий", "Guardián negro", "Kara Muhafız", "Guardião Negro"], "Утёсный Шагоход": ["Cliff Walker", "Скелястий Крокохід", "Caminante del acantilado", "Kayalık Yürüteci", "Andador do Penhasco"], "Тронный Краулер": ["Throne Crawler", "Тронний Краулер", "Reptador del trono", "Taht Sürüngeni", "Rastejador do Trono"], "Венценосный Дрон": ["Crowned Drone", "Вінценосний Дрон", "Dron coronado", "Taçlı Drone", "Drone Coroado"], "Владычий Страж": ["Overlord's Guardian", "Володарів Вартовий", "Guardián del Señor", "Hükümdar Muhafızı", "Guardião do Senhor"]});   // Мир: локация, края, споты и монстры
+Object.assign(I18N, {"Железный Наместник повержен! Добычу получили пилотов: {n}.": ["Iron Viceroy is defeated! Pilots who got loot: {n}.", "Залізного Намісника переможено! Здобич отримали пілотів: {n}.", "¡Virrey de Hierro derrotado! Pilotos con botín: {n}.", "Demir Vali yenildi! Ganimet alan pilot: {n}.", "Vice-rei de Ferro derrotado! Pilotos com saque: {n}."], "Железный Наместник вернулся на Трон Владыки": ["Iron Viceroy has returned to the Overlord's Throne", "Залізний Намісник повернувся на Трон Володаря", "El Virrey de Hierro ha vuelto al Trono del Señor", "Demir Vali Hükümdarın Tahtı'na döndü", "O Vice-rei de Ferro voltou ao Trono do Senhor"], "Железный Наместник повержен — добыча твоя": ["Iron Viceroy is defeated — the loot is yours", "Залізного Намісника переможено — здобич твоя", "Virrey de Hierro derrotado: el botín es tuyo", "Demir Vali yenildi — ganimet senin", "Vice-rei de Ferro derrotado — o saque é seu"], "Железный Наместник": ["Iron Viceroy", "Залізний Намісник", "Virrey de Hierro", "Demir Vali", "Vice-rei de Ferro"], "бить лучше группой: добыча и опыт — каждому, кто снёс {n}% прочности": ["better fought in a group: loot and XP for everyone who dealt {n}% of its hull", "краще бити групою: здобич і досвід — кожному, хто зніс {n}% міцності", "mejor en grupo: botín y experiencia para todos los que quitaron {n}% de su casco", "grupla dövüşmek daha iyi: gövdesinin %{n}'ini götüren herkese ganimet ve deneyim", "melhor em grupo: saque e experiência para todos que tiraram {n}% do casco"], "На троне": ["On the throne", "На троні", "En el trono", "Tahtta", "No trono"], "Вернётся через": ["Returns in", "Повернеться через", "Vuelve en", "Dönüşüne kalan:", "Volta em"], "Удар скипетром!": ["Scepter Slam!", "Удар скіпетром!", "¡Golpe de cetro!", "Asa Darbesi!", "Golpe de cetro!"], "Кара трона!": ["Throne's Judgment!", "Кара трону!", "¡Castigo del trono!", "Tahtın Cezası!", "Castigo do trono!"], "Вернуть босса": ["Bring the boss back", "Повернути боса", "Traer al jefe", "Patronu geri getir", "Trazer o chefe de volta"], "Босс трона вернулся": ["The throne boss is back", "Бос трону повернувся", "El jefe del trono ha vuelto", "Taht patronu geri döndü", "O chefe do trono voltou"]});   // Мир: босс трона
+Object.assign(I18N, {"Монета удачи": ["Lucky Coin", "Монета удачі", "Moneda de la suerte", "Şans Parası", "Moeda da Sorte"], "Монета с зубчатым краем из казны Владыки: кто носит её в корпусе, бьёт вернее": ["A cog-edged coin from the Overlord's treasury: whoever carries it in their hull strikes truer", "Монета з зубчастим краєм зі скарбниці Володаря: хто носить її в корпусі, б'є влучніше", "Moneda de borde dentado del tesoro del Señor: quien la lleva en el casco golpea con más acierto", "Hükümdarın hazinesinden dişli kenarlı bir para: onu gövdesinde taşıyan daha isabetli vurur", "Moeda de borda dentada do tesouro do Senhor: quem a leva no casco acerta com mais precisão"], "Чертёж Стража": ["Guardian blueprint", "Креслення Вартового", "Plano del Guardián", "Muhafız planı", "Projeto do Guardião"], "Чертёж Жнеца": ["Reaper blueprint", "Креслення Женця", "Plano del Segador", "Biçici planı", "Projeto do Ceifador"], "Чертёж Снайпера": ["Sniper blueprint", "Креслення Снайпера", "Plano del Francotirador", "Keskin nişancı planı", "Projeto do Atirador"], "Чертёж Техноманта": ["Technomancer blueprint", "Креслення Техноманта", "Plano del Tecnomante", "Teknomant planı", "Projeto do Tecnomante"], "Чертёж Призрака": ["Ghost blueprint", "Креслення Привида", "Plano del Espectro", "Hayalet planı", "Projeto do Espectro"], "Чертёж Глифоносца": ["Glyphbearer blueprint", "Креслення Гліфоносця", "Plano del Portaglifos", "Glif Taşıyıcı planı", "Projeto do Portador de glifos"], "Чертёж Ремонтника": ["Mechanic blueprint", "Креслення Ремонтника", "Plano del Mecánico", "Tamirci planı", "Projeto do Mecânico"], "Кузнец соберёт по нему любую вещь сета «Цитадель» без осколков": ["The Blacksmith will craft any item of the «Citadel» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Цитадель» без уламків", "El Herrero fabricará con él cualquier pieza del set «Ciudadela» sin fragmentos", "Demirci bununla «Kale» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Cidadela» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Жатва» без осколков": ["The Blacksmith will craft any item of the «Harvest» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Жнива» без уламків", "El Herrero fabricará con él cualquier pieza del set «Cosecha» sin fragmentos", "Demirci bununla «Hasat» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Colheita» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Ястреб» без осколков": ["The Blacksmith will craft any item of the «Hawk» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Яструб» без уламків", "El Herrero fabricará con él cualquier pieza del set «Halcón» sin fragmentos", "Demirci bununla «Şahin» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Falcão» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Сингулярность» без осколков": ["The Blacksmith will craft any item of the «Singularity» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Сингулярність» без уламків", "El Herrero fabricará con él cualquier pieza del set «Singularidad» sin fragmentos", "Demirci bununla «Tekillik» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Singularidade» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Фантом» без осколков": ["The Blacksmith will craft any item of the «Phantom» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Фантом» без уламків", "El Herrero fabricará con él cualquier pieza del set «Fantasma» sin fragmentos", "Demirci bununla «Hayalet» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Fantasma» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Архонт» без осколков": ["The Blacksmith will craft any item of the «Archon» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Архонт» без уламків", "El Herrero fabricará con él cualquier pieza del set «Arconte» sin fragmentos", "Demirci bununla «Arkon» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Arconte» sem fragmentos"], "Кузнец соберёт по нему любую вещь сета «Ковчег» без осколков": ["The Blacksmith will craft any item of the «Ark» set from it, no shards needed", "Коваль збере за ним будь-яку річ сету «Ковчег» без уламків", "El Herrero fabricará con él cualquier pieza del set «Arca» sin fragmentos", "Demirci bununla «Gemi» setinin her eşyasını parçasız üretir", "O Ferreiro fará com ele qualquer peça do conjunto «Arca» sem fragmentos"], "падает в Мире": ["drops in the World", "падає у Світі", "cae en el Mundo", "Dünya'da düşer", "cai no Mundo"], "по нему Кузнец соберёт вещь сета без осколков": ["the Blacksmith will craft a set item from it, no shards needed", "за ним Коваль збере річ сету без уламків", "con él el Herrero fabricará una pieza del set sin fragmentos", "Demirci bununla parçasız bir set eşyası üretir", "com ele o Ferreiro fará uma peça do conjunto sem fragmentos"], "Монета удачи — сдай её в Кодекс → «Самоцветы»": ["Lucky Coin — turn it in to the Codex → «Gems»", "Монета удачі — здай її в Кодекс → «Самоцвіти»", "Moneda de la suerte — entrégala en el Códice → «Gemas»", "Şans Parası — onu Kodeks → «Mücevherler» bölümüne ver", "Moeda da Sorte — entregue-a no Códex → «Gemas»"], "нашёл в Мире": ["found in the World", "знайшов у Світі", "encontró en el Mundo", "Dünya'da buldu", "encontrou no Mundo"], "Собираются из Осколков или по Чертежу класса. Осколки падают с врагов от {n} уровня, чертежи — в Мире. Вещи сильнее Звёздного поколения и дают бонус сета.": ["Crafted from Shards or from a class Blueprint. Shards drop from enemies from level {n}, blueprints drop in the World. Stronger than Stellar gear and grant a set bonus.", "Збираються з Уламків або за Кресленням класу. Уламки падають з ворогів від {n} рівня, креслення — у Світі. Речі сильніші за Зоряне покоління й дають бонус сету.", "Se fabrican con Fragmentos o con un Plano de clase. Los fragmentos caen de enemigos desde el nivel {n}; los planos, en el Mundo. Más fuertes que la generación Estelar y dan bonus de set.", "Parçalardan veya sınıf Planı ile üretilir. Parçalar {n}. seviyeden itibaren düşmanlardan, planlar Dünya'da düşer. Yıldız neslinden güçlüdür ve set bonusu verir.", "Feitos com Fragmentos ou com um Projeto de classe. Fragmentos caem de inimigos a partir do nível {n}, projetos — no Mundo. Mais fortes que a geração Estelar e dão bônus de conjunto."], "Или по чертежу": ["Or with a blueprint", "Або за кресленням", "O con un plano", "Ya da planla", "Ou com um projeto"], "Собрать по чертежу": ["Craft with blueprint", "Зібрати за кресленням", "Fabricar con plano", "Planla üret", "Fazer com projeto"], "Нет чертежа": ["No blueprint", "Немає креслення", "Sin plano", "Plan yok", "Sem projeto"], "Его можно купить на маркете": ["You can buy it on the market", "Його можна купити на маркеті", "Se puede comprar en el mercado", "Pazardan satın alınabilir", "Pode ser comprado no mercado"], "Чертежи классов": ["Class blueprints", "Креслення класів", "Planos de clase", "Sınıf planları", "Projetos de classe"], "Чертежи": ["Blueprints", "Креслення", "Planos", "Planlar", "Projetos"], "Падают только в Мире, у каждого спота свои, — шанс каждого 0,003% с монстра. По чертежу Кузнец соберёт любую вещь сета этого класса без осколков: нужны только лом и ядра. Чертежи продаются и покупаются на маркете за GRAM.": ["They drop only in the World, each spot has its own — 0.003% per monster for each. With a blueprint the Blacksmith crafts any item of that class's set without shards: only scrap and cores are needed. Blueprints are sold and bought on the market for GRAM.", "Падають лише у Світі, на кожному споті свої, — шанс кожного 0,003% з монстра. За кресленням Коваль збере будь-яку річ сету цього класу без уламків: потрібні лише брухт і ядра. Креслення продаються й купуються на маркеті за GRAM.", "Caen solo en el Mundo, cada spot tiene los suyos: 0,003% por monstruo cada uno. Con un plano el Herrero fabrica cualquier pieza del set de esa clase sin fragmentos: solo hacen falta chatarra y núcleos. Los planos se venden y se compran en el mercado por GRAM.", "Yalnızca Dünya'da düşer, her spotun kendi planları vardır — her biri canavar başına %0,003. Planla Demirci o sınıfın setinden herhangi bir eşyayı parçasız üretir: yalnızca hurda ve çekirdek gerekir. Planlar pazarda GRAM karşılığında alınıp satılır.", "Caem só no Mundo, cada spot tem os seus — 0,003% por monstro cada. Com um projeto o Ferreiro faz qualquer peça do conjunto dessa classe sem fragmentos: só são necessários sucata e núcleos. Projetos são vendidos e comprados no mercado por GRAM."], "Только в Мире · 0,003% с монстра, с Наместника чаще": ["World only · 0.003% per monster, more often from the Viceroy", "Лише у Світі · 0,003% з монстра, з Намісника частіше", "Solo en el Mundo · 0,003% por monstruo, más a menudo del Virrey", "Yalnızca Dünya'da · canavar başına %0,003, Vali'den daha sık", "Só no Mundo · 0,003% por monstro, mais vezes do Vice-rei"], "Монета удачи падает только в Мире, с любого монстра, и сдаётся рядом с самоцветами — до {n} штук. Её пороги тоже складываются.": ["The Lucky Coin drops only in the World, from any monster, and is turned in next to the gems — up to {n}. Its thresholds stack too.", "Монета удачі падає лише у Світі, з будь-якого монстра, і здається поруч із самоцвітами — до {n} штук. Її пороги теж складаються.", "La Moneda de la suerte cae solo en el Mundo, de cualquier monstruo, y se entrega junto a las gemas: hasta {n}. Sus umbrales también se suman.", "Şans Parası yalnızca Dünya'da, herhangi bir canavardan düşer ve mücevherlerin yanında verilir — en fazla {n} adet. Eşikleri de toplanır.", "A Moeda da Sorte cai só no Mundo, de qualquer monstro, e é entregue junto às gemas — até {n}. Seus limiares também se somam."], "Сдать можно только монеты, учтённые сервером: выпавшие в Мире или купленные на маркете": ["Only server-registered coins can be turned in: ones dropped in the World or bought on the market", "Здати можна лише монети, враховані сервером: ті, що випали у Світі або куплені на маркеті", "Solo se pueden entregar monedas registradas por el servidor: las que caen en el Mundo o compradas en el mercado", "Yalnızca sunucuda kayıtlı paralar verilebilir: Dünya'da düşenler veya pazardan alınanlar", "Só é possível entregar moedas registradas pelo servidor: as que caem no Mundo ou compradas no mercado"], "Нет учтённых монет: сдать можно только выпавшие в Мире или купленные на маркете": ["No registered coins: only ones dropped in the World or bought on the market can be turned in", "Немає врахованих монет: здати можна лише ті, що випали у Світі або куплені на маркеті", "No hay monedas registradas: solo se pueden entregar las que caen en el Mundo o compradas en el mercado", "Kayıtlı para yok: yalnızca Dünya'da düşenler veya pazardan alınanlar verilebilir", "Nenhuma moeda registrada: só é possível entregar as que caem no Mundo ou compradas no mercado"], "Нет учтённого чертежа: он должен выпасть в Мире или быть куплен на маркете": ["No registered blueprint: it must drop in the World or be bought on the market", "Немає врахованого креслення: воно має випасти у Світі або бути купленим на маркеті", "No hay plano registrado: debe caer en el Mundo o comprarse en el mercado", "Kayıtlı plan yok: Dünya'da düşmeli veya pazardan alınmalı", "Nenhum projeto registrado: ele deve cair no Mundo ou ser comprado no mercado"], "Учтённых чертежей только {n}: остальные нельзя продать за GRAM": ["Only {n} blueprints are registered: the rest can't be sold for GRAM", "Врахованих креслень лише {n}: решту не можна продати за GRAM", "Solo hay {n} planos registrados: el resto no se puede vender por GRAM", "Yalnızca {n} plan kayıtlı: kalanlar GRAM karşılığı satılamaz", "Só {n} projetos estão registrados: o resto não pode ser vendido por GRAM"], "Учтённых монет удачи только {n}: остальные нельзя продать за GRAM": ["Only {n} Lucky Coins are registered: the rest can't be sold for GRAM", "Врахованих монет удачі лише {n}: решту не можна продати за GRAM", "Solo hay {n} monedas de la suerte registradas: el resto no se puede vender por GRAM", "Yalnızca {n} Şans Parası kayıtlı: kalanlar GRAM karşılığı satılamaz", "Só {n} moedas da sorte estão registradas: o resto não pode ser vendido por GRAM"], "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы и чертежи с мобов, руны, дронов, артефакты, крылья и плащи": ["Only gear, spheres, shards, gems and blueprints from monsters, runes, drones, artifacts, wings and cloaks can be sold for GRAM", "За GRAM можна продавати лише спорядження, сфери, уламки, самоцвіти й креслення з мобів, руни, дронів, артефакти, крила та плащі", "Por GRAM solo se pueden vender equipo, esferas, fragmentos, gemas y planos de monstruos, runas, drones, artefactos, alas y capas", "GRAM karşılığında yalnızca ekipman, canavarlardan düşen küreler, parçalar, mücevherler ve planlar, rünler, dronlar, eserler, kanatlar ve pelerinler satılabilir", "Por GRAM só é possível vender equipamento, esferas, fragmentos, gemas e projetos de monstros, runas, drones, artefatos, asas e capas"]});
 // ===================== ЯЗЫКИ =====================
 // Интерфейс пишется по-русски, а здесь фразы подменяются на выбранный язык:
 // в тексте страницы, подсказках полей, уведомлениях и надписях на карте.
@@ -16755,17 +16901,18 @@ const W_TIERS = [
   {name:"Лоу-спот", pack:3, aggro:false, col:"#8FDB6A"},
   {name:"Мид-спот", pack:4, aggro:true, col:"#F2C14B"},
   {name:"Топ-спот", pack:5, aggro:true, col:"#FF6A5A"}];
+// bp — чьи чертежи классов падают на споте (шаг 3 Мира, как свитки классов в LIBERTY; зеркало items.WORLD_BP)
 const W_SPOTS = [
-  {id:"tract",  name:"Заросшая трасса",   tier:0, lo:40, hi:42, x:980,  y:660,  r:260, packs:5},
-  {id:"glade",  name:"Тихая поляна",      tier:0, lo:40, hi:42, x:1010, y:2120, r:260, packs:5},
-  {id:"mill",   name:"Старый ветряк",     tier:0, lo:43, hi:45, x:1800, y:1020, r:260, packs:5},
-  {id:"ravine", name:"Сырые овраги",      tier:0, lo:43, hi:45, x:1780, y:1960, r:260, packs:5},
-  {id:"grove",  name:"Ржавая роща",       tier:1, lo:46, hi:49, x:3200, y:820,  r:260, packs:4},
-  {id:"crypts", name:"Склепы энергопийц", tier:1, lo:49, hi:52, x:3950, y:2000, r:260, packs:4},
-  {id:"circle", name:"Каменный круг",     tier:1, lo:49, hi:52, x:4230, y:880,  r:290, packs:4},
-  {id:"eye",    name:"Око бездны",        tier:2, lo:53, hi:56, x:5680, y:720,  r:270, packs:4},
-  {id:"cliff",  name:"Чёрный утёс",       tier:2, lo:53, hi:56, x:5640, y:2100, r:270, packs:4},
-  {id:"gate",   name:"Преддверие трона",  tier:2, lo:57, hi:59, x:6230, y:1400, r:250, packs:4}];
+  {id:"tract",  name:"Заросшая трасса",   tier:0, lo:40, hi:42, x:980,  y:660,  r:260, packs:5, bp:["guard"]},
+  {id:"glade",  name:"Тихая поляна",      tier:0, lo:40, hi:42, x:1010, y:2120, r:260, packs:5, bp:["reaper"]},
+  {id:"mill",   name:"Старый ветряк",     tier:0, lo:43, hi:45, x:1800, y:1020, r:260, packs:5, bp:["sniper"]},
+  {id:"ravine", name:"Сырые овраги",      tier:0, lo:43, hi:45, x:1780, y:1960, r:260, packs:5, bp:["techno"]},
+  {id:"grove",  name:"Ржавая роща",       tier:1, lo:46, hi:49, x:3200, y:820,  r:260, packs:4, bp:["medic"]},
+  {id:"crypts", name:"Склепы энергопийц", tier:1, lo:49, hi:52, x:3950, y:2000, r:260, packs:4, bp:["glyph"]},
+  {id:"circle", name:"Каменный круг",     tier:1, lo:49, hi:52, x:4230, y:880,  r:290, packs:4, bp:["ghost"]},
+  {id:"eye",    name:"Око бездны",        tier:2, lo:53, hi:56, x:5680, y:720,  r:270, packs:4, bp:["guard", "reaper", "sniper"]},
+  {id:"cliff",  name:"Чёрный утёс",       tier:2, lo:53, hi:56, x:5640, y:2100, r:270, packs:4, bp:["techno", "medic"]},
+  {id:"gate",   name:"Преддверие трона",  tier:2, lo:57, hi:59, x:6230, y:1400, r:250, packs:4, bp:["glyph", "ghost"]}];
 const W_ZONES = {
   meadow:{name:"Луг", sub:"Лоу-споты · монстры 40–45 сами не нападают", amb:{tint:"rgba(190,255,140,.035)", kind:"dust", n:26, c:["#EAF7A6", "#BFE88A"]}},
   forest:{name:"Лес", sub:"Мид-споты · пачки бросаются, если подойти близко", amb:{tint:"rgba(40,120,80,.07)", kind:"mist", n:12, c:["#BFF0D0", "#8FD8B0"]}},
@@ -17340,7 +17487,7 @@ function wBusy(cx, cy){
 function wPackLabels(cx, cy, busy){
   const G = new Map(), sel = typeof lockedEnemy === "function" ? lockedEnemy() : null;
   for(const e of enemies){
-    if(e.dead || e.pack == null || !e.spot) continue;
+    if(e.dead || e.pack == null || !e.spot || e.throne) continue;             // у босса трона — своя подпись
     let g = G.get(e.pack);
     if(!g) G.set(e.pack, g = {top:e, bot:e, n:0, sx:0, x0:e.x, x1:e.x, sel:false});
     g.n++; g.sx += e.x;
@@ -17419,12 +17566,22 @@ function wMini(){
     const X = wx => x + (wx - vx)*s, Y = wy => y + (wy - vy)*s;
     for(const n of npcs){ ctx.fillStyle = "#9B7BFF"; circle(X(n.x), Y(n.y), 3.5); ctx.fill(); }
     ctx.fillStyle = "#E0694A";
-    for(const e of enemies) if(!e.dead && Math.abs(e.x - p.x) < 900 && Math.abs(e.y - p.y) < 900) ctx.fillRect(X(e.x) - 1, Y(e.y) - 1, 2.5, 2.5);
+    for(const e of enemies) if(!e.dead && !e.throne && Math.abs(e.x - p.x) < 900 && Math.abs(e.y - p.y) < 900) ctx.fillRect(X(e.x) - 1, Y(e.y) - 1, 2.5, 2.5);
+    if(typeof wtAlive === "function"){ const B0 = wtBoss(), bx = B0 && !B0.dead ? B0.x : WT.home.x, by = B0 && !B0.dead ? B0.y : WT.home.y;   // босс трона
+      ctx.fillStyle = wtAlive() ? "#F2C14B" : "#5A6470"; circle(X(bx), Y(by), 4); ctx.fill(); ctx.strokeStyle = "#1B232C"; ctx.lineWidth = 1; ctx.stroke(); }
     if(typeof NET !== "undefined"){ ctx.fillStyle = "#7BC98A"; for(const o of NET.others.values()){ circle(X(o.rx), Y(o.ry), 2.5); ctx.fill(); } }
     ctx.fillStyle = "#fff"; circle(X(p.x), Y(p.y), 3); ctx.fill();
     ctx.restore();
   }; }
 const wSpotHint = s => s.tier ? "бросаются, если подойти близко" : "сами не нападают";
+// чертежи классов с монстра этого типа: со всех спотов, где он стоит (вкладка «Карта» → монстры; бросает их сервер)
+function wBpRows(type){
+  const L = (NPCS[type] || {}).lvl, out = [];
+  for(const s of W_SPOTS) if(L >= s.lo && L <= s.hi) for(const c of s.bp) out.push({id:"bp_" + c, chance:P(BP_PCT), spot:s.name});
+  return out;
+}
+// строка карточки спота: чьи чертежи здесь падают (своего класса — золотом)
+const wSpotBp = s => `<small class="wsp-bp">${s.bp.map(c => `<i class="${c === S.cls ? "me" : ""}">${bpIcon("bp_" + c)}${ITEMS["bp_" + c].name}</i>`).join("")}</small>`;
 { const _rmW = renderMapScreen;
   renderMapScreen = function(){
     if(locKey !== WORLD.KEY) return _rmW();
@@ -17433,9 +17590,11 @@ const wSpotHint = s => s.tier ? "бросаются, если подойти б�
     WORLD.mapScroll = false;
     el.innerHTML = `<div class="ghead"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--faction)" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg><h1>Карта</h1><span class="maploc">${LOCS[WORLD.KEY].name} · врагов: ${alive}</span></div>
       <section class="mapbox"><div class="wmap"><canvas id="mapCv"></canvas></div><div class="maplegend"><span><i style="background:#7BC98A"></i>Ты</span><span><i style="background:#E0694A"></i>Враги</span><span><i style="background:#F2C14B"></i>Портал</span>${typeof NET !== "undefined" && NET.others.size ? `<span><i style="background:#5FD4E8"></i>Игроки</span>` : ""}</div></section>
+      <h3 class="maph">Босс</h3>
+      <div class="wspots"><div class="wspot wt-card" style="--c:#F2C14B"><b>${NPCS[WT.TYPE].name} · ${WT.LVL} ур.</b><small>Трон Владыки · бить лучше группой: добыча и опыт — каждому, кто снёс 1% прочности</small><small class="wt-left">${wtStatus()}</small>${window.NET_ADMIN ? `<button type="button" class="btn link wt-res" data-wtres>Вернуть босса</button>` : ""}</div></div>
       <h3 class="maph">Споты</h3>
       <div class="wspots">${W_SPOTS.map(s => { const T0 = W_TIERS[s.tier];
-        return `<div class="wspot" style="--c:${T0.col}"><b>${s.name}</b><small>${wSpotSub(s)} · ${wSpotHint(s)}</small></div>`; }).join("")}</div>
+        return `<div class="wspot" style="--c:${T0.col}"><b>${s.name}</b><small>${wSpotSub(s)} · ${wSpotHint(s)}</small>${wSpotBp(s)}</div>`; }).join("")}</div>
       <h3 class="maph">Монстры</h3>
       <div class="moblist">${types.map(mobCard).join("")}</div>`;
     drawMapCanvas();
@@ -17453,9 +17612,17 @@ const wSpotHint = s => s.tier ? "бросаются, если подойти б�
     for(const s of W_SPOTS){ const col = W_TIERS[s.tier].col;
       txt(T(s.name), X(s.x), Y(s.y - s.r*0.86) - 4, col, "700 10px Rubik, sans-serif");
       txt(s.lo + "–" + s.hi, X(s.x), Y(s.y) + 4, "#E4DED1", "700 10px Rubik, sans-serif"); }
-    txt(T("Трон Владыки"), X(WORLD.throne.x), Y(WORLD.throne.y + WORLD.throne.R) + 16, "#F2C14B", "700 10px Rubik, sans-serif");   // под кольцом: сверху — подпись соседнего спота
+    // трон — у правого края плана: подпись и время возвращения босса прижаты к краю, чтобы не обрезались
+    const wl = T(wtStatus()), ty = Y(WORLD.throne.y + WORLD.throne.R);
+    g.textAlign = "right";
+    txt(T("Трон Владыки"), w - 6, ty + 16, "#F2C14B", "700 10px Rubik, sans-serif");   // под кольцом: сверху — подпись соседнего спота
+    txt(wl, w - 6, ty + 29, wtAlive() ? "#FF8A6A" : "#C9D1D8", "9px Rubik, sans-serif");
+    g.textAlign = "center";
+    const card = document.querySelector("#scrMap .wt-left"); if(card && card._s !== wl){ card._s = wl; card.textContent = wtStatus(); }
     const dot = (x, y, c, r) => { g.fillStyle = c; g.beginPath(); g.arc(X(x), Y(y), r, 0, Math.PI*2); g.fill(); };
-    for(const e of enemies) if(!e.dead) dot(e.x, e.y, mapOpenType === e.type ? "#FFE08A" : "#E0694A", mapOpenType === e.type ? 2.4 : 1.4);
+    for(const e of enemies) if(!e.dead && !e.throne) dot(e.x, e.y, mapOpenType === e.type ? "#FFE08A" : "#E0694A", mapOpenType === e.type ? 2.4 : 1.4);
+    { const B0 = wtBoss(), bx = B0 && !B0.dead ? B0.x : WT.home.x, by = B0 && !B0.dead ? B0.y : WT.home.y;   // босс трона: золотой — жив, серый — ждём
+      dot(bx, by, wtAlive() ? "#F2C14B" : "#5A6470", 4.2); g.strokeStyle = "#1B232C"; g.lineWidth = 1.2; g.beginPath(); g.arc(X(bx), Y(by), 4.2, 0, Math.PI*2); g.stroke(); }
     for(const n of npcs) dot(n.x, n.y, "#F2C14B", 3.4);
     if(typeof NET !== "undefined") for(const o of NET.others.values()) dot(o.rx, o.ry, "#5FD4E8", 2.6);
     dot(p.x, p.y, "#7BC98A", 4); g.strokeStyle = "#fff"; g.lineWidth = 1; g.beginPath(); g.arc(X(p.x), Y(p.y), 5.5, 0, Math.PI*2); g.stroke();
@@ -17490,6 +17657,273 @@ setInterval(() => {
     if(p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e)) nameText(T("Уровень") + " " + k.lvl, e.x, e.y - k.r*MOB_K - 34, wDanger(k.lvl), W_F.lvl);
     return r;
   }; }
+// ===================== МИР: БОСС ТРОНА «ЖЕЛЕЗНЫЙ НАМЕСТНИК» =====================
+// Шаг 2 Мира (как Владыка Мира в LIBERTY, патч 17 октября). Пока Владыка Ржавчины спит в своём логове, его трон
+// в Мире стережёт Железный Наместник: 60 ур., стоит на каменной площади за кольцом колонн, проход — с запада.
+// Общий моб, как все монстры Мира: прочность и смерть считает сервер (worldthrone.py), ведёт босса тот, за кем он гонится.
+// Добычу и опыт получает каждый, кто снёс хотя бы 1% прочности: сервер присылает их в mdie.share — для каждого
+// из них босс «убит своими руками» (опыт, лом, заявка на ценный дроп). Возвращается через 1–2 часа: сколько осталось —
+// во вкладке «Карта», на мини-карте, над пустым троном и в портале ангара.
+// Удары по площади идут по часам, поэтому одинаковы у всех телефонов:
+//   «Удар скипетром» — каждые 9 с (ниже 40% прочности — каждые 6 с) кольцо 230 px вокруг босса; за 1,2 с до удара
+//   оно наливается красным, скипетр поднимается — успей выйти (25% прочности);
+//   «Кара трона» — ниже 50% прочности каждые 7 с под ногами пилота рядом с боссом круг 95 px: 1,4 с, чтобы сойти (20%).
+const WT = {TYPE:"wt60", LVL:60, HP:500000, IDX:168, AGGRO:300, until:0,                  // как mobguard.THRONE_* и worldthrone.IDX
+  home:{x:WORLD.throne.x + 40, y:WORLD.throne.y + 10},
+  wave:{R:230, TELE:1.2, PCT:0.25, per:9000, rage:6000, slot:-1, armed:false, flash:0, k:0, on:false, x:0, y:0},
+  doom:{R:95, TELE:1.4, PCT:0.2, per:7000, slot:-1, list:[]}};
+WT.spot = {id:"throne", name:"Трон Владыки", tier:2, lo:WT.LVL, hi:WT.LVL, x:WORLD.throne.x, y:WORLD.throne.y, r:WORLD.throne.R - 40, packs:1};
+{ const k = WT.LVL - 1;       // опыт — как progress.mob_exp(60, boss=True): ×15 до округления; лом и материалы — как у главаря
+  NPCS[WT.TYPE] = {name:"Железный Наместник", lvl:WT.LVL, base:"war_walker", world:true, boss:true, throneBoss:true, gearLv:WORLD.GEAR_LV,
+    hp:WT.HP, atk:600, def:30, exp:Math.round((5 + 3*k + 0.2*k*k)*15), scrap:[(WT.LVL + 1)*10, (2*WT.LVL + 4)*10],
+    color:"#F2C14B", r:46, speed:72, range:120, ranged:false,
+    loot:Object.fromEntries(Object.entries(NPCS.war_walker.loot).map(([id, c]) => [id, +(c*0.6).toFixed(3)]))};
+}
+const wtBoss = () => { if(locKey !== WORLD.KEY) return null; const e = enemies[WT.IDX]; return e && e.throne ? e : null; };
+const wtAlive = () => !(WT.until > Date.now());
+function wtLeftText(ms){
+  const s = Math.max(0, Math.ceil(ms/1000)), h = Math.floor(s/3600), m = Math.floor(s%3600/60), sc = s%60;
+  return h ? `${h} ч ${m} мин` : m >= 10 ? `${m} мин` : m ? `${m} мин ${sc} сек` : `${sc} сек`;   // секунды — в последние 10 минут
+}
+const wtStatus = () => wtAlive() ? "На троне" : "Вернётся через " + wtLeftText(WT.until - Date.now());
+// босс встаёт на площади последним после монстров спотов: его номер у всех телефонов — WT.IDX
+{ const _blT = buildLoc;
+  buildLoc = function(key){
+    const r = _blT(key);
+    if(key !== WORLD.KEY) return r;
+    const k = NPCS[WT.TYPE], h = WT.home, dead = !wtAlive();
+    enemies.push({type:WT.TYPE, x:h.x, y:h.y, hx:h.x, hy:h.y, tx:h.x, ty:h.y, hp:k.hp, max:k.hp, cd:0, ang:Math.PI, chase:false, dead,
+      respawn:dead ? Infinity : 0, flash:0, wanderT:0, lunge:0, pack:WORLD.PACK0 + 999, spot:WT.spot, throne:true, idx:enemies.length});
+    WT.wave.slot = WT.doom.slot = -1; WT.wave.on = false; WT.doom.list = [];
+    return r;
+  }; }
+// погибший босс: жив ли он — решает сервер (wt, mdie, mstate); без связи — не раньше срока и не чаще раза в 5 минут
+function wtSync(){
+  const b = wtBoss(); if(!b) return;
+  if(!wtAlive()){ if(!b.dead){ b.dead = true; b.chase = false; b.pend = 0; b.owner = 0; } b.respawn = Infinity; }
+  else if(b.dead && b.respawn === Infinity && typeof shOn === "function" && shOn()) shHome(b);
+}
+setInterval(() => {
+  const b = wtBoss(); if(!b || !b.dead) return;
+  if(!shOn() && b.respawn !== Infinity && b.respawn < now + 300) b.respawn = now + Math.max(300, (WT.until - Date.now())/1000);
+}, 500);
+// поведение: бросается на пилота, зашедшего на площадь; не оглушается; пилот ушёл с площади — возвращается к трону
+{ const _ueT = updateEnemies;
+  updateEnemies = function(dt, st){
+    const b = wtBoss(), me = typeof NET !== "undefined" ? NET.id : 0, T0 = WORLD.throne;
+    if(b && !b.dead){
+      b.stun = 0;
+      if(b.pend && shOn() && now - b.pend > 0.9) b.pend = now;             // ждём решения сервера, а не «убиваем у себя»
+      if(!b.chase && (!b.owner || b.owner === me) && p && !p.dead && Math.hypot(p.x - b.x, p.y - b.y) < WT.AGGRO &&
+         Math.hypot(p.x - T0.x, p.y - T0.y) < T0.R + 40) b.chase = true;
+    }
+    const r = _ueT(dt, st);
+    if(b && !b.dead && b.chase && p && (p.dead || Math.hypot(p.x - T0.x, p.y - T0.y) > T0.R + 140)) b.chase = false;
+    wtAbilities(dt);
+    return r;
+  }; }
+function wtAbilities(dt){
+  const b = wtBoss(), W0 = WT.wave, D = WT.doom;
+  const on = !!(b && !b.dead && (b.chase || b.owner || b.hp < b.max) && p && Math.hypot(p.x - b.x, p.y - b.y) < 900);
+  if(W0.flash > 0) W0.flash -= dt;
+  if(!on){ W0.on = false; W0.armed = false; W0.slot = -1; D.list = []; return; }
+  const t = Date.now(), per = b.hp < b.max*0.4 ? W0.rage : W0.per, slot = Math.floor(t/per), tl = (per - t % per)/1000;
+  W0.on = true; W0.x = b.x; W0.y = b.y; W0.k = tl <= W0.TELE ? 1 - tl/W0.TELE : 0;
+  if(W0.slot !== slot){                                            // начался новый круг: удар прошлого — уже был
+    if(W0.slot >= 0 && W0.armed){
+      W0.flash = 0.4;
+      if(!p.dead && ((p.x - b.x)/W0.R)**2 + ((p.y - b.y)/(W0.R*0.6))**2 < 1){
+        p.inv = 0; hurtPlayer(Math.max(1, Math.round(stat().maxhp*W0.PCT)), NPCS[WT.TYPE].name, null);
+        addText(p.x, p.y - 50, "Удар скипетром!", "#FFB347"); Sfx.play("hit");
+      }
+    }
+    W0.slot = slot; W0.armed = false;
+  }
+  if(tl <= W0.TELE) W0.armed = true;                               // удар засчитывается, только если круг успел появиться
+  if(b.hp < b.max*0.5 && !p.dead){                                 // «Кара трона»: свой круг — под своими ногами
+    const ts = t + D.per/2, ds = Math.floor(ts/D.per);
+    if(D.slot !== ds){ D.slot = ds; if(Math.hypot(p.x - b.x, p.y - b.y) < 520) D.list.push({x:p.x, y:p.y, at:now + D.TELE, dur:D.TELE}); }
+  }
+  for(const c of D.list) if(!c.done && now >= c.at){
+    c.done = true;
+    if(p && !p.dead && ((p.x - c.x)/D.R)**2 + ((p.y - c.y)/(D.R*0.6))**2 < 1){
+      p.inv = 0; hurtPlayer(Math.max(1, Math.round(stat().maxhp*D.PCT)), NPCS[WT.TYPE].name, null); addText(p.x, p.y - 50, "Кара трона!", "#FF6A5A");
+    }
+  }
+  D.list = D.list.filter(c => now < c.at + 0.35);
+}
+// ---- вид: высокий парадный шагоход в багровом плаще, зубчатая корона, щит с гербом трона и скипетр-булава.
+// Пока по площади наливается круг удара, скипетр поднимается над головой, на ударе — опускается. Ниже 40% — ярость:
+// глаза и ядро краснеют, из-под брони летят искры ----
+function drawIronViceroy(x, y, t, o, g = ctx){                     // g — свой холст (картинка для страницы обновлений)
+  const bob = Math.sin(t*2)*2.5, pulse = (Math.sin(t*4) + 1)/2, rage = o.hpk < 0.4;
+  const glow = rage ? "#FF5A3A" : "#F2C14B", gold = "#B9862E";
+  g.save(); g.translate(x, y);
+  g.fillStyle = "rgba(0,0,0,.5)"; g.beginPath(); g.ellipse(0, 4, 82, 22, 0, 0, Math.PI*2); g.fill();
+  g.scale(o.face || 1, 1);
+  // плащ — за корпусом, колышется
+  const sw = Math.sin(t*1.6)*6;
+  g.fillStyle = "#4A1414"; g.beginPath(); g.moveTo(-36, -150 + bob); g.lineTo(36, -150 + bob); g.lineTo(56 + sw, -12); g.lineTo(-56 + sw*0.6, -12); g.closePath(); g.fill();
+  g.fillStyle = "#6E1F1F"; g.beginPath(); g.moveTo(-32, -150 + bob); g.lineTo(6, -150 + bob); g.lineTo(14 + sw, -12); g.lineTo(-50 + sw*0.6, -12); g.closePath(); g.fill();
+  g.strokeStyle = gold; g.lineWidth = 3; g.beginPath(); g.moveTo(-56 + sw*0.6, -12); g.lineTo(56 + sw, -12); g.stroke();
+  // ноги: шаг, когда идёт
+  for(const s of [-1, 1]){
+    const lift = o.moving ? Math.max(0, Math.sin(t*3.2 + (s > 0 ? Math.PI : 0)))*8 : 0;
+    g.fillStyle = "#23272E"; g.fillRect(s*22 - 12, -76 + bob*0.5, 24, 40);
+    g.fillStyle = "#3A3F47"; g.fillRect(s*22 - 13, -40 - lift, 26, 36);
+    g.fillStyle = gold; g.fillRect(s*22 - 13, -42 - lift, 26, 4);
+    g.fillStyle = "#1B1F25"; g.fillRect(s*22 - 17, -6 - lift, 34, 8);
+  }
+  g.translate(0, bob);
+  // таз, корпус и золотой шеврон
+  g.fillStyle = "#2A2E35"; g.beginPath(); g.moveTo(-38, -86); g.lineTo(38, -86); g.lineTo(28, -66); g.lineTo(-28, -66); g.closePath(); g.fill();
+  const grd = g.createLinearGradient(0, -156, 0, -82); grd.addColorStop(0, "#6C727D"); grd.addColorStop(1, "#2A2E35");
+  g.fillStyle = grd; g.beginPath(); g.moveTo(-42, -154); g.lineTo(42, -154); g.lineTo(32, -84); g.lineTo(-32, -84); g.closePath(); g.fill();
+  g.strokeStyle = "#11151A"; g.lineWidth = 3; g.stroke();
+  g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(-38, -150, 76, 5);
+  g.strokeStyle = gold; g.lineWidth = 3; g.beginPath(); g.moveTo(-36, -146); g.lineTo(0, -128); g.lineTo(36, -146); g.stroke();
+  for(let i = 0; i < 2; i++){ g.fillStyle = "#1A1E24"; g.fillRect(-24, -100 + i*8, 48, 3); }
+  // ядро
+  const cg = g.createRadialGradient(0, -112, 2, 0, -112, 20); cg.addColorStop(0, "#FFFFFF"); cg.addColorStop(.4, glow); cg.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = "#14181D"; g.beginPath(); g.arc(0, -112, 12, 0, Math.PI*2); g.fill();
+  g.fillStyle = cg; g.beginPath(); g.arc(0, -112, 9 + pulse*5, 0, Math.PI*2); g.fill();
+  // наплечники с шипами
+  for(const s of [-1, 1]){
+    g.fillStyle = "#4C5059"; g.beginPath(); g.ellipse(s*44, -144, 26, 18, 0, Math.PI, 0); g.closePath(); g.fill();
+    g.strokeStyle = gold; g.lineWidth = 2; g.stroke();
+    g.fillStyle = gold; for(const dx of [-12, 0, 12]){ g.beginPath(); g.moveTo(s*44 + dx - 4, -158); g.lineTo(s*44 + dx, -170 + Math.abs(dx)*0.4); g.lineTo(s*44 + dx + 4, -158); g.closePath(); g.fill(); }
+  }
+  // шлем, Т-образный визор, корона из пяти зубцов с камнем
+  g.fillStyle = "#1B1F25"; g.fillRect(-15, -186, 30, 34);
+  g.fillStyle = "#3A3F47"; g.fillRect(-13, -184, 26, 10);
+  g.globalAlpha = .75 + pulse*.25; g.fillStyle = glow; g.fillRect(-11, -172, 22, 4); g.fillRect(-2, -172, 4, 12); g.globalAlpha = 1;
+  g.fillStyle = gold; g.fillRect(-17, -192, 34, 7);
+  for(const [cx, h] of [[-15, 10], [-7, 14], [0, 18], [7, 14], [15, 10]]){ g.beginPath(); g.moveTo(cx - 3, -192); g.lineTo(cx, -192 - h); g.lineTo(cx + 3, -192); g.closePath(); g.fill(); }
+  g.fillStyle = rage ? "#FF5A3A" : "#5FD4E8"; g.fillRect(-2, -199, 4, 4);
+  // щит с гербом трона (три зубца, как на спинке трона)
+  g.fillStyle = "#3A3F47"; g.fillRect(-60, -142, 16, 40);
+  g.fillStyle = "#2A2E35"; g.beginPath(); g.moveTo(-86, -130); g.lineTo(-52, -130); g.lineTo(-52, -84); g.lineTo(-69, -68); g.lineTo(-86, -84); g.closePath(); g.fill();
+  g.strokeStyle = gold; g.lineWidth = 3; g.stroke();
+  g.fillStyle = gold; g.fillRect(-75, -110, 12, 14); g.fillRect(-78, -116, 4, 6); g.fillRect(-71, -120, 4, 10); g.fillRect(-64, -116, 4, 6);
+  g.fillStyle = "#8A2A2A"; g.fillRect(-72, -106, 6, 8);
+  // скипетр-булава: рука поднимает его, пока наливается круг удара, на ударе — вниз; в ближнем бою — короткий взмах
+  const ang = o.slam > 0 ? -0.3 + 0.25*o.slam : o.atk ? -1.25 : -0.3 - (o.raise || 0)*2.4 + Math.sin(t*1.3)*0.05;
+  g.save(); g.translate(48, -136); g.rotate(ang);
+  g.fillStyle = "#3A3F47"; g.fillRect(-7, -4, 14, 40);
+  g.fillStyle = "#23272E"; g.fillRect(-9, 32, 18, 12);
+  g.fillStyle = gold; g.fillRect(-3, 26, 6, 92);
+  g.fillStyle = "#6E5520"; g.fillRect(-3, 26, 2, 92);
+  g.fillStyle = gold; g.beginPath(); g.moveTo(-12, 112); g.lineTo(12, 112); g.lineTo(8, 124); g.lineTo(-8, 124); g.closePath(); g.fill();
+  const og = g.createRadialGradient(0, 132, 2, 0, 132, 18); og.addColorStop(0, "#FFFFFF"); og.addColorStop(.5, glow); og.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = "#14181D"; g.beginPath(); g.arc(0, 132, 10, 0, Math.PI*2); g.fill();
+  g.fillStyle = og; g.beginPath(); g.arc(0, 132, 8 + pulse*4 + (o.raise || 0)*6, 0, Math.PI*2); g.fill();
+  g.restore();
+  if(o.flash > 0){ g.globalAlpha = .5; g.fillStyle = "#fff"; g.beginPath(); g.ellipse(0, -112, 58, 80, 0, 0, Math.PI*2); g.fill(); g.globalAlpha = 1; }
+  if(rage){ g.save(); g.globalCompositeOperation = "lighter";
+    for(let i = 0; i < 6; i++){ const ph = (t*0.9 + i/6) % 1; g.globalAlpha = 1 - ph; g.fillStyle = i % 2 ? "#FF6A3A" : "#FFB070";
+      g.fillRect(Math.sin(i*2.1 + t)*34 - 1.5, -90 - ph*90, 3, 3); }
+    g.restore(); }
+  g.restore();
+}
+{ const _deT = drawEnemy;
+  drawEnemy = function(e, t){
+    const k = NPCS[e.type];
+    if(!k || !k.throneBoss) return _deT(e, t);
+    const fy = e.y + 40, rage = e.hp < e.max*0.4, pu = .55 + Math.sin(t*3)*.2;                 // ноги ниже центра: корпус закрывает круг столкновений
+    ctx.save(); ctx.globalAlpha = pu; ctx.strokeStyle = rage ? "#FF5A4A" : "#F2C14B"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(e.x, fy + 2, 92, 30, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+    if(p.target === e || (typeof lockedEnemy === "function" && lockedEnemy() === e)){
+      ctx.save(); ctx.strokeStyle = "rgba(224,105,74,.95)"; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.ellipse(e.x, fy + 2, 104, 36, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+    const W0 = WT.wave, face = Math.cos(e.ang) < 0 ? -1 : 1;
+    drawIronViceroy(e.x, fy, t, {atk:e.lunge > 0, hpk:e.hp/e.max, flash:e.flash, raise:W0.on ? W0.k : 0, slam:W0.flash > 0 ? W0.flash/0.4 : 0, face, moving:e.moving});
+    nameText("☠ " + T(k.name), e.x, fy - 228, rage ? "#FF8A6A" : "#F2C14B", "700 13px Rubik, sans-serif");
+    nameText(T("Уровень") + " " + k.lvl + (rage ? " · " + T("ярость") : ""), e.x, fy - 242, "#93A0AC", "10px Rubik, sans-serif");
+  }; }
+// круги ударов — на земле (пилоты и монстры поверх); над пустым троном — когда босс вернётся
+function wtDrawGround(t){
+  const W0 = WT.wave;
+  if(W0.on && (W0.k > 0 || W0.flash > 0)){
+    ctx.save();
+    if(W0.k > 0){
+      ctx.globalAlpha = .16 + W0.k*.26; ctx.fillStyle = "#FF3A2A"; ctx.beginPath(); ctx.ellipse(W0.x, W0.y, W0.R*W0.k, W0.R*W0.k*.6, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = .9; ctx.strokeStyle = "#F2C14B"; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ctx.lineDashOffset = -t*40;
+      ctx.beginPath(); ctx.ellipse(W0.x, W0.y, W0.R, W0.R*.6, 0, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(W0.flash > 0){
+      const f = Math.max(0, W0.flash/0.4), rr2 = W0.R*(1.12 - f*0.4);
+      ctx.globalAlpha = Math.min(1, f*1.6); ctx.strokeStyle = "#FFE08A"; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.ellipse(W0.x, W0.y, rr2, rr2*.6, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = "#FF8A4A";                                              // трещины от удара
+      for(let i = 0; i < 8; i++){ const a = i*Math.PI/4 + 0.3; ctx.beginPath(); ctx.moveTo(W0.x + Math.cos(a)*30, W0.y + Math.sin(a)*18);
+        ctx.lineTo(W0.x + Math.cos(a + .12)*W0.R*.55, W0.y + Math.sin(a + .12)*W0.R*.33); ctx.lineTo(W0.x + Math.cos(a)*W0.R*.85, W0.y + Math.sin(a)*W0.R*.51); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+  for(const c of WT.doom.list){
+    const k = Math.min(1, 1 - (c.at - now)/c.dur);
+    ctx.save(); ctx.fillStyle = `rgba(224,70,58,${now >= c.at ? .45 : .12 + k*.2})`; ctx.beginPath(); ctx.ellipse(c.x, c.y, WT.doom.R, WT.doom.R*.6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#FF4A3A"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(c.x, c.y, WT.doom.R*k, WT.doom.R*.6*k, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+  }
+}
+{ const _dlT = wDrawLive;
+  wDrawLive = function(cx, cy, t){ _dlT(cx, cy, t); wtDrawGround(t); }; }
+{ const _dtT = wDrawTop;
+  wDrawTop = function(t){
+    _dtT(t);
+    if(wtAlive()) return;
+    const x = WT.home.x, y = WT.home.y - 70, cx = window.camX || 0, cy = window.camY || 0;      // там, где стоит босс
+    if(x < cx - 160 || x > cx + vw + 160 || y < cy - 60 || y > cy + vh + 60) return;
+    nameText(T(NPCS[WT.TYPE].name), x, y, "#F2C14B", "700 13px Rubik, sans-serif");
+    nameText(T(wtStatus()), x, y + 15, "#C9D1D8", "11px Rubik, sans-serif");
+  }; }
+// камера у босса: чем ближе робот, тем сильнее кадр сдвигается к Наместнику — высокий босс целиком в кадре
+{ const _cfT = camFocus;
+  camFocus = function(){
+    const f = _cfT(), b = wtBoss();
+    if(f !== p || !b || b.dead || !p || p.dead) return f;
+    const d = Math.hypot(b.x - p.x, b.y - p.y), k = 0.38*Math.max(0, Math.min(1, 1 - (d - 260)/480));
+    return k > 0 ? {x:p.x + (b.x - p.x)*k, y:p.y + (b.y - 90 - p.y)*k} : p;
+  }; }
+// полоса прочности вверху экрана — когда босс рядом
+const wtBar = document.createElement("div"); wtBar.className = "wb-bar wt-bar"; wtBar.hidden = true;
+wtBar.innerHTML = `<b>Железный Наместник</b><div class="wb-hp"><i></i><span data-notr></span></div>`;
+document.getElementById("scrGame").append(wtBar);
+setInterval(() => {
+  const b = wtBoss(), on = !!(b && !b.dead && p && !p.dead && Math.hypot(p.x - b.x, p.y - b.y) < 900);
+  if(wtBar.hidden === on) wtBar.hidden = !on;
+  if(!on) return;
+  const k = Math.max(0, Math.min(1, b.hp/b.max));
+  wtBar.querySelector("i").style.width = (k*100).toFixed(1) + "%";
+  wtBar.querySelector("span").textContent = Math.max(0, Math.round(b.hp)).toLocaleString("ru-RU") + " / " + b.max.toLocaleString("ru-RU") + " · " + (k*100).toFixed(1) + "%";
+}, 250);
+// сервер: таймер возвращения (wt — всем, при входе и при гибели/возвращении), добыча каждому из mdie.share
+{ const _netT = onNetExtra;
+  onNetExtra = function(d){
+    if(d.t === "wt"){ WT.until = +d.until || 0; wtSync(); return; }
+    if(d.loc === WORLD.KEY && d.t === "mdie" && d.i === WT.IDX){
+      if(d.back > 0) WT.until = Date.now() + d.back*1000;
+      const mine = d.by === NET.id || (Array.isArray(d.share) && d.share.includes(NET.id));
+      if(mine){ d = {...d, by:NET.id}; toast("🏆 " + NPCS[WT.TYPE].name + " повержен — добыча твоя"); }
+    }
+    if(d.loc === WORLD.KEY && d.t === "mstate"){ const row = (d.dead || []).find(x => x[0] === WT.IDX); if(row) WT.until = Date.now() + row[1]*1000; }
+    const r = _netT(d);
+    if(d.loc === WORLD.KEY && (d.t === "mstate" || d.t === "mdie")) wtSync();
+    return r;
+  }; }
+// портал в ангаре: у Мира — жив ли босс трона
+{ const _rpT = renderPortal;
+  renderPortal = function(){
+    const r = _rpT();
+    const btn = body().querySelector(`[data-go="${WORLD.KEY}"]`), tx = btn && btn.parentElement.querySelector(".tx");
+    if(tx) tx.insertAdjacentHTML("beforeend", `<small class="wt-pt">⚔ ${NPCS[WT.TYPE].name} · ${wtStatus()}</small>`);
+    return r;
+  }; }
+// админ: вернуть босса сразу (проверка на сервере) — кнопка в карточке босса во вкладке «Карта»
+$("scrMap").addEventListener("click", e => {
+  if(!e.target.closest("[data-wtres]") || typeof NET === "undefined" || !NET.api) return;
+  NET.api("/api/wthrone", {respawn:1}).then(r => { if(r && r.ok){ WT.until = +r.until || 0; wtSync(); toast("Босс трона вернулся"); } });
+});
 // ---- перевод страницы ----
 const trOrig = new WeakMap(), trDone = new WeakMap();
 const skip = el => !el || el.closest("[data-notr],script,style,textarea");
