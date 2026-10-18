@@ -505,10 +505,11 @@ class Pages(unittest.TestCase):
     def test_patch_notes(self):
         clean = re.sub(r"<!--.*?-->", "", PATCHES, flags=re.S)
         patches = re.findall(r'<section\b[^>]*\bdata-patch="([^"]+)"[^>]*data-title="([^"]+)"', clean)
-        self.assertEqual(patches[0], ("2026-10-18-5", "Чертежи классов и Монета удачи"))       # самый свежий — первым
+        self.assertIn(("2026-10-18-5", "Чертежи классов и Монета удачи"), patches)                 # порядок патчей проверяет test_news
         self.assertIn('<li><a href="#p-1018-5"><time datetime="2026-10-18">18 октября 2026</time><span>Чертежи классов и Монета удачи</span></a></li>', PATCHES)
-        self.assertIn("<h1>Чертежи и Монета удачи</h1>", PATCHES)
         sec = PATCHES[PATCHES.index('id="p-1018-5"'):PATCHES.index("</section>", PATCHES.index('id="p-1018-5"'))]
+        self.assertEqual(sec.count('<span class="gem bp"'), 7)                                    # плитки чертежей и монеты — в патче
+        self.assertIn('aria-label="Монета удачи"', sec)
         names = {"guard": "Стража", "reaper": "Жнеца", "sniper": "Снайпера", "techno": "Техноманта", "ghost": "Призрака", "glyph": "Глифоносца", "medic": "Ремонтника"}
         a = GAME.index("const W_SPOTS = [")
         spot_names = dict(re.findall(r'\{id:"(\w+)",\s*name:"([^"]+)"', GAME[a:GAME.index("];", a)]))
