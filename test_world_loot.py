@@ -275,6 +275,9 @@ class ProcessKills(unittest.TestCase):
         async def count_loot_kill(s, uid, weight):
             return 0
 
+        async def dropup_mult(s, uid, cap):
+            return 1.0
+
         fake = {
             "progress": types.SimpleNamespace(cap_of=lambda s, u: a_val(50), add_kill=lambda *a, **k: a_val(50), mob_exp=lambda lv, boss=False: 1),
             "pvp": types.SimpleNamespace(mob_killed=a_none),
@@ -287,7 +290,7 @@ class ProcessKills(unittest.TestCase):
         session = types.SimpleNamespace(commit=a_none)
         with mock.patch.dict(sys.modules, fake), mock.patch.object(items, "random", rnd), \
                 mock.patch.object(items, "add_spheres", add_spheres), mock.patch.object(items, "mint_gear", mint_gear), \
-                mock.patch.object(items, "count_loot_kill", count_loot_kill):
+                mock.patch.object(items, "count_loot_kill", count_loot_kill), mock.patch.object(items, "dropup_mult", dropup_mult):
             asyncio.run(items.process_kills(session, 5, {"loc": LOC, "fac": None}, kills))
         return got
 

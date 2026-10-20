@@ -593,6 +593,43 @@ async def count_loot_kill(s, uid, weight):
     return (row[0] - weight) if row else 0
 
 
+# ---------- улучшение «Бонус к дропу» ----------
+# В игре: +0,1% к шансу дропа за уровень, до 300 уровней (+30%). Уровень хранится в сохранении (S.up.dropup),
+# которое присылает телефон, поэтому сервер его ограничивает: не выше 300 и не больше очков навыка,
+# которые можно получить к серверному уровню (3 за уровень + запас на очки из паков).
+DROPUP_MAX, DROPUP_PER = 300, 0.001
+DROPUP_PTS_SLACK = env_int("DROPUP_PTS_SLACK", 30)
+DROPUP_TTL = 60
+_dropup = {}                                    # tg_id -> (время, уровень из сохранения)
+
+
+def dropup_level(raw, cap):
+    """Уровень улучшения, который сервер признаёт: из сохранения, но не выше 300 и не выше очков к уровню cap."""
+    try:
+        lv = int(raw or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, min(lv, DROPUP_MAX, 3 * max(0, int(cap or 1) - 1) + DROPUP_PTS_SLACK))
+
+
+async def dropup_mult(s, uid, cap):
+    """Множитель ценного дропа от улучшения (1.0 … 1.3). Сохранение читается не чаще раза в минуту."""
+    hit = _dropup.get(uid)
+    if hit and time.time() - hit[0] < DROPUP_TTL:
+        raw = hit[1]
+    else:
+        raw = 0
+        data = (await s.execute(select(GameSave.data).where(GameSave.tg_id == uid))).scalar_one_or_none()
+        if data:
+            try:
+                up = json.loads(data).get("up")
+                raw = up.get("dropup", 0) if isinstance(up, dict) else 0
+            except (ValueError, AttributeError):
+                raw = 0
+        _dropup[uid] = (time.time(), raw)
+    return 1 + DROPUP_PER * dropup_level(raw, cap)
+
+
 # ---------- ограничение частоты убийств ----------
 _bucket = {}                                    # tg_id -> [жетоны, время]
 KILL_RATE, KILL_BURST = 2.5, 30                 # в среднем 2,5 убийства в секунду, запас 30
@@ -877,7 +914,7 @@ async def process_kills(s, uid, me, kills, exp_out=None):
     import funnel
     cap = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
     import vip
-    drops, lf, vip_lv, ticket = [], 1.0, None, None
+    drops, lf, vip_lv, ticket, dup = [], 1.0, None, None, None
     if not isinstance(kills, list):
         kills = []
     for i, k in enumerate(kills[:40]):
@@ -921,7 +958,9 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         vrow = vip.LEVELS[vip_lv - 1] if vip_lv else (0, 0, 0, 0)
         ledger.add(uid, ledger.kill_income(mob, loc, vip_scrap=vrow[2],
                                            drop_bonus=vrow[3] + (0.6 if ticket else 0) + (0.5 if loc == "season1" else 0)))
-        base_mult = mult * lf * bonus * vip.drop_mult(vip_lv) * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
+        if dup is None:
+            dup = await dropup_mult(s, uid, cap)                        # улучшение «Бонус к дропу» (до +30%)
+        base_mult = mult * lf * bonus * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
         em = ELITE_LOOT if mob.startswith("el") else 1                  # элитная зона: ценный дроп ×2 (осколки — как обычно)
         for d in roll(lv, base_mult * em, shard_mult=base_mult, gear_lv=min(lv, WORLD_GEAR_LV) if loc == WORLD_LOC else None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
@@ -1050,5 +1089,7 @@ def cleanup(online_ids):
         _boss_t.pop(uid, None)
     for uid in [u for u in _bucket if u not in online_ids]:
         _bucket.pop(uid, None)
+    for uid in [u for u in _dropup if u not in online_ids]:
+        _dropup.pop(uid, None)
     for uid in [u for u in _gem_cx if u not in online_ids]:          # при следующем входе их снова пришлёт op "state"
         _gem_cx.pop(uid, None)
