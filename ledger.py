@@ -26,8 +26,11 @@ if MODE not in ("off", "shadow", "on"):
 LEDGER_K = float(os.getenv("LEDGER_K", "3"))          # запас на везение для редкого дропа (материалы, ядра)
 LOOT_MAX = 2.0         # потолок бонуса к лому от снаряжения: «Мародёр», руны удачи, дроны, артефакты (st.loot в игре)
 DROP_UP_MAX = 0.3      # улучшение «Бонус к дропу»: 300 ур. × 0,1%
-SLACK = {"scrap": 3000, "cores": 3, "wire": 3, "plate": 3, "chip": 3}   # постоянный запас на неточности за сохранение
+SLACK = {"scrap": 3000, "cores": 3, "wire": 3, "plate": 3, "chip": 3,   # постоянный запас на неточности за сохранение
+         "pot_hp": 1, "pot_atk": 1, "pot_xp": 1}
 MATS = ("wire", "plate", "chip")
+# зелья: приход — дроп с мобов и мирового босса, паки магазина, награды VIP, выдачи админа (всё это знает сервер)
+POTS = ("pot_hp", "pot_atk", "pot_xp")
 
 # ---- зеркало game.html (совпадение проверяет test_ledger.py) ----
 SCRAP_CHANCE = 0.30
@@ -116,14 +119,14 @@ def kill_income(mob, loc, vip_scrap=0.0, drop_bonus=0.0):
     chance = 1.0 if boss else SCRAP_CHANCE
     out["scrap"] = chance * scrap[1] * (1 + LOOT_MAX + vip_scrap)
     dm = 1 + drop_bonus + DROP_UP_MAX
-    base = (0.13 + 0.0079 * s) / 100
+    base = (0.26 + 0.0158 * s) / 100
     for mid, c in loot.items():
         ch = base * max(0.3, min(1.0, c / 0.4)) * em
         if boss:
             ch = min(0.9, ch * BOSS_LOOT)
         out[mid] = out.get(mid, 0) + min(1.0, ch * dm) * LEDGER_K
     if lv >= 3 or loc in LOC_CORES:
-        ch = (0.02 + 0.001 * s) / 100 * em
+        ch = (0.2 + 0.01 * s) / 100 * em
         if boss:
             ch = min(0.9, ch * BOSS_LOOT)
         out["cores"] = min(1.0, ch * dm) * LEDGER_K
@@ -190,6 +193,30 @@ def _mats(S, mid):
     return n
 
 
+def _cut_stacks(S, item_id, extra):
+    """Убрать extra штук предмета из стопок сохранения: сначала со склада, потом из сумки."""
+    for bag in ("store", "inv"):
+        items = S.get(bag)
+        if not isinstance(items, list):
+            continue
+        for i in range(len(items) - 1, -1, -1):
+            if extra <= 0:
+                return
+            it = items[i]
+            if not isinstance(it, dict) or it.get("id") != item_id:
+                continue
+            try:
+                n = int(it.get("n", 1) or 0)
+            except (TypeError, ValueError):
+                n = 0
+            take = min(extra, n)
+            extra -= take
+            if n - take > 0:
+                it["n"] = n - take
+            else:
+                items.pop(i)
+
+
 def _num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -204,8 +231,8 @@ def check(uid, nick, oldS, newS, granted):
         return []                                   # после перезапуска прихода нет — сверяет старая проверка
     a["_snap"] = {k: v for k, v in a.items() if k not in ("t", "_snap")}
     out = []
-    for k in ("scrap", "cores") + MATS:
-        if k in MATS:
+    for k in ("scrap", "cores") + MATS + POTS:
+        if k in MATS or k in POTS:
             gain = _mats(newS, k) - _mats(oldS, k)
         else:
             o, n = oldS.get(k, 0), newS.get(k, 0)
@@ -230,13 +257,20 @@ def enforce(oldS, newS, notes, fix_out):
 
     Лом и ядра срезаются до «было + допустимый приход» (значение уходит телефону в fix_out, он применит его у себя),
     остальное сохранение принимается. Материалы так не срезать (они лежат стопками в сумке и на складе), поэтому
-    скачок материалов — отказ: возвращается список материалов, сервер оставляет прошлое сохранение."""
+    скачок материалов — отказ: возвращается список материалов, сервер оставляет прошлое сохранение.
+    Лишние зелья срезаются из стопок (сначала со склада, потом из сумки), их число уходит телефону в fix_out."""
     if MODE != "on" or not notes or not isinstance(oldS, dict) or not isinstance(newS, dict):
         return []
     bad = []
     for k, _gain, allowed in notes:
         if k in MATS:
             bad.append(k)
+            continue
+        if k in POTS:
+            cap = max(0, _mats(oldS, k) + int(allowed))
+            _cut_stacks(newS, k, _mats(newS, k) - cap)
+            if fix_out is not None:
+                fix_out[k] = _mats(newS, k)
             continue
         cap = max(0, int(oldS.get(k, 0) or 0) + int(allowed))
         newS[k] = max(0, min(int(newS.get(k, 0) or 0), cap))

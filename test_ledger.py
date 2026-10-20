@@ -47,9 +47,9 @@ class Contract(unittest.TestCase):
         self.assertEqual(tuple(order), ledger.DG_BASE)
 
     def test_drop_chances(self):
-        self.assertIn("const base = 0.13 + 0.0079*s;", GAME)
+        self.assertIn("const base = 0.26 + 0.0158*s;", GAME)
         self.assertIn("chance:P(+(base*Math.max(0.3, Math.min(1, c/0.4))).toFixed(4))", GAME)
-        self.assertIn('if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:P(+(0.02 + 0.001*s).toFixed(4))', GAME)
+        self.assertIn('if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:P(+(0.2 + 0.01*s).toFixed(4))', GAME)
         self.assertIn("it.chance = Math.min(0.9, it.chance*BOSS_LOOT)", GAME)
         locs = GAME[GAME.index("const LOCS = {"):GAME.index("\n};", GAME.index("const LOCS = {"))]
         with_cores = set(re.findall(r"^\s*(\w+):\{[^\n]*\bcores:", locs, re.M))
@@ -74,7 +74,7 @@ def honest_session(mob, loc, kills, loot_bonus, vip_scrap, drop_bonus, rng):
     lv, scrap, loot, boss = ledger.mob_info(mob)
     s = lv - 1
     got = {"scrap": 0, "cores": 0, "wire": 0, "plate": 0, "chip": 0}
-    base = (0.13 + 0.0079 * s) / 100
+    base = (0.26 + 0.0158 * s) / 100
     for _ in range(kills):
         if boss or rng.random() < ledger.SCRAP_CHANCE:
             got["scrap"] += round(rng.randint(scrap[0], scrap[1]) * (1 + loot_bonus + vip_scrap))
@@ -85,7 +85,7 @@ def honest_session(mob, loc, kills, loot_bonus, vip_scrap, drop_bonus, rng):
             if rng.random() < ch * (1 + drop_bonus):
                 got[mid] += 1
         if lv >= 3 or loc in ledger.LOC_CORES:
-            ch = (0.02 + 0.001 * s) / 100
+            ch = (0.2 + 0.01 * s) / 100
             if boss:
                 ch = min(0.9, ch * ledger.BOSS_LOOT)
             if rng.random() < ch * (1 + drop_bonus):

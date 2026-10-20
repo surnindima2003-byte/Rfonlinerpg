@@ -69,6 +69,12 @@ PACK_GRANTS = {
     "x_pots": {"scrap": 20_000},
     "u1": {"sph": 60}, "u2": {"sph": 120}, "u3": {"sph": 245},
 }
+# зелья в паках (зеркало PACKS в игре — сверяет test_pots_ledger.py): по столько каждого из трёх видов
+POTS = ("pot_hp", "pot_atk", "pot_xp")
+for _pk, _n in (("p_start", 2), ("p_base", 10), ("p_std", 20), ("p_elite", 50), ("p_legend", 100), ("p_epic", 200), ("x_pots", 10)):
+    PACK_GRANTS[_pk].update({p: _n for p in POTS})
+for _pk, _n in (("u1", 10), ("u2", 20), ("u3", 40)):
+    PACK_GRANTS[_pk]["pot_xp"] = _n
 PURCHASE_TTL = 600           # покупка учитывается в сохранениях следующие 10 минут
 
 _purchases = {}              # tg_id -> {"scrap", "cores", "sph", "ench", "t"} — ещё не учтённые покупки
@@ -263,12 +269,17 @@ def jumps(old, new, dt, granted, slack=None, skip_ench=False, caps_out=None):
 
 def note_purchase(uid, pack=None):
     """Покупка пака: в ближайших сохранениях законен прирост ровно того, что в паке."""
-    g = PACK_GRANTS.get(pack, {})
+    note_grant(uid, PACK_GRANTS.get(pack, {}))
+
+
+def note_grant(uid, g):
+    """Выдача, о которой знает сервер (пак, награда VIP): {"scrap", "cores", "sph", "ench", зелья} — законный прирост
+    в ближайших сохранениях."""
     p = _purchases.get(uid)
     if not p or time.time() - p["t"] > PURCHASE_TTL:
         p = _purchases[uid] = {"scrap": 0, "cores": 0, "sph": 0, "ench": False, "t": 0}
-    for k in ("scrap", "cores", "sph"):
-        p[k] += g.get(k, 0)
+    for k in ("scrap", "cores", "sph") + POTS:
+        p[k] = p.get(k, 0) + g.get(k, 0)
     p["ench"] = p["ench"] or bool(g.get("ench"))
     p["t"] = time.time()
 

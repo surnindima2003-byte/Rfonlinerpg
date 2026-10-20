@@ -5376,6 +5376,8 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     const data = snapshot(); lastPushed = JSON.stringify(data);
     const sentCraft = +S.craftN || 0;
     const sent = {scrap:+S.scrap || 0, cores:+S.cores || 0};
+    const potN = k => [...S.inv, ...S.store].reduce((a, x) => a + (x.id === k ? (+x.n || 1) : 0), 0);
+    const sentPots = {pot_hp:potN("pot_hp"), pot_atk:potN("pot_atk"), pot_xp:potN("pot_xp")};
     try{
       const r = await api("/api/state/save", {epoch:serverEpoch, data});
       // сервер срезал лишний лом или ядра (больше, чем можно было набрать за это время) — применяем у себя,
@@ -5385,6 +5387,14 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
         for(const k of ["scrap", "cores"]){
           const v = +r.fix[k];
           if(isFinite(v) && sent[k] > v){ const d = sent[k] - v; S[k] = Math.max(0, (+S[k] || 0) - d); cut.push((k === "scrap" ? "лом " : "ядра ") + "−" + d.toLocaleString("ru-RU")); }
+        }
+        // зелья сверх законного прихода (ledger.enforce): убираем столько же у себя — со склада, потом из сумки
+        for(const k of ["pot_hp", "pot_atk", "pot_xp"]){
+          const v = +r.fix[k];
+          if(isFinite(v) && sentPots[k] > v){ let d = sentPots[k] - v; const n0 = d;
+            for(const bag of [S.store, S.inv]) for(let j = bag.length - 1; j >= 0 && d > 0; j--){ const x = bag[j]; if(x.id !== k) continue;
+              const take = Math.min(d, x.n || 1); d -= take; x.n = (x.n || 1) - take; if(x.n <= 0) bag.splice(j, 1); }
+            cut.push(ITEMS[k].name.toLowerCase() + " −" + (n0 - d)); }
         }
         if(cut.length){ save(); lastPushed = ""; if(Date.now() - fixToastT > 60000){ fixToastT = Date.now(); toast("Сервер не засчитал лишнее: " + cut.join(", ")); } }
       }
@@ -8626,16 +8636,16 @@ function gearPer(lv){
 function mobDrops(type, loc){
   const k = NPCS[type], L = LOCS[loc] || {}, lv = k.lvl || L.min || 1, s = lv - 1;
   const out = {exp:k.exp, scrap:k.scrap, scrapChance:k.boss ? 1 : SCRAP_CHANCE, items:[], gear:null};
-  // материалы — как «ключи» в LIBERTY: 0,13% на 1 ур., растёт с уровнем; более редкие — реже
-  const base = 0.13 + 0.0079*s;
+  // материалы: 0,26% на 1 ур., растёт с уровнем; более редкие — реже (зеркало items.soft_table и ledger.kill_income)
+  const base = 0.26 + 0.0158*s;
   for(const [id, c] of Object.entries(k.loot || {})) out.items.push({id, chance:P(+(base*Math.max(0.3, Math.min(1, c/0.4))).toFixed(4)), sect:"mat"});
   out.items.push({id:"kit_s", chance:P(+(0.0267 + 0.0015*s).toFixed(4)), sect:"mat"});
-  if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:P(+(0.02 + 0.001*s).toFixed(4)), sect:"sph"});
+  if(lv >= 3 || L.cores) out.items.push({id:"cores", chance:P(+(0.2 + 0.01*s).toFixed(4)), sect:"sph"});
   // сферы — как «камень обычной заточки»: 0,0033% на 1 ур.
   out.items.push({id:"sph_cu", chance:P(+(0.0033 + 0.000036*s).toFixed(6)), sect:"sph"});
   out.items.push({id:"sph_ti", chance:P(+(0.00033 + 0.0000036*s).toFixed(7)), sect:"sph"});
-  // книги: 0,0001% каждая, книги навыков с 11 ур. — 0,0002%
-  for(const b of BOOK_IDS) out.items.push({id:b, chance:P(ITEMS[b].pas ? 0.0001 : lv > 10 ? 0.0002 : 0.0001), sect:ITEMS[b].pas ? "bookp" : "book"});
+  // книги: 0,0005% каждая, книги навыков с 11 ур. — 0,001%
+  for(const b of BOOK_IDS) out.items.push({id:b, chance:P(ITEMS[b].pas ? 0.0005 : lv > 10 ? 0.001 : 0.0005), sect:ITEMS[b].pas ? "bookp" : "book"});
   // вещи своего уровня и до 10 ниже; у монстров Мира выше 50 ур. — как у 50-го (иначе с топ-спотов снаряжение не падало бы вовсе:
   // старшее поколение — 45 ур.), gearLv — как items.WORLD_GEAR_LV на сервере
   const gl = k.gearLv || lv, pool = GEAR_IDS.filter(id => !ITEMS[id].starter && (ITEMS[id].lvl || 1) <= gl + 2 && (ITEMS[id].lvl || 1) >= gl - 10);
@@ -9043,6 +9053,21 @@ function vipProgressHtml(){
   if(window.NET_ADMIN) return `<div class="vip-prog"><span>Максимальный VIP · администратор</span><span>VIP ${VIP.length}</span></div><div class="vbar"><i style="width:100%"></i></div>`;
   return nx ? `<div class="vip-prog"><span>До VIP ${l + 1} · всего нужно ${nx.need} GRAM</span><span>${gramF(S.vipSpent)} / ${nx.need} GRAM</span></div><div class="vbar"><i style="width:${Math.min(100, S.vipSpent/nx.need*100)}%"></i></div>`
     : `<div class="vip-prog"><span>Максимальный VIP</span><span>${gramF(S.vipSpent)} GRAM</span></div><div class="vbar"><i style="width:100%"></i></div>`;
+}
+// награду VIP забирает сервер: он отмечает её полученной и учитывает зелья, лом и сферы (vip.claim).
+// Без связи с сервером (превью) — на телефоне, как раньше
+let vipBusy = false;
+async function vipClaim(i, btn){
+  if(vipBusy) return;
+  const done = () => { if(!S.vipClaimed.includes(i)) S.vipClaimed.push(i); giveReward(VIP[i].rew); save(); toast("Награда VIP " + (i + 1) + " получена"); Sfx.play("level"); openVip(); };
+  if(!(typeof regOnline === "function" && regOnline() && NET.api)){ done(); return; }
+  vipBusy = true; if(btn) btn.disabled = true;
+  try{
+    const r = await NET.api("/api/vip/claim", {i});
+    if(r && r.ok) done();
+    else { if(r && /уже получена/.test(r.error || "")){ S.vipClaimed.push(i); save(); openVip(); } toast((r && r.error) || "Не удалось забрать награду"); if(btn) btn.disabled = false; }
+  }catch(err){ toast("Нет связи с сервером, попробуй ещё раз"); if(btn) btn.disabled = false; }
+  vipBusy = false;
 }
 function openVip(){
   openSheet("VIP система", "Уровень растёт от GRAM, потраченных в магазине", () => {
@@ -10023,7 +10048,7 @@ setTimeout(newsLoad, 3000); setInterval(newsLoad, 30*60e3);       // и в до�
 $("shBody").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b || b.disabled) return;
   const d = b.dataset;
-  if(d.vipc !== undefined){ const i = +d.vipc; if(i < vipLevel() && !S.vipClaimed.includes(i)){ S.vipClaimed.push(i); giveReward(VIP[i].rew); toast("Награда VIP " + (i + 1) + " получена"); Sfx.play("level"); openVip(); } }
+  if(d.vipc !== undefined){ const i = +d.vipc; if(i < vipLevel() && !S.vipClaimed.includes(i)) vipClaim(i, b); }
   else if(d.pack){
     const pk = PACKS.find(x => x.id === d.pack), price = pk && packPrice(pk); if(!pk || gramBal() < price) return;
     const before = vipLevel();
@@ -14391,7 +14416,6 @@ tapBtn($("tpBtn"), tpStart);
 const TR = {tab:"buy", q:1, ok:"", okT:0, ask:null};
 const TR_SECT = [
   ["Ремонт", ["kit_s", "kit_l"]],
-  ["Зелья усиления", ["pot_hp", "pot_atk", "pot_xp"]],
   ["Сферы заточки", ["sph_cu", "sph_ti"]],
   ["Снаряжение", () => ["g_sensor_1", "g_armor_1", "g_legs_1", "g_module_1", "g_core_1", ...(S.cls ? [weaponId(S.cls, 1)] : [])]]
 ];
@@ -14448,7 +14472,7 @@ function trBuyScrap(id){
   if((id === "kit_s" || id === "kit_l") && typeof storyEvent === "function") storyEvent("buy", null, n);
   trOk("Куплено: ×" + n + " " + it.name);
 }
-UI.trader = () => { if(typeof tutEv !== "undefined") tutEv.trader++; TR.ask = null; TR.ok = ""; openSheet("Торговец", "Зелья и расходники", renderTrader); };
+UI.trader = () => { if(typeof tutEv !== "undefined") tutEv.trader++; TR.ask = null; TR.ok = ""; openSheet("Торговец", "Расходники и скупка", renderTrader); };
 $("shBody").addEventListener("click", async e => {
   const b = e.target.closest("[data-trt],[data-trq],[data-trbuy],[data-trtp],[data-trask]"); if(!b || b.disabled) return;
   const d = b.dataset; Sfx.play("ui");

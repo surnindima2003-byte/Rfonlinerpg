@@ -134,9 +134,9 @@ def on_pick(info, d, hub):
     st["loot"].pop(it["id"], None)                                 # кто первый — того и предмет
     if not st["loot"]:
         st["dirty"] = True                                         # добычу разобрали — логово закрывается
-    if it.get("kind") == "cores":
+    if it.get("kind") in ("cores", "pot_hp", "pot_atk", "pot_xp"):
         import ledger
-        ledger.add(info["id"], {"cores": it.get("n", 1)})          # учёт ресурсов: ядра с мирового босса
+        ledger.add(info["id"], {it["kind"]: it.get("n", 1)})       # учёт ресурсов: ядра и зелья с мирового босса
     hub.to_uid(info["id"], {"t": "wbgot", **it})
     hub.to_loc(LOC, {"t": "wbrm", "id": it["id"]})
 

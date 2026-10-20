@@ -48,6 +48,10 @@ class PackContract(unittest.TestCase):
                 g["sph"] = n("sph_ti") + n("sph_cu")
             if re.search(r'\{id:"(gset|wcls)"', line) or '"bookcls"' in line and '"wcls"' in line:
                 g["ench"] = True
+            pots = re.search(r"\.\.\.POTS\((\d+)\)", line)                     # зелья: по столько каждого вида
+            for pid in ("pot_hp", "pot_atk", "pot_xp"):
+                if pots or n(pid):
+                    g[pid] = (int(pots.group(1)) if pots else 0) + n(pid)
             if g:
                 client[m.group(1)] = g
         self.assertEqual(client, saveguard.PACK_GRANTS)

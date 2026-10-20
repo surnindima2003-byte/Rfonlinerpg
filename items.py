@@ -474,16 +474,16 @@ def soft_table(mob, loc):
     def add(item_id, pct):
         out[item_id] = min(0.9, P(pct) * k)
 
-    base = 0.13 + 0.0079 * s
+    base = 0.26 + 0.0158 * s
     for mid, c in loot.items():                                    # материалы: чем меньше вес, тем реже
         add(mid, round(base * max(0.3, min(1.0, c / 0.4)), 4))
     add(KIT_ID, round(0.0267 + 0.0015 * s, 4))
     if lv >= 3 or loc in ledger.LOC_CORES:
-        add("cores", round(0.02 + 0.001 * s, 4))
+        add("cores", round(0.2 + 0.01 * s, 4))
     for b in BOOKS_SKILL:
-        add(b, 0.0002 if lv > 10 else 0.0001)
+        add(b, 0.001 if lv > 10 else 0.0005)
     for b in BOOKS_PAS:
-        add(b, 0.0001)
+        add(b, 0.0005)
     return out
 
 
@@ -1030,6 +1030,7 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         pot_mult = (POT_BOSS if boss else 1) * lf * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
         for d in roll_pots(pot_mult):                                   # зелья: решает сервер, в реестр не идут
             drops.append({"id": d["id"], "n": d["n"], "i": i})
+            ledger.add(uid, {d["id"]: d["n"]})                          # учёт зелий: законный приход в сохранении
         soft_mult = vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
         for d in roll_soft(mob, loc, soft_mult):                        # материалы, ремкомплект, ядра, книги
             drops.append({"id": d["id"], "n": d["n"], "i": i})

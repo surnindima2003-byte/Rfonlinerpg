@@ -510,6 +510,8 @@ async def api_save(request):
                     try:
                         pl = json.loads(g.payload or "{}")
                         key = "sph" if g.kind == "item" and pl.get("item") in saveguard.SPHERES else g.kind
+                        if g.kind == "item" and pl.get("item") in ledger.POTS:
+                            key = pl["item"]                                  # зелья от админа — по видам (учёт зелий)
                         granted[key] = granted.get(key, 0) + int(pl.get("amount", 0))
                     except (ValueError, TypeError, AttributeError):
                         pass
@@ -519,7 +521,7 @@ async def api_save(request):
                     lg = dict(granted)
                     bought = saveguard._purchases.get(user["id"])
                     if bought and time.time() - bought["t"] <= saveguard.PURCHASE_TTL:
-                        for k in ("scrap", "cores"):          # паки магазина за GRAM — тоже приход
+                        for k in ("scrap", "cores") + ledger.POTS:   # паки магазина и награды VIP — тоже приход
                             lg[k] = lg.get(k, 0) + bought.get(k, 0)
                     lnotes = ledger.check(user["id"], user["username"] or user["name"], base.get("S"), s_, lg)
                     if lnotes:
@@ -3295,6 +3297,7 @@ async def start_web(port: int):
     app.router.add_get("/icon.png", icon_png)
     gram.setup(app)
     items.setup(app)
+    vip.setup(app, read_auth)                              # награды уровней VIP — через сервер
     pvp.setup(app)
     stats.setup(app)
     special_quests.setup(app, read_auth, push_to_player, grant_dict)
