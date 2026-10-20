@@ -436,6 +436,17 @@ def roll(lv, mult=1, shard_mult=None, gear_lv=None):
     return out
 
 
+# зелья усиления — дорогой ресурс: в магазине их нет, падают очень редко (зеркало POT_DROP в игре).
+# Шанс на моба; главарь ×POT_BOSS. Действуют бонусы к дропу (VIP, билет, улучшение, сезонная зона) и усталость лута
+POT_DROP = (("pot_hp", 1 / 2000), ("pot_atk", 1 / 3000), ("pot_xp", 1 / 6000))
+POT_BOSS = 10
+
+
+def roll_pots(mult=1):
+    """Зелья за одного убитого моба: [{kind, id, n}]. Не учитываются в реестре — ложатся в сумку как обычные вещи."""
+    return [{"kind": "pot", "id": pid, "n": 1} for pid, ch in POT_DROP if random.random() < min(0.5, ch * mult)]
+
+
 def roll_throne():
     """Камни заточки с босса трона — сверх обычного броска."""
     return [{"kind": "sph", "id": sid, "n": random.randint(lo, hi)} for sid, lo, hi, ch in THRONE_GIFT if random.random() < ch]
@@ -622,7 +633,8 @@ async def dropup_mult(s, uid, cap):
         data = (await s.execute(select(GameSave.data).where(GameSave.tg_id == uid))).scalar_one_or_none()
         if data:
             try:
-                up = json.loads(data).get("up")
+                S = json.loads(data).get("S")                    # сохранение: {"S": {..., "up": {"dropup": N}}}
+                up = S.get("up") if isinstance(S, dict) else None
                 raw = up.get("dropup", 0) if isinstance(up, dict) else 0
             except (ValueError, AttributeError):
                 raw = 0
@@ -966,6 +978,9 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])
             item["i"] = i
             drops.append(item)
+        pot_mult = (POT_BOSS if boss else 1) * lf * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
+        for d in roll_pots(pot_mult):                                   # зелья: решает сервер, в реестр не идут
+            drops.append({"id": d["id"], "n": d["n"], "i": i})
         if mob == mobguard.THRONE_BOSS:                                 # босс трона: ещё и камни заточки
             for d in roll_throne():
                 item = await add_spheres(s, uid, d["id"], d["n"])

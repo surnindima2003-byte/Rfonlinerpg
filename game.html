@@ -2121,7 +2121,7 @@ function migrateGearIds(){
   for(const x of all){ if(!x || !LEGACY_GEAR[x.id]) continue; const m = LEGACY_GEAR[x.id]; x.id = m[0] === "W" ? weaponId(S.cls, +m[1]) : m; }
 }
 const STARTER = {head:"g_sensor_1", weapon:"g_hammer_1", module:"g_module_1", armor:"g_armor_1", core:"g_core_1", legs:"g_legs_1"};
-const SHOP = ["kit_s", "kit_l", "pot_hp", "pot_atk", "pot_xp", "sph_cu", "sph_ti", "g_sensor_1", "g_armor_1", "g_legs_1", "g_module_1", "g_core_1"];
+const SHOP = ["kit_s", "kit_l", "sph_cu", "sph_ti", "g_sensor_1", "g_armor_1", "g_legs_1", "g_module_1", "g_core_1"];
 // мастерская: из материалов собираются вещи Железного (2) и Стального (3) поколений
 const RECIPES = Object.keys(GEAR_FAM).flatMap(fam => [
   {id:"g_" + fam + "_2", need:{scrap:260, wire:4, plate:3, chip:2, cores:3}},
@@ -8671,6 +8671,7 @@ function mobDrops(type, loc){
   }
   return out;
 }
+const POT_DROP = [["pot_hp", 1/2000], ["pot_atk", 1/3000], ["pot_xp", 1/6000]];   // зеркало items.POT_DROP на сервере
 function rollDrops(e){
   const k = NPCS[e.type], D = mobDrops(e.type, locKey), st = stat();
   const vb0 = typeof vipBonus === "function" ? vipBonus() : {scrap:0, drop:0};
@@ -8679,8 +8680,10 @@ function rollDrops(e){
   if(Math.random() < D.scrapChance) drops.push({x:e.x, y:e.y, kind:"scrap", amt:Math.round(rnd(k.scrap)*(1 + st.loot + vb.scrap)), t:0});
   const srv = typeof regOnline === "function" && regOnline();
   if(srv) regKill(e);                                   // ценный лут решает сервер
-  // зелья усиления: небольшой шанс с любого моба (бонус VIP к дропу тоже действует)
-  for(const [pid, ch] of [["pot_hp", 0.012], ["pot_atk", 0.008], ["pot_xp", 0.005]]) if(Math.random() < ch*(k.boss ? 10 : 1)*(1 + vb.drop))
+  // зелья усиления — дорогой ресурс, падают очень редко: прочности ~1 на 2 000 мобов, силы ~1 на 3 000,
+  // опыта ~1 на 6 000; главарь ×10. Бонусы к дропу (VIP, билет, улучшение) тоже действуют
+  // онлайн зелья бросает сервер (items.roll_pots) — здесь только без связи с ним
+  if(!srv) for(const [pid, ch] of POT_DROP) if(Math.random() < ch*(k.boss ? 10 : 1)*(1 + vb.drop))
     drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:pid, amt:1, t:0});
   for(const it of D.items) if(!(srv && (it.id === "sph_cu" || it.id === "sph_ti")) && Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
   // снаряжение: один бросок на грейд, шанс — на моба (вещь случайная из пула)
