@@ -2955,18 +2955,29 @@ function invChangedUnderUi(gone){
 
 // ---- механика ----
 function addText(x, y, t, c){ texts.push({x, y, t, c, life:0.9}); }
+// Центр робота внутри прямоугольной стены (рывок, «Телепорт», лаг кадра): выходим через ближайшую сторону, которая
+// ведёт внутрь карты. Раньше выталкивало всегда вниз — у нижней стены «Страха» это за край карты, и обрезка по краю
+// возвращала робота обратно в кирпич каждый кадр: пилот застревал в стене (у боковых стен — в нижнем углу).
+function rectExit(o, r, k, wall){
+  const ok = (x, y) => x >= r + wall && x <= W - r - wall && y >= r + wall && y <= H - r - wall;
+  const ways = [[o.y - k.ry, o.x, k.ry - r], [k.ry + k.rh - o.y, o.x, k.ry + k.rh + r],
+                [o.x - k.rx, k.rx - r, o.y], [k.rx + k.rw - o.x, k.rx + k.rw + r, o.y]].filter(w => ok(w[1], w[2])).sort((a, b) => a[0] - b[0]);
+  if(ways.length){ o.x = ways[0][1]; o.y = ways[0][2]; } else o.y = k.ry + k.rh + r;
+}
 function pushOut(o, r){
+  const wall = locKey === "lobby" ? 60 : 0;
+  const clamp = () => { o.x = Math.max(r + wall, Math.min(W - r - wall, o.x)); o.y = Math.max(r + wall, Math.min(H - r - wall, o.y)); };
+  clamp();                                                        // рывок за край карты: сначала возвращаем в её пределы, потом выталкиваем из стен
   for(const k of rocks){
     if(k.rw){
       const cx = Math.max(k.rx, Math.min(k.rx + k.rw, o.x)), cy = Math.max(k.ry, Math.min(k.ry + k.rh, o.y));
       const dx = o.x - cx, dy = o.y - cy, d = Math.hypot(dx, dy);
-      if(d < r){ if(d > 0){ o.x = cx + dx/d*r; o.y = cy + dy/d*r; } else o.y = k.ry + k.rh + r; }
+      if(d < r){ if(d > 0){ o.x = cx + dx/d*r; o.y = cy + dy/d*r; } else rectExit(o, r, k, wall); }
       continue;
     }
     const dx = o.x-k.x, dy = o.y-k.y, d = Math.hypot(dx,dy), m = k.r + r; if(d < m && d > 0){ o.x = k.x + dx/d*m; o.y = k.y + dy/d*m; }
   }
-  const wall = locKey === "lobby" ? 60 : 0;
-  o.x = Math.max(r + wall, Math.min(W - r - wall, o.x)); o.y = Math.max(r + wall, Math.min(H - r - wall, o.y));
+  clamp();
 }
 const safeSpot = o => locKey === "lobby" || (npcs[0] && Math.hypot(o.x-npcs[0].x, o.y-npcs[0].y) < 150);
 
@@ -18127,6 +18138,11 @@ function setLang(l, chosen){
   document.documentElement.lang = l;
   trAll();
 }
+
+// Кнопки умений рисуются на старте раньше, чем ниже по коду добавляются иконки Призрака, Глифоносца и Ремонтника
+// (Object.assign(SKILL_ART, …)). Им доставалась запасная иконка «Плазменного шара» — четыре одинаковых значка,
+// пока игрок не сменит класс или не улучшит умение. Здесь весь код уже загружен: перерисовываем с настоящими иконками.
+renderSkillButtons();
 
 // первый вход из Telegram: язык берём из приложения игрока
 (() => {
