@@ -250,35 +250,83 @@ try:
     import brotli                      # необязательно: если пакет Brotli установлен, страница ещё на ~28% меньше
 except ImportError:
     brotli = None
-_game_cache = {"mtime": None, "raw": b"", "gz": b"", "br": b"", "etag": ""}
+# Первым приходит маленькая оболочка с экраном загрузки, код игры — частями /g/<хэш>.js (см. bootpage.py).
+# /?full=1 — страница целиком, как раньше (для очень старых браузеров и на случай проверки).
+_game_cache = {"mtime": None, "shell": None, "full": None, "parts": {}}
 _game_lock = asyncio.Lock()
 
 
-def _build_game(mtime):
+def _variants(raw, compress_br=True):
+    """Тело ответа в трёх видах (как есть, gzip, brotli — если пакет есть) и ETag."""
     import gzip
     import hashlib
-    raw = GAME_FILE.read_bytes()
     br = b""
-    if brotli is not None:
+    if brotli is not None and compress_br:
         try:
             br = brotli.compress(raw, quality=11)
         except Exception:
-            log.exception("brotli: не удалось сжать страницу, отдаю gzip")
-    return {"mtime": mtime, "raw": raw, "gz": gzip.compress(raw, 9), "br": br,
-            "etag": 'W/"' + hashlib.sha1(raw).hexdigest()[:24] + '"'}
+            log.exception("brotli: не удалось сжать, отдаю gzip")
+    return {"raw": raw, "gz": gzip.compress(raw, 9), "br": br, "etag": 'W/"' + hashlib.sha1(raw).hexdigest()[:24] + '"'}
+
+
+def _build_game(mtime):
+    import bootpage
+    raw = GAME_FILE.read_bytes()
+    full = _variants(raw, compress_br=False)
+    try:
+        built = bootpage.build(raw.decode("utf-8"))
+    except Exception:
+        log.exception("загрузчик: не удалось разобрать game.html — отдаю страницу целиком")
+        built = None
+    if not built:
+        return {"mtime": mtime, "shell": full, "full": full, "parts": {}}
+    shell, parts = built
+    return {"mtime": mtime, "shell": _variants(shell.encode("utf-8")), "full": full,
+            "parts": {name: _variants(text.encode("utf-8")) for name, text in parts.items()}}
 
 
 async def game_bodies():
-    """Страница игры: исходник, gzip, brotli и ETag. Пересобирается, только когда game.html изменился."""
+    """Оболочка, части кода и полная страница. Пересобираются, только когда game.html изменился."""
     mtime = GAME_FILE.stat().st_mtime
     if mtime != _game_cache["mtime"]:
         async with _game_lock:
             if mtime != _game_cache["mtime"]:
                 built = await asyncio.get_running_loop().run_in_executor(None, _build_game, mtime)
                 _game_cache.update(built)
-                log.info("Страница игры: %d КБ, gzip %d КБ%s", len(built["raw"]) // 1024, len(built["gz"]) // 1024,
-                         f", brotli {len(built['br']) // 1024} КБ" if built["br"] else "")
+                kb = lambda v, k: len(v[k]) // 1024
+                pg = sum(len(v["gz"]) for v in built["parts"].values()) // 1024
+                log.info("Страница игры: целиком gzip %d КБ; первая страница gzip %d КБ%s; код — %d частей, gzip %d КБ",
+                         kb(built["full"], "gz"), kb(built["shell"], "gz"),
+                         f" (brotli {kb(built['shell'], 'br')} КБ)" if built["shell"]["br"] else "", len(built["parts"]), pg)
     return _game_cache
+
+
+def _send_variant(request, v, content_type, cache_control):
+    headers = {"Cache-Control": cache_control, "ETag": v["etag"], "Vary": "Accept-Encoding"}
+    inm = request.headers.get("If-None-Match", "")
+    if inm and _etag_match(inm, v["etag"]):
+        return web.Response(status=304, headers=headers)
+    accept = request.headers.get("Accept-Encoding", "").lower()
+    if v["br"] and "br" in accept:
+        body, headers["Content-Encoding"] = v["br"], "br"
+    elif "gzip" in accept:
+        body, headers["Content-Encoding"] = v["gz"], "gzip"
+    else:
+        body = v["raw"]
+    return web.Response(body=body, content_type=content_type, charset="utf-8", headers=headers)
+
+
+async def game_part(request):
+    """Часть кода или стилей игры. Имя — хэш содержимого, поэтому кэшируется навсегда: изменится код — изменится имя."""
+    import bootpage
+    name = request.match_info["name"]
+    v = (await game_bodies())["parts"].get(name) if bootpage.PART_RE.match(name) else None
+    if not v:
+        metrics.inc("page.part_404")
+        raise web.HTTPNotFound()
+    metrics.inc("page.part")
+    return _send_variant(request, v, "text/css" if name.endswith(".css") else "application/javascript",
+                         "public, max-age=31536000, immutable")
 
 
 def _etag_match(header, etag):
@@ -287,22 +335,11 @@ def _etag_match(header, etag):
 
 
 async def game_page(request):
-    """Игра: уже есть в кэше телефона — 304 без тела; нет — заранее сжатая копия (brotli или gzip)."""
+    """Игра: оболочка с загрузчиком (или /?full=1 — страница целиком). Есть в кэше телефона — 304 без тела."""
     c = await game_bodies()
-    headers = {"Cache-Control": "no-cache", "ETag": c["etag"], "Vary": "Accept-Encoding"}
-    inm = request.headers.get("If-None-Match", "")
-    if inm and _etag_match(inm, c["etag"]):
-        metrics.inc("page.304")
-        return web.Response(status=304, headers=headers)
-    accept = request.headers.get("Accept-Encoding", "").lower()
-    if c["br"] and "br" in accept:
-        body, headers["Content-Encoding"] = c["br"], "br"
-    elif "gzip" in accept:
-        body, headers["Content-Encoding"] = c["gz"], "gzip"
-    else:
-        body = c["raw"]
-    metrics.inc("page.full")
-    return web.Response(body=body, content_type="text/html", charset="utf-8", headers=headers)
+    full = request.query.get("full") == "1"
+    metrics.inc("page.full" if full else "page.shell")
+    return _send_variant(request, c["full"] if full else c["shell"], "text/html", "no-cache")
 
 
 async def guide_page(request):
@@ -3287,6 +3324,7 @@ async def start_web(port: int):
     await game_bodies()                  # сжимаем страницу до старта: первый игрок не ждёт
     app = web.Application(client_max_size=512 * 1024)
     app.router.add_get("/", game_page)
+    app.router.add_get("/g/{name}", game_part)
     app.router.add_get("/guide.html", guide_page)
     app.router.add_get("/guide", guide_page)
     app.router.add_get("/patches.html", patches_page)
