@@ -442,6 +442,57 @@ POT_DROP = (("pot_hp", 1 / 2000), ("pot_atk", 1 / 3000), ("pot_xp", 1 / 6000))
 POT_BOSS = 10
 
 
+# обычный дроп, который раньше бросал телефон: материалы, ремкомплект, энергоядра и книги умений.
+# Формулы — как mobDrops в игре (сверяет test_server_drops.py); таблица мобов — ledger.mob_info.
+# Усталость лута на него не действует (как раньше), бонусы к дропу — действуют.
+KIT_ID = "kit_s"
+BOOKS_SKILL = (
+    "bk_shock", "bk_blades", "bk_plating", "bk_ram", "bk_drain", "bk_saw", "bk_overheat", "bk_hook", "bk_volley",
+    "bk_burst", "bk_jet", "bk_overclock", "bk_plasma", "bk_emp", "bk_field", "bk_blink", "bk_phase", "bk_echo",
+    "bk_siren", "bk_nulltrace", "bk_gravity", "bk_chain", "bk_seal", "bk_recall", "bk_mend", "bk_nanoswarm",
+    "bk_aegis", "bk_surge",
+)
+BOOKS_PAS = (
+    "bp_steelskin", "bp_retaliate", "bp_hunger", "bp_execute", "bp_eagle", "bp_longshot", "bp_overload",
+    "bp_cyclotron", "bp_fieldrep", "bp_triage", "bp_hunter", "bp_shade", "bp_monolith", "bp_weave", "bp_swift",
+    "bp_vital", "bp_fury", "bp_servo", "bp_cold", "bp_selfrepair", "bp_looter",
+)
+
+
+def soft_table(mob, loc):
+    """Шансы обычного дропа за моба без бонусов: {id: вероятность} (главарь и элита уже учтены)."""
+    import ledger
+    info = ledger.mob_info(mob)
+    if not info:
+        return {}
+    lv, _, loot, boss = info
+    lv = lv or ledger.LOC_MIN.get(loc, 1)
+    s = lv - 1
+    k = BOSS_LOOT if boss else ELITE_LOOT if mob.startswith("el") else 1
+    out = {}
+
+    def add(item_id, pct):
+        out[item_id] = min(0.9, P(pct) * k)
+
+    base = 0.13 + 0.0079 * s
+    for mid, c in loot.items():                                    # материалы: чем меньше вес, тем реже
+        add(mid, round(base * max(0.3, min(1.0, c / 0.4)), 4))
+    add(KIT_ID, round(0.0267 + 0.0015 * s, 4))
+    if lv >= 3 or loc in ledger.LOC_CORES:
+        add("cores", round(0.02 + 0.001 * s, 4))
+    for b in BOOKS_SKILL:
+        add(b, 0.0002 if lv > 10 else 0.0001)
+    for b in BOOKS_PAS:
+        add(b, 0.0001)
+    return out
+
+
+def roll_soft(mob, loc, mult=1):
+    """Материалы, ремкомплект, ядра и книги за одного убитого моба: [{kind, id, n}]. mult — бонусы к дропу."""
+    return [{"kind": "soft", "id": item_id, "n": 1} for item_id, ch in soft_table(mob, loc).items()
+            if random.random() < min(0.9, ch * mult)]
+
+
 def roll_pots(mult=1):
     """Зелья за одного убитого моба: [{kind, id, n}]. Не учитываются в реестре — ложатся в сумку как обычные вещи."""
     return [{"kind": "pot", "id": pid, "n": 1} for pid, ch in POT_DROP if random.random() < min(0.5, ch * mult)]
@@ -978,6 +1029,9 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             drops.append(item)
         pot_mult = (POT_BOSS if boss else 1) * lf * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
         for d in roll_pots(pot_mult):                                   # зелья: решает сервер, в реестр не идут
+            drops.append({"id": d["id"], "n": d["n"], "i": i})
+        soft_mult = vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
+        for d in roll_soft(mob, loc, soft_mult):                        # материалы, ремкомплект, ядра, книги
             drops.append({"id": d["id"], "n": d["n"], "i": i})
         if mob == mobguard.THRONE_BOSS:                                 # босс трона: ещё и камни заточки
             for d in roll_throne():

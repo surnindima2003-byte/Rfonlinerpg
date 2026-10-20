@@ -8668,7 +8668,8 @@ function rollDrops(e){
   // онлайн зелья бросает сервер (items.roll_pots) — здесь только без связи с ним
   if(!srv) for(const [pid, ch] of POT_DROP) if(Math.random() < ch*(k.boss ? 10 : 1)*(1 + vb.drop))
     drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:pid, amt:1, t:0});
-  for(const it of D.items) if(!(srv && (it.id === "sph_cu" || it.id === "sph_ti")) && Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
+  // онлайн материалы, ремкомплект, ядра, книги и сферы бросает сервер (items.roll_soft / roll) — здесь только без связи с ним
+  if(!srv) for(const it of D.items) if(Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
   // снаряжение: один бросок на грейд, шанс — на моба (вещь случайная из пула)
   if(!srv && D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
     if(p && Math.random() < Math.min(0.5, p*(1 + vb.drop)))

@@ -289,7 +289,8 @@ class ProcessKills(unittest.TestCase):
         session = types.SimpleNamespace(commit=a_none)
         with mock.patch.dict(sys.modules, fake), mock.patch.object(items, "random", rnd), \
                 mock.patch.object(items, "add_spheres", add_spheres), mock.patch.object(items, "mint_gear", mint_gear), \
-                mock.patch.object(items, "count_loot_kill", count_loot_kill), mock.patch.object(items, "dropup_mult", dropup_mult):
+                mock.patch.object(items, "count_loot_kill", count_loot_kill), mock.patch.object(items, "dropup_mult", dropup_mult), \
+                mock.patch.object(items, "roll_soft", lambda *a, **k: []), mock.patch.object(items, "roll_pots", lambda *a, **k: []):
             asyncio.run(items.process_kills(session, 5, {"loc": LOC, "fac": None}, kills))
         return got
 
