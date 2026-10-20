@@ -72,7 +72,7 @@ class Events(unittest.TestCase):
                 self.assertNotIn("when", e, eid)                              # без выдуманного расписания
             elif not e.get("play"):
                 self.assertIn(f'd.ev === "{eid}"', dispatch, eid)            # у настоящего события — своё окно
-        self.assertEqual({k for k, e in ev.items() if not e.get("soon")}, {"fear", "tower", "boss", "chipwar", "elite", "coop"})
+        self.assertEqual({k for k, e in ev.items() if not e.get("soon")}, {"fear", "tower", "boss", "elite", "coop"})
 
     def test_schedules_match_server(self):
         ev = self.events()
@@ -83,8 +83,6 @@ class Events(unittest.TestCase):
         self.assertEqual(ev["boss"]["when"], "Пн, Ср, Пт, Вс в 20:00 МСК")
         self.assertIn("OPEN_H, OPEN_M, REG_SEC, RUN_SEC = 20, 30,", tw)
         self.assertEqual(ev["tower"]["when"], "Ежедневно в 20:30 МСК")
-        self.assertNotIn("when", ev["chipwar"])                               # время Chip War присылает сервер
-        self.assertIn("mskWhen(st.next)", block(GAME, "function cwWhen", "\n}\n"))
 
     def test_menu_opens_events_with_live_banners(self):
         # пункт меню берёт openEvents в момент вызова: плашки «босс в ангаре» и «запись в башню» не теряются
@@ -123,12 +121,6 @@ class Guide(unittest.TestCase):
         tiers = len(re.findall(r"^  \{n:\d+, lvl:\d+", block(GAME, "const TIERS = [", "\n];"), re.M))
         self.assertIn(f"<b>{(len(fams) + extra) * tiers}</b><span>видов снаряжения</span>", GUIDE)
 
-    def test_chip_war_rewards(self):
-        cw = (ROOT / "chipwar.py").read_text(encoding="utf-8")
-        self.assertIn('"cores": 5 if won else 0', cw)                        # ядра — только победившей фракции
-        self.assertIn("а пилоты победившей фракции — ещё и ядра", GUIDE)
-        self.assertIn("а пилоты победившей фракции — ещё и ядра", GAME)
-
 
 class Translations(unittest.TestCase):
     def test_changed_strings_are_translated(self):
@@ -137,7 +129,7 @@ class Translations(unittest.TestCase):
                 "Редкая титановая сфера. Если заточка не удастся — предмет останется целым, но заточка снизится на 1.",
                 "Титановая сфера сохранила предмет, но заточка снизилась:", "До +3 заточка безопасна для любых сфер.",
                 "Следующий уровень даёт", "Курс: 1 GRAM =", "Ежедневно в 20:30 МСК", "Пн, Ср, Пт, Вс в 20:00 МСК",
-                "Битва фракций за чип в Железном каньоне", "Скоро", "В разработке", "МСК",
+                "Скоро", "В разработке", "МСК",
                 "Расписание объявим, когда событие откроется."]
         for k in must:
             self.assertIn(k, tr, k)

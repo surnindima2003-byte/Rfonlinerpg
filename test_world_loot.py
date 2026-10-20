@@ -281,7 +281,6 @@ class ProcessKills(unittest.TestCase):
         fake = {
             "progress": types.SimpleNamespace(cap_of=lambda s, u: a_val(50), add_kill=lambda *a, **k: a_val(50), mob_exp=lambda lv, boss=False: 1),
             "pvp": types.SimpleNamespace(mob_killed=a_none),
-            "chipwar": types.SimpleNamespace(loot_mult=lambda fac: 1),
             "funnel": types.SimpleNamespace(mark=lambda *a: None),
             "vip": types.SimpleNamespace(level=lambda *a: a_val(0), LEVELS=[], drop_mult=lambda lv: 1),
             "seasonpts": types.SimpleNamespace(kill_counter=lambda loc: None, add=a_none, has_ticket=lambda uid: a_val(False)),

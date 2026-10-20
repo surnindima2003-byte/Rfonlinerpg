@@ -1,4 +1,4 @@
-"""События по расписанию: мировой босс после ручного вызова, Chip War после перезапуска, потолок шанса лута.
+"""События по расписанию: мировой босс после ручного вызова, потолок шанса лута.
 
 Запуск: python -m unittest test_events_restart
 """
@@ -14,7 +14,6 @@ if "metrics" not in sys.modules:
     m = types.ModuleType("metrics"); m.inc = m.gauge = m.observe = lambda *a, **k: None
     sys.modules["metrics"] = m
 
-import chipwar     # noqa: E402
 import worldboss   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -65,19 +64,6 @@ class WorldBossSchedule(unittest.TestCase):
         worldboss.st.update(loot={"1": {"id": "1"}}, loot_until=0)
         worldboss.tick(self.hub)
         self.assertIn({"t": "wbloot", "items": []}, self.hub.loc)
-
-
-class ChipWarResume(unittest.TestCase):
-    def test_current_slot(self):
-        sched = "tue 19:00"
-        start = int(datetime(2026, 10, 6, 19, 0, tzinfo=worldboss.MSK).timestamp())      # вторник 19:00 МСК
-        self.assertEqual(chipwar.current_slot(start + 300, sched, 3, 1200), start)
-        self.assertIsNone(chipwar.current_slot(start + 1300, sched, 3, 1200))
-        self.assertIsNone(chipwar.current_slot(start - 10, sched, 3, 1200))
-
-    def test_slot_across_midnight(self):
-        start = int(datetime(2026, 10, 6, 23, 50, tzinfo=worldboss.MSK).timestamp())
-        self.assertEqual(chipwar.current_slot(start + 900, "tue 23:50", 3, 1200), start)
 
 
 class LootCap(unittest.TestCase):
