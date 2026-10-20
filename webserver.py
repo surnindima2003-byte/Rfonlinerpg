@@ -242,17 +242,67 @@ def grant_dict(g: Grant):
 
 
 # ---------- страницы и API ----------
-_game_cache = {"mtime": 0, "body": b""}
+# Страница игры весит ~2 МБ (~630 КБ в gzip). Раньше она сжималась заново на каждый запрос (блокируя сервер) и
+# каждый вход качалась целиком: на медленном мобильном интернете Telegram обрывал загрузку (ERR_CONNECTION_ABORTED),
+# а после синхронизации сохранения (location.reload) — качал всё ещё раз. Теперь сжатая копия готовится один раз,
+# а у страницы есть ETag: телефон, у которого игра уже есть в кэше, получает ответ 304 без тела.
+try:
+    import brotli                      # необязательно: если пакет Brotli установлен, страница ещё на ~28% меньше
+except ImportError:
+    brotli = None
+_game_cache = {"mtime": None, "raw": b"", "gz": b"", "br": b"", "etag": ""}
+_game_lock = asyncio.Lock()
+
+
+def _build_game(mtime):
+    import gzip
+    import hashlib
+    raw = GAME_FILE.read_bytes()
+    br = b""
+    if brotli is not None:
+        try:
+            br = brotli.compress(raw, quality=11)
+        except Exception:
+            log.exception("brotli: не удалось сжать страницу, отдаю gzip")
+    return {"mtime": mtime, "raw": raw, "gz": gzip.compress(raw, 9), "br": br,
+            "etag": 'W/"' + hashlib.sha1(raw).hexdigest()[:24] + '"'}
+
+
+async def game_bodies():
+    """Страница игры: исходник, gzip, brotli и ETag. Пересобирается, только когда game.html изменился."""
+    mtime = GAME_FILE.stat().st_mtime
+    if mtime != _game_cache["mtime"]:
+        async with _game_lock:
+            if mtime != _game_cache["mtime"]:
+                built = await asyncio.get_running_loop().run_in_executor(None, _build_game, mtime)
+                _game_cache.update(built)
+                log.info("Страница игры: %d КБ, gzip %d КБ%s", len(built["raw"]) // 1024, len(built["gz"]) // 1024,
+                         f", brotli {len(built['br']) // 1024} КБ" if built["br"] else "")
+    return _game_cache
+
+
+def _etag_match(header, etag):
+    tag = etag[2:] if etag.startswith("W/") else etag
+    return any((t.strip()[2:] if t.strip().startswith("W/") else t.strip()) in (tag, "*") for t in header.split(","))
 
 
 async def game_page(request):
-    """Игра отдаётся сжатой (gzip): грузится в несколько раз быстрее на мобильном интернете."""
-    st = GAME_FILE.stat()
-    if st.st_mtime != _game_cache["mtime"]:
-        _game_cache.update(mtime=st.st_mtime, body=GAME_FILE.read_bytes())
-    resp = web.Response(body=_game_cache["body"], content_type="text/html", charset="utf-8", headers={"Cache-Control": "no-cache"})
-    resp.enable_compression()
-    return resp
+    """Игра: уже есть в кэше телефона — 304 без тела; нет — заранее сжатая копия (brotli или gzip)."""
+    c = await game_bodies()
+    headers = {"Cache-Control": "no-cache", "ETag": c["etag"], "Vary": "Accept-Encoding"}
+    inm = request.headers.get("If-None-Match", "")
+    if inm and _etag_match(inm, c["etag"]):
+        metrics.inc("page.304")
+        return web.Response(status=304, headers=headers)
+    accept = request.headers.get("Accept-Encoding", "").lower()
+    if c["br"] and "br" in accept:
+        body, headers["Content-Encoding"] = c["br"], "br"
+    elif "gzip" in accept:
+        body, headers["Content-Encoding"] = c["gz"], "gzip"
+    else:
+        body = c["raw"]
+    metrics.inc("page.full")
+    return web.Response(body=body, content_type="text/html", charset="utf-8", headers=headers)
 
 
 async def guide_page(request):
@@ -3234,6 +3284,7 @@ async def cleanup_loop():
 
 async def start_web(port: int):
     ensure_epoch()
+    await game_bodies()                  # сжимаем страницу до старта: первый игрок не ждёт
     app = web.Application(client_max_size=512 * 1024)
     app.router.add_get("/", game_page)
     app.router.add_get("/guide.html", guide_page)
