@@ -295,9 +295,7 @@ def _inv_take(S, item_id, n):
 
 def craft_in_save(S, item_id, level):
     """Проверить и провести крафт в данных сохранения. Возвращает текст ошибки или None (S изменён)."""
-    lvl, need = CRAFT[item_id]
-    if level < lvl:
-        return f"Нужен {lvl} уровень"
+    _, need = CRAFT[item_id]                    # уровень в CRAFT — справочный: собирать можно с 1-го уровня
     for k, n in need.items():
         have = S.get(k, 0) if k in ("scrap", "cores") else _inv_count(S, k)
         if not isinstance(have, (int, float)) or have < n:
@@ -354,9 +352,7 @@ def uniq_need(item_id, bp=False):
 
 def uniq_check(S, item_id, level, bp=False):
     """Можно ли собрать уникальную вещь по данным сохранения. Текст ошибки или None (S не меняется)."""
-    lvl = UNIQ[item_id][0]
-    if level < lvl:
-        return f"Нужен {lvl} уровень"
+    # уровень не проверяется: уникальные вещи собираются и надеваются с 1-го уровня
     for k, n in uniq_need(item_id, bp).items():
         have = S.get(k, 0) if k in ("scrap", "cores") else _have_any(S, k)
         if not isinstance(have, (int, float)) or have < n:
@@ -396,14 +392,18 @@ P = lambda pct: pct / 100.0
 
 
 def gear_per(lv):
-    """Шанс каждой вещи по грейдам (серый, зелёный, синий, золотой) — как gearPer в игре."""
+    """Шанс выпадения вещи за одного моба по грейдам (серый, зелёный, синий, золотой) — как gearPer в игре.
+    Шанс — на убийство, а не на каждую вещь: какая именно вещь, выбирается из пула случайно, поэтому
+    размер пула шанс не меняет. Синее — только с мобов от 20 ур., золотое — от 31 ур."""
     if lv <= 10:
-        return [P(0.0028 + 0.00008 * (lv - 1)), 0, 0, 0]
-    if lv <= 20:
-        return [0, P(0.0001), 0, 0]
+        return [1 / 2500, 1 / 25000, 0, 0]
+    if lv <= 19:
+        return [1 / 3000, 1 / 10000, 0, 0]
     if lv <= 30:
-        return [0, P(0.00012), P(0.00002), 0]
-    return [0, 0, P(0.0001), P(0.00001)]
+        return [0, 1 / 8000, 1 / 60000, 0]
+    if lv <= 40:
+        return [0, 0, 1 / 40000, 1 / 400000]
+    return [0, 0, 1 / 30000, 1 / 250000]
 
 
 SHARD_MIN_LVL = 15
@@ -422,8 +422,8 @@ def roll(lv, mult=1, shard_mult=None, gear_lv=None):
     out, s, gl = [], lv - 1, lv if gear_lv is None else gear_lv
     pool = [g for g, need in GEAR if gl - 10 <= need <= gl + 2]
     for grade, per in enumerate(gear_per(gl)):
-        # потолок 50% — на итоговый шанс (раньше min стоял до умножения на число вещей и не ограничивал ничего)
-        if per and pool and random.random() < min(0.5, per * mult * len(pool)):
+        # шанс — на моба, потолок 50% (главарь ×150 и бонусы не делают вещь гарантированной)
+        if per and pool and random.random() < min(0.5, per * mult):
             out.append({"kind": "gear", "id": random.choice(pool), "g": grade})
     if random.random() < min(0.9, P(0.0033 + 0.000036 * s) * mult):
         out.append({"kind": "sph", "id": "sph_cu", "n": 1})

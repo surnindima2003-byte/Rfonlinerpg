@@ -82,7 +82,7 @@ class CraftContract(unittest.TestCase):
         self.assertIsNotNone(items.craft_in_save(S, "r_atk", 12))
         self.assertEqual(S["scrap"], 100)
         S = {"scrap": 99999, "cores": 999, "inv": [{"id": "chip", "n": 50}]}
-        self.assertIsNotNone(items.craft_in_save(S, "r_atk", 5))
+        self.assertIsNone(items.craft_in_save(S, "r_atk", 1))                  # ограничения по уровню нет
 
     def test_drone_only_once(self):
         S = {"scrap": 99999, "cores": 999, "inv": [{"id": "wire", "n": 50}], "store": [{"id": "d_spark", "n": 1}]}
@@ -129,7 +129,7 @@ class UniqContract(unittest.TestCase):
 
     def test_uniq_refuses(self):
         S = {"level": 39, "scrap": 10**6, "cores": 10**4, "inv": [{"id": sh, "n": 999} for sh in items.CLASS_SHARDS["guard"]]}
-        self.assertIn("40", items.uniq_check(S, "u_guard_head", 39))
+        self.assertIsNone(items.uniq_check(S, "u_guard_head", 1))              # ограничения по уровню нет
         self.assertIsNone(items.uniq_check(S, "u_guard_head", 40))
         S["inv"][0]["n"] = 10
         self.assertIsNotNone(items.uniq_check(S, "u_guard_head", 40))

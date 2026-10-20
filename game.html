@@ -3998,13 +3998,13 @@ function transferItem(i, k){
 function renderCraft(){
   let h = invLine() + wingCraftHtml() + cloakCraftHtml() + artCraftHtml() + droneCraftHtml() + runeCraftHtml() + `<h3 class="bag-h" style="margin-top:12px">Снаряжение</h3><div class="list">`;
   for(const r of RECIPES){
-    const it = ITEMS[r.id], lvlOk = !it.lvl || S.level >= it.lvl;
+    const it = ITEMS[r.id], lvlOk = true;                     // ограничений по уровню на вещи нет
     const parts = Object.entries(r.need).map(([k, n]) => {
       const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n)}/${n}</span>`;
     }).join("");
     const can = lvlOk && Object.entries(r.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic">${icon(r.id)}</div><div class="tx">${it.name}<small>${SLOT_NAME[it.slot]}: ${gearDesc(r.id, 0)} (обычный)${it.lvl ? " · с " + it.lvl + " уровня" : ""}</small><div class="need">${parts}</div></div>
+    h += `<div class="li"><div class="ic">${icon(r.id)}</div><div class="tx">${it.name}<small>${SLOT_NAME[it.slot]}: ${gearDesc(r.id, 0)} (обычный)</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-craft="${r.id}" ${can ? "" : "disabled"}>Собрать</button></div>`;
   }
   body().innerHTML = h + `</div><p class="hint">Грейд собранной вещи случайный: 50% серый, 35% зелёный, 13% синий, 2% золотой. Материалы выпадают из врагов: провода из краулеров и дронов, микросхемы из дронов и стражей, бронепластины из стражей и шагоходов.</p>`;
@@ -4026,7 +4026,6 @@ function renderPortal(){
 // ---- экипировка (общая для сумки и вкладки Персонаж) ----
 function equipAt(i){
   const x = S.inv[i]; if(!x) return false; const it = ITEMS[x.id];
-  if(it.lvl && S.level < it.lvl){ toast("Нужен " + it.lvl + " уровень"); return false; }
   if(it.cls && it.cls !== S.cls){ toast((it.uniq ? "Это сет класса «" : "Это оружие класса «") + CLASSES[it.cls].name + "»"); return false; }
   const old = S.eq[it.slot];
   S.inv.splice(i, 1); S.eq[it.slot] = {id:x.id, g:x.g||0, e:x.e||0, ...(x.uid ? {uid:x.uid} : {})};
@@ -4062,7 +4061,7 @@ function bagDetail(){
     if(it.type === "cloak") btn = S.cloak === x.id ? `<button class="act alt" type="button" disabled>Надет</button>` : `<button class="act" type="button" data-bcset="${x.id}">Надеть</button>`;
     if(it.type === "wings") btn = S.wing === x.id ? `<button class="act alt" type="button" disabled>Надеты</button>` : `<button class="act" type="button" data-bwset="${x.id}">Надеть</button>`;
     if(it.type === "artifact") btn = S.art === x.id ? `<button class="act alt" type="button" disabled>Надет</button>` : `<button class="act" type="button" data-baset="${x.id}">Надеть</button>`;
-    if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}" ${it.lvl && S.level < it.lvl ? "disabled" : ""}>${it.lvl && S.level < it.lvl ? "Нужен ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
+    if(it.type === "gear") btn = `<div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-equip="${bagSel}">Надеть</button><button class="act alt" type="button" data-ench-inv="${bagSel}">Заточить</button></div>`;
     h += `<div class="detail"><div class="ic" style="width:40px;height:40px;border-radius:9px;background:#1B232C;display:grid;place-items:center">${icon(x.id, x.g)}</div><div class="tx"><span data-notr ${gc ? `style="color:${gc}"` : ""}>${x.e ? "+" + x.e + " " : ""}</span><span ${gc ? `style="color:${gc}"` : ""}>${it.name}</span>${x.n > 1 ? " ×" + x.n : ""}<small>${gc ? GRADES[x.g].name + " · " : ""}${RUNES[x.id] ? rarTag(RUNES[x.id].q) + statChips(RUNES[x.id].b) : ARTS[x.id] ? rarTag(ARTS[x.id].q, true) + statChips(ARTS[x.id].b, artMul(ARTS[x.id])) : itemDesc(x.id, x.g, x.e)}</small></div>${btn}</div>`;
   return h;
 }
@@ -4213,9 +4212,9 @@ function renderGearTab(){
   // карточка выбранного: надетое в слоте или вещь из сумки
   const eqSel = cSlot && S.eq[cSlot], invSel = cSel !== null ? S.inv[cSel] : null;
   if(invSel && ITEMS[invSel.id].type === "gear"){
-    const it = ITEMS[invSel.id], gc = gradeColor(invSel.g), lock = it.lvl && S.level < it.lvl;
+    const it = ITEMS[invSel.id], gc = gradeColor(invSel.g), lock = false;
     h += `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${gc}">${icon(invSel.id, invSel.g)}</div>
-      <div class="tx"><span style="color:${gc}">${invSel.e ? "+" + invSel.e + " " : ""}${it.name}</span><small>${GRADES[invSel.g].name} · ${itemDesc(invSel.id, invSel.g, invSel.e)}${it.lvl ? " · с " + it.lvl + " ур." : ""}</small><div class="cmp">${cmpHtml(invSel.id, invSel.g, invSel.e)}</div></div>
+      <div class="tx"><span style="color:${gc}">${invSel.e ? "+" + invSel.e + " " : ""}${it.name}</span><small>${GRADES[invSel.g].name} · ${itemDesc(invSel.id, invSel.g, invSel.e)}</small><div class="cmp">${cmpHtml(invSel.id, invSel.g, invSel.e)}</div></div>
       <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-cequip="${cSel}" ${lock ? "disabled" : ""}>${lock ? "Ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${cSel}">Заточить</button></div></div>${runeRow("inv:" + cSel)}</section>`;
   } else if(eqSel){
     const it = ITEMS[eqSel.id], gc = gradeColor(eqSel.g);
@@ -8632,12 +8631,14 @@ function elitePacks(rm, rng, packBase){
 // ---- таблица выпадения по образцу LIBERTY: лом 30%, всё остальное — сотые и тысячные доли процента ----
 const P = pct => pct/100;                                  // проценты → вероятность
 const SCRAP_CHANCE = 0.30;
-// снаряжение: шанс на КАЖДУЮ вещь; низкие уровни — обычный грейд, выше — только более редкие грейды и реже
+// снаряжение: шанс на моба по грейдам (серый, зелёный, синий, золотой), вещь — случайная из пула.
+// Синее — только с мобов от 20 ур., золотое — от 31 ур. Зеркало items.gear_per на сервере
 function gearPer(lv){
-  if(lv <= 10) return [P(0.0028 + 0.00008*(lv - 1)), 0, 0, 0];
-  if(lv <= 20) return [0, P(0.0001), 0, 0];
-  if(lv <= 30) return [0, P(0.00012), P(0.00002), 0];
-  return [0, 0, P(0.0001), P(0.00001)];
+  if(lv <= 10) return [1/2500, 1/25000, 0, 0];
+  if(lv <= 19) return [1/3000, 1/10000, 0, 0];
+  if(lv <= 30) return [0, 1/8000, 1/60000, 0];
+  if(lv <= 40) return [0, 0, 1/40000, 1/400000];
+  return [0, 0, 1/30000, 1/250000];
 }
 function mobDrops(type, loc){
   const k = NPCS[type], L = LOCS[loc] || {}, lv = k.lvl || L.min || 1, s = lv - 1;
@@ -8682,9 +8683,9 @@ function rollDrops(e){
   for(const [pid, ch] of [["pot_hp", 0.012], ["pot_atk", 0.008], ["pot_xp", 0.005]]) if(Math.random() < ch*(k.boss ? 10 : 1)*(1 + vb.drop))
     drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:pid, amt:1, t:0});
   for(const it of D.items) if(!(srv && (it.id === "sph_cu" || it.id === "sph_ti")) && Math.random() < it.chance*(1 + vb.drop)) drops.push({x:e.x + Math.random()*30 - 15, y:e.y + Math.random()*30 - 15, kind:it.id, amt:it.amt ? rnd(it.amt) : 1, t:0});
-  // снаряжение: один бросок на грейд, шанс = шанс вещи × число вещей
+  // снаряжение: один бросок на грейд, шанс — на моба (вещь случайная из пула)
   if(!srv && D.gear && D.gear.pool.length) D.gear.per.forEach((p, g) => {
-    if(p && Math.random() < p*D.gear.pool.length*(1 + vb.drop))
+    if(p && Math.random() < Math.min(0.5, p*(1 + vb.drop)))
       drops.push({x:e.x - 12, y:e.y + 12, kind:D.gear.pool[Math.floor(Math.random()*D.gear.pool.length)], amt:1, g, t:0});
   });
 }
@@ -8965,7 +8966,7 @@ function mobCard(type){
     const lateBooks = `${bk.length ? `<div class="dsect">Книги навыков (все классы)</div>` + bk.map(bookRow).join("") : ""}${bp.length ? `<div class="dsect">Книги пассивок (все классы)</div>` + bp.map(bookRow).join("") : ""}`;
     if(D.gear) D.gear.per.forEach((per, g) => {
       if(!per) return;
-      h += `<div class="dsect">Снаряжение (${GRADES[g].name.toLowerCase()})</div>` + D.gear.pool.map(id => row(icon(id, g), ITEMS[id].name, "×1 · " + pctF(per), g ? GRADES[g].color : "")).join("");
+      h += `<div class="dsect">Снаряжение (${GRADES[g].name.toLowerCase()}) · ${pctF(per)} за моба</div>` + D.gear.pool.map(id => row(icon(id, g), ITEMS[id].name, "×1 · " + pctF(per/D.gear.pool.length), g ? GRADES[g].color : "")).join("");
     });
     h += lateBooks;
   }
@@ -11772,7 +11773,7 @@ function elDropRows(){
   h += row(icon(SHARD_IDS[0]), "Осколок уникального сета (любой)", pctF(sh), "#C77DFF");
   for(const i of D.items.filter(i => i.sect === "book" || i.sect === "bookp")){ const it = ITEMS[i.id], C = it.cls && CLASSES[it.cls];
     h += row(icon(i.id), it.name, pctF(i.chance), C ? C.color : "#C9D1D8"); }
-  if(D.gear) D.gear.per.forEach((per, g) => { if(per) for(const id of D.gear.pool) h += row(icon(id, g), ITEMS[id].name, pctF(per), GRADES[g].color); });
+  if(D.gear) D.gear.per.forEach((per, g) => { if(per) for(const id of D.gear.pool) h += row(icon(id, g), ITEMS[id].name, pctF(per/D.gear.pool.length), GRADES[g].color); });
   return h;
 }
 const ELITE_SHARD = [4.0, 0.1];                 // SHARD_BASE и SHARD_STEP по умолчанию в items.py (сверяет test_elite.py)
@@ -13857,7 +13858,7 @@ function artCardHtml(){
     : `<div class="cdetail"><div class="ic"><i class="empty-ic"></i></div><div class="tx"><span>Слот артефакта пуст</span><small>Артефакт даёт постоянный бонус. Собери его в Мастерской или купи в магазине GRAM</small></div></div>`);
   const rows = (artShowAll ? ART_IDS : own.filter(id => id !== S.art)).map(id => {
     const X = ARTS[id], mine = artOwned(id), on = S.art === id && mine;
-    const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
+    const how = X.src === "craft" ? `Мастерская` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
     const btn = on ? `<button class="act alt" type="button" disabled>Надет</button>` : mine ? `<button class="act" type="button" data-aset="${id}">Надеть</button>`
       : X.src === "gram" ? `<button class="act alt" type="button" data-ashop="1">Купить</button>` : `<button class="act alt" type="button" data-dcraftgo="1">Мастерская</button>`;
     return artLine(id, `<small>${mine ? "Есть ×" + (count(S.inv, id) + count(S.store, id)) : how}</small>`, btn);
@@ -13870,11 +13871,11 @@ function artCraftHtml(){
   let h = `<h3 class="bag-h">Артефакты</h3><div class="list">`;
   for(const id of ART_IDS){
     const A = ARTS[id]; if(A.src !== "craft") continue;
-    const lvlOk = S.level >= A.lvl;
+    const lvlOk = true;
     const parts = Object.entries(A.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(A.need).every(([k, n]) => have(k) >= n);
-    h += artLine(id, `<small>с ${A.lvl} ур.${artOwned(id) ? " · уже есть" : ""}</small><div class="need">${parts}</div>`,
+    h += artLine(id, `<small>${artOwned(id) ? "уже есть" : ""}</small><div class="need">${parts}</div>`,
       `<button class="act" type="button" data-acraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + A.lvl}</button>`, "craft");
   }
   return h + `</div><p class="hint">Надет может быть один артефакт. Артефакт своего класса работает в ${numRu(ART_RES)} раза сильнее. Собранный артефакт учтён сервером — его можно продать на маркете за GRAM</p>`;
@@ -13885,7 +13886,6 @@ function artCraftHtml(){
 // Без связи с сервером (превью) крафт идёт на телефоне, как раньше, и вещь получается привязанной.
 let craftBusy = false;
 function craftNeedOk(def){
-  if(S.level < def.lvl){ toast("Нужен " + def.lvl + " уровень"); return false; }
   if(!Object.entries(def.need).every(([k, n]) => have(k) >= n)){ toast("Не хватает материалов"); return false; }
   return true;
 }
@@ -14191,7 +14191,6 @@ function uniqGot(id){
 }
 async function craftUniq(id, btn, bp){
   const it = ITEMS[id]; if(!it || !it.uniq || craftBusy) return;
-  if(S.level < it.lvl && !window.NET_ADMIN){ toast("Нужен " + it.lvl + " уровень"); return; }
   if(!uniqCan(id, bp)){ toast(bp && haveAll("bp_" + it.set) < 1 ? "Нет чертежа: " + ITEMS["bp_" + it.set].name : "Не хватает ресурсов"); return; }
   if(S.inv.length >= INV_MAX){ toast("Освободи место в сумке"); return; }
   const online = typeof REG !== "undefined" && REG.on && regOnline();
@@ -14227,14 +14226,14 @@ function smItems(){
       <div class="sm-grid">${UNIQ_SLOTS.map(s => smTile("u_" + cls + "_" + s, "u", mine ? "" : "dim")).join("")}</div></div>`;
   }
   h += `<h4 class="sm-h">Снаряжение из материалов</h4><p class="sm-note">Железное и Стальное поколения. Грейд случайный: 50% серый, 35% зелёный, 13% синий, 2% золотой.</p>`;
-  for(const t of [2, 3]) h += `<div class="sm-sub">${TIERS[t - 1].set} · с ${TIERS[t - 1].lvl} уровня</div><div class="sm-grid">${RECIPES.filter(r => ITEMS[r.id].tier === t && (!ITEMS[r.id].cls || ITEMS[r.id].cls === S.cls || !S.cls)).map(r => smTile(r.id, "r")).join("")}</div>`;
+  for(const t of [2, 3]) h += `<div class="sm-sub">${TIERS[t - 1].set}</div><div class="sm-grid">${RECIPES.filter(r => ITEMS[r.id].tier === t && (!ITEMS[r.id].cls || ITEMS[r.id].cls === S.cls || !S.cls)).map(r => smTile(r.id, "r")).join("")}</div>`;
   return h;
 }
 function smDetail(){
   const [kind, id] = SM.sel.split(":"), it = ITEMS[id]; if(!it){ SM.sel = null; return smBody(); }
   const uq = kind === "u", rec = !uq && RECIPES.find(r => r.id === id), need = uq ? it.need : rec.need;
   const hv = k => uq ? haveAll(k) : have(k);
-  const lvlOk = !it.lvl || S.level >= it.lvl || window.NET_ADMIN, canRes = Object.entries(need).every(([k, n]) => hv(k) >= n);
+  const lvlOk = true, canRes = Object.entries(need).every(([k, n]) => hv(k) >= n);
   const C = it.cls && CLASSES[it.cls], other = uq && it.set !== S.cls;
   const sh = uq ? CLASS_SHARDS[it.set] : [];
   const isBp = k => ITEMS[k] && ITEMS[k].type === "bp", first = k => SHARD[k] || isBp(k) ? 1 : 0;
@@ -14248,7 +14247,7 @@ function smDetail(){
     <div class="sm-head ${uq ? "uq" : ""} ${SM.just === id ? "just" : ""}" ${C ? `style="--cc:${C.color}"` : ""}>
       <div class="sm-big">${icon(id, uq ? 3 : 0)}</div>
       <div class="sm-hx"><b style="color:${uq ? "#F2C14B" : "var(--text)"}">${uq ? "★ " : ""}${it.name}</b>
-        <small>${SLOT_NAME[it.slot]}${C ? " · " + C.name : ""}${it.lvl ? " · с " + it.lvl + " ур." : ""}${uq ? " · золотой" : ""}</small>
+        <small>${SLOT_NAME[it.slot]}${C ? " · " + C.name : ""}${uq ? " · золотой" : ""}</small>
         <span class="sm-st">${desc}</span></div></div>`;
   if(uq){
     h += `<div class="sm-set" style="--cc:${C.color}"><b>Сет «${UNIQ_SETS[it.set].set}»</b>
@@ -14705,11 +14704,11 @@ function runeCraftHtml(){
   let h = `<h3 class="bag-h" style="margin-top:12px">Руны</h3><div class="list">`;
   for(const id of RUNE_IDS){
     const R = RUNES[id]; if(R.src !== "craft") continue;
-    const lvlOk = S.level >= R.lvl;
+    const lvlOk = true;
     const parts = Object.entries(R.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(R.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li rn-li" style="--rc:${RARITY[R.q].c}"><div class="ic">${runeIcon(id)}</div><div class="tx"><span class="rn-nm">${R.name}${have(id) ? ` <em>есть ${have(id)}</em>` : ""}</span>${rarTag(R.q)}${statChips(R.b)}<small>с ${R.lvl} ур.</small><div class="need">${parts}</div></div>
+    h += `<div class="li rn-li" style="--rc:${RARITY[R.q].c}"><div class="ic">${runeIcon(id)}</div><div class="tx"><span class="rn-nm">${R.name}${have(id) ? ` <em>есть ${have(id)}</em>` : ""}</span>${rarTag(R.q)}${statChips(R.b)}<div class="need">${parts}</div></div>
       <button class="act" type="button" data-rcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + R.lvl}</button></div>`;
   }
   return h + `</div><p class="hint">В каждой вещи одно гнездо для руны. Вставить и вынуть можно в Персонаже, нажав на вещь. Действуют не больше ${RUNE_STACK} одинаковых рун. Эпические и легендарные руны — только в магазине GRAM. Собранные руны можно продать на маркете — и сразу, и после того как вынешь их из вещи</p>`;
@@ -14830,7 +14829,7 @@ function drawOtherDrone(o, t, dt){
 // ---- вкладка «Дрон» в Персонаже ----
 function droneCard(id){
   const D = DRONES[id], own = droneOwned(id), on = S.drone === id && own, gc = GRADES[D.g].color;
-  const how = D.src === "craft" ? `Собрать в Мастерской · с ${D.lvl} ур. · ${Object.entries(D.need).map(([k, n]) => n.toLocaleString("ru-RU") + " " + (k === "scrap" ? "лома" : k === "cores" ? "ядер" : ITEMS[k].name.toLowerCase())).join(", ")}`
+  const how = D.src === "craft" ? `Собрать в Мастерской · ${Object.entries(D.need).map(([k, n]) => n.toLocaleString("ru-RU") + " " + (k === "scrap" ? "лома" : k === "cores" ? "ядер" : ITEMS[k].name.toLowerCase())).join(", ")}`
     : `Только в магазине GRAM · ${gramF(shopPriceOf(id, D.price))} GRAM`;
   const btn = on ? `<button class="act alt" type="button" data-doff="1">Убрать</button>`
     : own ? `<button class="act" type="button" data-dset="${id}">Выпустить</button>`
@@ -14852,11 +14851,11 @@ function droneCraftHtml(){
   let h = `<h3 class="bag-h">Дроны</h3><div class="list">`;
   for(const id of DRONE_IDS){
     const D = DRONES[id]; if(D.src !== "craft") continue;
-    const own = droneOwned(id), lvlOk = S.level >= D.lvl, gc = GRADES[D.g].color;
+    const own = droneOwned(id), lvlOk = true, gc = GRADES[D.g].color;
     const parts = Object.entries(D.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = !own && lvlOk && Object.entries(D.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic" style="border-color:${gc}">${droneIcon(id, 34)}</div><div class="tx"><span style="color:${gc}">Дрон «${D.name}»</span><small>${droneBonusText(D)} · сбор лута ${D.r} · с ${D.lvl} ур.</small>${own ? "" : `<div class="need">${parts}</div>`}</div>
+    h += `<div class="li"><div class="ic" style="border-color:${gc}">${droneIcon(id, 34)}</div><div class="tx"><span style="color:${gc}">Дрон «${D.name}»</span><small>${droneBonusText(D)} · сбор лута ${D.r}</small>${own ? "" : `<div class="need">${parts}</div>`}</div>
       <button class="act" type="button" data-dcraft="${id}" ${can ? "" : "disabled"}>${own ? "Есть" : lvlOk ? "Собрать" : "Ур. " + D.lvl}</button></div>`;
   }
   return h + `</div>`;
@@ -14962,9 +14961,9 @@ renderGearTab = function(){
   const eqSel = cSlot && S.eq[cSlot], invSel = cSel !== null ? S.inv[cSel] : null;
   if(cSlot === "drone" || cSlot === "art" || cSlot === "wing" || cSlot === "cloak") h += bayDetail(cSlot);
   else if(invSel && ITEMS[invSel.id].type === "gear"){
-    const it = ITEMS[invSel.id], gc = gradeColor(invSel.g), lock = it.lvl && S.level < it.lvl;
+    const it = ITEMS[invSel.id], gc = gradeColor(invSel.g), lock = false;
     h += `<section class="pcard"><div class="cdetail"><div class="ic" style="border-color:${gc}">${icon(invSel.id, invSel.g)}</div>
-      <div class="tx"><span style="color:${gc}">${invSel.e ? "+" + invSel.e + " " : ""}${it.name}</span><small>${GRADES[invSel.g].name} · ${itemDesc(invSel.id, invSel.g, invSel.e)}${it.lvl ? " · с " + it.lvl + " ур." : ""}</small><div class="cmp">${cmpHtml(invSel.id, invSel.g, invSel.e)}</div></div>
+      <div class="tx"><span style="color:${gc}">${invSel.e ? "+" + invSel.e + " " : ""}${it.name}</span><small>${GRADES[invSel.g].name} · ${itemDesc(invSel.id, invSel.g, invSel.e)}</small><div class="cmp">${cmpHtml(invSel.id, invSel.g, invSel.e)}</div></div>
       <div style="display:flex;flex-direction:column;gap:5px"><button class="act" type="button" data-cequip="${cSel}" ${lock ? "disabled" : ""}>${lock ? "Ур. " + it.lvl : "Надеть"}</button><button class="act alt" type="button" data-ench-inv="${cSel}">Заточить</button></div></div>${runeRow("inv:" + cSel)}</section>`;
   } else if(eqSel){
     const it = ITEMS[eqSel.id], gc = gradeColor(eqSel.g);
@@ -15054,7 +15053,7 @@ function renderRigPick(){
   if(rigPick === "cloak"){
     const list = cloakShowAll ? CLOAK_IDS : CLOAK_IDS.filter(cloakOwned);
     for(const id of list){ const X = CLOAKS[id], mine = cloakOwned(id), on = S.cloak === id && mine;
-      const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
+      const how = X.src === "craft" ? `Мастерская` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
       h += `<div class="li ${on ? "on" : ""}"><div class="ic" style="border-color:${GRADES[X.g].color};display:grid;place-items:center;${mine ? "" : "opacity:.45"}">${cloakIcon(id, 26)}</div><div class="tx"><span style="color:${X.lt}">${X.name}${mine ? "" : " 🔒"}</span><small>${runeText(X)}</small>${mine ? "" : `<small>${how}</small>`}</div>
         ${on ? `<button class="act alt" type="button" data-rpoff="cloak">Снять</button>` : mine ? `<button class="act" type="button" data-rp="cloak:${id}">Надеть</button>` : X.src === "gram" ? `<button class="act alt" type="button" data-cshop="1">Купить</button>` : ""}</div>`; }
     if(!list.length) h += `<div class="empty">Своих плащей пока нет<small>Посмотри все плащи и где их взять</small></div>`;
@@ -15062,7 +15061,7 @@ function renderRigPick(){
   } else if(rigPick === "wing"){
     const list = wingShowAll ? WING_IDS : WING_IDS.filter(wingOwned);
     for(const id of list){ const X = WINGS[id], mine = wingOwned(id), on = S.wing === id && mine;
-      const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
+      const how = X.src === "craft" ? `Мастерская` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
       h += `<div class="li ${on ? "on" : ""}"><div class="ic" style="border-color:${GRADES[X.g].color};display:grid;place-items:center;${mine ? "" : "opacity:.45"}">${wingIcon(id, 34)}</div><div class="tx"><span style="color:${X.col}">${X.name}${mine ? "" : " 🔒"}</span><small>${runeText(X)}</small>${mine ? "" : `<small>${how}</small>`}</div>
         ${on ? `<button class="act alt" type="button" data-rpoff="wing">Снять</button>` : mine ? `<button class="act" type="button" data-rp="wing:${id}">Надеть</button>` : X.src === "gram" ? `<button class="act alt" type="button" data-wshop="1">Купить</button>` : ""}</div>`; }
     if(!list.length) h += `<div class="empty">Своих крыльев пока нет<small>Посмотри все крылья и где их взять</small></div>`;
@@ -15077,7 +15076,7 @@ function renderRigPick(){
   } else {
     const list = artShowAll ? ART_IDS : ART_IDS.filter(artOwned);
     for(const id of [...list].sort((a, b) => artRes(ARTS[b]) - artRes(ARTS[a]) || ARTS[b].q - ARTS[a].q)){ const X = ARTS[id], mine = artOwned(id), on = S.art === id && mine;
-      const how = X.src === "craft" ? `Мастерская · с ${X.lvl} ур.` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
+      const how = X.src === "craft" ? `Мастерская` : `Магазин GRAM · ${gramF(shopPriceOf(id, X.price))} GRAM`;
       h += artLine(id, mine ? "" : `<small>${how}</small>`, on ? `<button class="act alt" type="button" data-rpoff="art">Снять</button>` : mine ? `<button class="act" type="button" data-rp="art:${id}">Надеть</button>` : X.src === "gram" ? `<button class="act alt" type="button" data-ashop="1">Купить</button>` : "", on ? "on art-on" : ""); }
     if(!list.length) h += `<div class="empty">Своих артефактов пока нет<small>Посмотри все артефакты и где их взять</small></div>`;
     h += `</div><button class="btn wide" type="button" data-rpcat="art" style="margin-top:10px">${artShowAll ? "Только мои артефакты" : "Все артефакты (" + ART_IDS.filter(artOwned).length + " из " + ART_IDS.length + ")"}</button>`;
@@ -15250,11 +15249,11 @@ function wingCraftHtml(){
   let h = `<h3 class="bag-h">Крылья</h3><div class="list">`;
   for(const id of WING_IDS){
     const Wd = WINGS[id]; if(Wd.src !== "craft") continue;
-    const lvlOk = S.level >= Wd.lvl, gc = GRADES[Wd.g].color;
+    const lvlOk = true, gc = GRADES[Wd.g].color;
     const parts = Object.entries(Wd.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(Wd.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic" style="border-color:${gc};display:grid;place-items:center">${wingIcon(id, 34)}</div><div class="tx"><span style="color:${Wd.col}">${Wd.name}${wingOwned(id) ? " · есть" : ""}</span><small>${runeText(Wd)} · с ${Wd.lvl} ур.</small><div class="need">${parts}</div></div>
+    h += `<div class="li"><div class="ic" style="border-color:${gc};display:grid;place-items:center">${wingIcon(id, 34)}</div><div class="tx"><span style="color:${Wd.col}">${Wd.name}${wingOwned(id) ? " · есть" : ""}</span><small>${runeText(Wd)}</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-wcraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + Wd.lvl}</button></div>`;
   }
   return h + `</div><p class="hint">Надеты могут быть одни крылья. Собранные крылья учтены сервером — их можно продать на маркете за GRAM</p>`;
@@ -15352,11 +15351,11 @@ function cloakCraftHtml(){
   let h = `<h3 class="bag-h">Плащи</h3><div class="list">`;
   for(const id of CLOAK_IDS){
     const Cd = CLOAKS[id]; if(Cd.src !== "craft") continue;
-    const lvlOk = S.level >= Cd.lvl, gc = GRADES[Cd.g].color;
+    const lvlOk = true, gc = GRADES[Cd.g].color;
     const parts = Object.entries(Cd.need).map(([k, n]) => { const nm = k === "scrap" ? "Лом" : k === "cores" ? "Ядра" : ITEMS[k].name, hv = have(k);
       return `<span class="${hv >= n ? "ok" : "no"}">${nm} ${Math.min(hv, n).toLocaleString("ru-RU")}/${n.toLocaleString("ru-RU")}</span>`; }).join("");
     const can = lvlOk && Object.entries(Cd.need).every(([k, n]) => have(k) >= n);
-    h += `<div class="li"><div class="ic" style="border-color:${gc};display:grid;place-items:center">${cloakIcon(id, 26)}</div><div class="tx"><span style="color:${Cd.lt}">${Cd.name}${cloakOwned(id) ? " · есть" : ""}</span><small>${runeText(Cd)} · с ${Cd.lvl} ур.</small><div class="need">${parts}</div></div>
+    h += `<div class="li"><div class="ic" style="border-color:${gc};display:grid;place-items:center">${cloakIcon(id, 26)}</div><div class="tx"><span style="color:${Cd.lt}">${Cd.name}${cloakOwned(id) ? " · есть" : ""}</span><small>${runeText(Cd)}</small><div class="need">${parts}</div></div>
       <button class="act" type="button" data-ccraft="${id}" ${can ? "" : "disabled"}>${lvlOk ? "Собрать" : "Ур. " + Cd.lvl}</button></div>`;
   }
   return h + `</div><p class="hint">Надет может быть один плащ. Собранный плащ учтён сервером — его можно продать на маркете за GRAM</p>`;

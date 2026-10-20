@@ -133,7 +133,7 @@ class Blueprints(unittest.TestCase):
             need = items.uniq_need(uid, True)
             self.assertEqual([k for k in need if k not in ("scrap", "cores")], ["bp_" + uid.split("_")[1]])
         S = {"scrap": 10**6, "cores": 10**4, "inv": [{"id": "bp_guard", "n": 1}], "store": [{"id": "bp_guard", "n": 1}]}
-        self.assertIn("40", items.uniq_check(S, "u_guard_armor", 39, True))
+        self.assertIsNone(items.uniq_check(S, "u_guard_armor", 1, True))       # ограничения по уровню нет
         self.assertIsNone(items.uniq_check(S, "u_guard_armor", 40, True))
         self.assertIsNotNone(items.uniq_check(S, "u_guard_armor", 40))              # осколков нет
         self.assertIsNotNone(items.uniq_check(S, "u_reaper_armor", 40, True))       # чертёж чужого класса не подходит

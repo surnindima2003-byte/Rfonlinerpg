@@ -83,8 +83,9 @@ class ChipWarResume(unittest.TestCase):
 class LootCap(unittest.TestCase):
     def test_cap_applies_to_final_chance(self):
         src = (ROOT / "items.py").read_text(encoding="utf-8")
-        self.assertIn("min(0.5, per * mult * len(pool))", src)
-        self.assertNotIn("min(0.5, per * mult) * len(pool)", src)
+        # шанс снаряжения — на моба, а не на вещь: число вещей в пуле его не умножает, потолок 50% — на итог
+        self.assertIn("min(0.5, per * mult)", src)
+        self.assertNotIn("len(pool))", src)
 
 
 if __name__ == "__main__":
