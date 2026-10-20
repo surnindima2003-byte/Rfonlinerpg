@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from db import SessionLocal
 from models import Player
-from game_data import FACTIONS, ZONES, exp_to_next_level
+from game_data import ZONES, exp_to_next_level
 
 router = Router()
 
@@ -24,7 +24,7 @@ async def cmd_profile(message: Message):
     need_exp = exp_to_next_level(player.level)
 
     text = (
-        f"🤖 {player.name} | {FACTIONS.get(player.faction, 'Без фракции').split(' — ')[0]}\n"
+        f"🤖 {player.name}\n"
         f"Уровень: {player.level} (опыт {player.exp}/{need_exp})\n"
         f"HP: {player.hp}/{player.max_hp}\n"
         f"Атака: {player.attack} | Броня: {player.defense}\n\n"

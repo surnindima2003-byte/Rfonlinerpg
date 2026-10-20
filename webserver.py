@@ -57,7 +57,6 @@ SAFE_LOCS |= set(elite.LOCS)                           # в зоне тольк�
 LOCS |= set(coop.LOCS)                                 # залы «Сотрудничества» (по одному на пару)
 SAFE_LOCS |= set(coop.LOCS)                            # в зале только напарники — PvP нет
 mobworld.set_rules(coop.PREFIX, coop.allow_hit, coop.on_kill)   # общие мобы зала: только текущий этап, без возрождения
-FACTIONS = {"aegis", "vex", "core"}
 CLASSES = {"", "guard", "reaper", "sniper", "techno", "ghost", "glyph", "medic"}
 GRANT_KINDS = {"scrap", "cores", "exp", "level", "item"}
 GEAR_IDS = items.GEAR_IDS | {"kit_s", "kit_l", "wire", "plate", "chip", "sph_cu", "sph_ti"}
@@ -2361,7 +2360,6 @@ def clean_pos(d, info):
             info["dead_since"] = time.time()               # с какого момента телефон сообщает о смерти
         info["dead"] = dead
         # ник задаёт сервер (set_online_nick): раньше его брали из каждого pos — можно было писать в чат как «Админ»
-        info["fac"] = info.get("fac_srv") or ""                                    # фракцию задаёт сервер, а не сообщение
         cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1            # свежий предел: растёт по мере убийств
         if info.get("loadtest"):
             cap = 60
@@ -2393,7 +2391,7 @@ def clean_pos(d, info):
     pvpguard.on_report(info)
 
 
-PUBLIC_KEYS = ("id", "nick", "fac", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
+PUBLIC_KEYS = ("id", "nick", "lvl", "x", "y", "ang", "aim", "moving", "dead", "eq", "wpn", "cls", "gt", "gn", "gi", "gc",
                "hp", "mhp", "cp", "mcp", "bm", "admin", "sth", "dr", "wg", "ck")
 # дроны-компаньоны (как в game.html → DRONES): другим игрокам показываем только известные виды
 DRONE_IDS = {"d_spark", "d_bolt", "d_hawk", "d_titan", "d_nova", "d_aegis", "d_phantom", "d_sol"}
@@ -2605,7 +2603,7 @@ async def handle_chat(d, info):
         chat_cids[uid].append(cid)
     now = time.time()
     chat_seq[0] += 1
-    m = {"id": f"{uid}-{int(now * 1000)}", "seq": chat_seq[0], "ch": ch, "text": text, "nick": info["nick"], "fac": info["fac"],
+    m = {"id": f"{uid}-{int(now * 1000)}", "seq": chat_seq[0], "ch": ch, "text": text, "nick": info["nick"],
          "lvl": info["lvl"], "uid": str(uid), "admin": info["admin"], "mod": bool(info.get("mod")) and not info["admin"], "ts": int(now * 1000)}
     await seasonpts.add(uid, "chat", 1)                        # задание сезона: сообщения в чат
     if ch == "world":
@@ -2816,29 +2814,6 @@ async def handle_kills(d, info, conn):
         await share_party_xp(info, sum(exp))
 
 
-async def api_faction(request):
-    """Одноразовый выбор фракции в игре (для тех, кто не выбрал её в боте через /start). Сменить потом нельзя."""
-    body, user = await read_auth(request)
-    fac = body.get("fac")
-    if not isinstance(fac, str) or fac not in FACTIONS:
-        return web.json_response({"ok": False, "error": "Нет такой фракции"})
-    uid = user["id"]
-    async with SessionLocal() as s:
-        await s.execute(insert_ignore(Player.__table__, tg_id=uid, name=(user["name"] or "Пилот")[:64], faction=fac,
-                                      current_zone="scrapfields", **STARTING_STATS))
-        # строка могла существовать с пустой фракцией — заполняем, только если она всё ещё пустая
-        await s.execute(update(Player).where(Player.tg_id == uid, Player.faction == "").values(faction=fac)
-                        .execution_options(synchronize_session=False))
-        cur = (await s.execute(select(Player.faction).where(Player.tg_id == uid))).scalar()
-        await s.commit()
-    if cur != fac:
-        return web.json_response({"ok": False, "error": "Фракция уже выбрана", "fac": cur})
-    for c in hub.by_uid.get(uid, []):
-        c.info["fac_srv"] = c.info["fac"] = fac
-    log.info("Фракция: игрок %s выбрал %s", uid, fac)
-    return web.json_response({"ok": True, "fac": fac})
-
-
 WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "card", "card_get", "pvp", "pvp_dead", "emote", "sfx", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
@@ -2893,7 +2868,7 @@ async def ws_handler(request):
                 except (TypeError, ValueError):
                     proto = 1
                 info = {**user, "loc": "lobby", "x": 500, "y": 640, "ang": 0, "aim": 0, "moving": False, "dead": False,
-                        "nick": public_name("", user["name"]), "fac": "", "fac_srv": "", "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
+                        "nick": public_name("", user["name"]), "lvl": 1, "eq": {}, "wpn": "", "seen": time.time(), "kr": 0,
                         "proto": proto, "gid": "", "gt": "", "gn": "", "gi": "", "gc": ""}
                 if LOADTEST and user["id"] >= LOADTEST_UID_BASE:
                     info["loadtest"] = True
@@ -2902,11 +2877,9 @@ async def ws_handler(request):
                     async with SessionLocal() as s_:
                         info["lvl_cap"] = await progress.cap_of(s_, user["id"])
                         pvpguard.set_points(user["id"], await gram.bought_points(s_, user["id"]))   # для пределов PvP
-                        fac = (await s_.execute(select(Player.faction).where(Player.tg_id == user["id"]))).scalar()
                         nick = (await s_.execute(select(GameSave.nick).where(GameSave.tg_id == user["id"]))).scalar()
                         g = await guild_of(s_, user["id"])
                         await s_.commit()
-                    info["fac_srv"] = info["fac"] = fac if fac in FACTIONS else ""
                     if nick:
                         info["nick"] = public_name(nick)
                     if g:
@@ -2928,8 +2901,7 @@ async def ws_handler(request):
                 conn.push(realtime.encode({"t": "hello", "id": user["id"], "admin": user["admin"], "mod": user.get("mod", False), "mw": 2,
                                            "muted": int(muted_until(user["id"]) * 1000), "kr": info["kr"],
                                            # мировой чат и чат своей гильдии (гильдию сервер узнал выше, из базы)
-                                           "history": list(chat_history) + list(guild_history.get(info["gid"], ())),
-                                           "fac": info["fac_srv"]}))
+                                           "history": list(chat_history) + list(guild_history.get(info["gid"], ()))}))
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
@@ -3337,7 +3309,6 @@ async def start_web(port: int):
     app.router.add_post("/api/wboss", api_wboss)
     tower.setup(app, read_auth, online)
     seasonpts.setup_rating(app, read_auth, push_to_player)
-    app.router.add_post("/api/faction", api_faction)
     app.router.add_get("/ws", ws_handler)
     # закрепления ролей — ДО приёма запросов: раньше сервер сначала открывал порт, и в это окно ник админа
     # мог закрепиться за чужим id (пустой словарь закреплений = «первый вошедший получает роль»)

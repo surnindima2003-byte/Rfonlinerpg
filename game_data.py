@@ -1,9 +1,3 @@
-FACTIONS = {
-    "aegis": "Aegis Dynamics — оборонные роботы, тяжёлая броня",
-    "vex": "Vex Industries — быстрые разведывательные дроны",
-    "core": "CoreForge — инженерные роботы, ставка на энергию и крафт",
-}
-
 # Зоны открытого мира. chance_fight / chance_resource — вероятности события при исследовании.
 ZONES = {
     "scrapfields": {

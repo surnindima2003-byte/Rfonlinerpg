@@ -40,8 +40,9 @@ class HandlersContract(unittest.TestCase):
     def test_callback_data_validated(self):
         self.assertIn("ZONES.get(zone_key)", EXPLORE)
         self.assertNotIn("ZONES[zone_key]", EXPLORE)
-        self.assertIn("if faction_key not in FACTIONS", START)
-        self.assertIn("FACTIONS.get(player.faction", PROFILE)
+        self.assertNotIn("faction", START)                                     # фракций в игре больше нет
+        self.assertNotIn("FACTIONS", PROFILE)
+        self.assertIn("insert_ignore(Player.__table__", START)                 # двойной /start не роняет бота
 
     def test_no_raw_edit_text(self):
         for src in (EXPLORE, START):
