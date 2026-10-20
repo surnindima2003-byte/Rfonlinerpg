@@ -922,7 +922,6 @@ async def process_kills(s, uid, me, kills, exp_out=None):
     Коммитит сессию сам."""
     import progress
     import pvp
-    import chipwar
     import funnel
     cap = await progress.cap_of(s, uid)                  # уровень — серверный, а не присланный игроком
     import vip
@@ -959,7 +958,6 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             await seasonpts.add(uid, ctr, 1)                # задания сезона: убийства на этажах и в полях
         before = await count_loot_kill(s, uid, 10 if boss else 1)
         lf = loot_factor(before)
-        bonus = chipwar.loot_mult(me.get("fac"))
         if vip_lv is None:
             vip_lv = await vip.level(s, uid, bool(me.get("admin")))
         if ticket is None:
@@ -972,7 +970,7 @@ async def process_kills(s, uid, me, kills, exp_out=None):
                                            drop_bonus=vrow[3] + (0.6 if ticket else 0) + (0.5 if loc == "season1" else 0)))
         if dup is None:
             dup = await dropup_mult(s, uid, cap)                        # улучшение «Бонус к дропу» (до +30%)
-        base_mult = mult * lf * bonus * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
+        base_mult = mult * lf * vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)   # билет сезона: +60% к дропу   # VIP-бонус к дропу считает сервер
         em = ELITE_LOOT if mob.startswith("el") else 1                  # элитная зона: ценный дроп ×2 (осколки — как обычно)
         for d in roll(lv, base_mult * em, shard_mult=base_mult, gear_lv=min(lv, WORLD_GEAR_LV) if loc == WORLD_LOC else None):
             item = await mint_gear(s, uid, d["id"], d["g"]) if d["kind"] == "gear" else await add_spheres(s, uid, d["id"], d["n"])

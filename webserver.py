@@ -22,7 +22,6 @@ from db import SessionLocal, engine, db_ping, dispose as db_dispose
 import metrics
 import realtime
 from models import Base, GameSave, Grant, Doc, Meta, MarketLot, MarketHist, Player, FirstSeen
-import chipwar
 import funnel
 import mobguard
 from db_atomic import insert_ignore
@@ -2840,31 +2839,6 @@ async def api_faction(request):
     return web.json_response({"ok": True, "fac": fac})
 
 
-async def api_chipwar(request):
-    body, user = await read_auth(request)
-    op = request.match_info["op"]
-    if op == "state":
-        return web.json_response({"ok": True, **chipwar.status()})
-    if not user["admin"]:
-        raise web.HTTPForbidden(text="not admin")
-    if op == "start":
-        if chipwar.WAR.phase == "live":
-            return web.json_response({"ok": False, "error": "Chip War уже идёт"})
-        try:
-            minutes = max(1, min(60, int(body.get("minutes", 10))))
-        except (TypeError, ValueError):
-            minutes = 10
-        await chipwar.start_now(hub, minutes * 60)
-        log.warning("Админ @%s запустил Chip War на %s мин", user["username"], minutes)
-        return web.json_response({"ok": True})
-    if op == "stop":
-        if chipwar.WAR.phase != "live":
-            return web.json_response({"ok": False, "error": "Chip War сейчас не идёт"})
-        await chipwar.finish_now(hub, push_to_player)
-        return web.json_response({"ok": True})
-    raise web.HTTPBadRequest(text="bad op")
-
-
 WS_TYPES = {"pos", "pinv", "pacc", "pdec", "pleave", "pkick", "heal", "cheal", "cbuff", "pxp", "card", "card_get", "pvp", "pvp_dead", "emote", "sfx", "chat", "ping", "mute", "report", "reports", "report_close", "mhit", "mpos", "mctl", "wbhit", "wbpick", "twhit", "twdead"}
 
 
@@ -2955,7 +2929,7 @@ async def ws_handler(request):
                                            "muted": int(muted_until(user["id"]) * 1000), "kr": info["kr"],
                                            # мировой чат и чат своей гильдии (гильдию сервер узнал выше, из базы)
                                            "history": list(chat_history) + list(guild_history.get(info["gid"], ())),
-                                           "fac": info["fac_srv"], "cw": chipwar.status()}))
+                                           "fac": info["fac_srv"]}))
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
@@ -3364,7 +3338,6 @@ async def start_web(port: int):
     tower.setup(app, read_auth, online)
     seasonpts.setup_rating(app, read_auth, push_to_player)
     app.router.add_post("/api/faction", api_faction)
-    app.router.add_post("/api/chipwar/{op}", api_chipwar)
     app.router.add_get("/ws", ws_handler)
     # закрепления ролей — ДО приёма запросов: раньше сервер сначала открывал порт, и в это окно ник админа
     # мог закрепиться за чужим id (пустой словарь закреплений = «первый вошедший получает роль»)
@@ -3384,7 +3357,6 @@ async def start_web(port: int):
     await items.migrate_gear()
     await items.migrate_market_registry()
     STATE["tasks"]["deposit"] = asyncio.create_task(gram.deposit_watcher())
-    STATE["tasks"]["chipwar"] = asyncio.create_task(chipwar.loop(hub, push_to_player, metrics))
     STATE["ready"] = True
     if LOADTEST:
         log.warning("РЕЖИМ НАГРУЗОЧНОГО ТЕСТА включён (staging, LOADTEST=1)")
