@@ -2814,6 +2814,8 @@ function travel(key){
   setTimeout(() => {
     const s = buildLoc(key);
     p = {x:s.x, y:s.y, r:20, ang:-Math.PI/2, aim:-Math.PI/2, fireCd:0, dashCd:0, kitCd:0, dashT:0, dx:0, dy:0, inv:0.8, dead:false, deadT:0, flash:0, moving:false, target:null};
+    // первый вход в игру: робот встаёт там, где пилот вышел (не дальше краёв карты и не внутри камня)
+    if(typeof resumeAt !== "undefined" && resumeAt && resumeAt.loc === key){ p.x = resumeAt.x; p.y = resumeAt.y; pushOut(p, p.r); resumeAt = null; }
     const L = LOCS[key]; $("locName").textContent = L.name;
     const tag = $("zoneTag");
     tag.innerHTML = L.name + (L.safe ? "<small>Безопасная зона</small>" : (S.level < L.min ? `<small>Опасно: рекомендован уровень ${L.min}</small>` : "<small>Враги рядом</small>"));
@@ -4257,7 +4259,29 @@ document.querySelectorAll("[data-soon]").forEach(b => b.addEventListener("click"
 document.documentElement.style.setProperty("--faction", FACTIONS[S.faction].color);
 { const s = buildLoc("lobby"); p = {x:s.x, y:s.y, r:20, ang:-Math.PI/2, aim:-Math.PI/2, fireCd:0, dashCd:0, kitCd:0, dashT:0, dx:0, dy:0, inv:0, dead:false, deadT:0, flash:0, moving:false, target:null}; }
 S.hp = Math.max(1, Math.min(S.hp, stat().maxhp));
-resize(); travel("lobby");
+// ---- вход там, где вышел: локация и точка (S.lastSpot) запоминаются каждые 3 с и при выходе из игры ----
+// Только обычные локации. Из событий и экземпляров («Страх», башня, логово босса, элитная зона, «Сотрудничество»)
+// вход — в ангар: туда попадают только через их окно. Погиб и вышел, не дождавшись возрождения, — тоже в ангар.
+const RESUME_LOCS = ["lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "farm1", "season1", "world"];
+let resumeAt = null;                                   // куда поставить робота при первом входе (применяет travel)
+let spotHold = true;                                   // вход ещё не состоялся — место выхода не трогаем
+function rememberSpot(){
+  if(spotHold || !p) return;                           // (игра может перезапуститься сразу после загрузки — синхронизация)
+  if(p.dead || !RESUME_LOCS.includes(locKey)){ S.lastSpot = null; return; }
+  S.lastSpot = {loc:locKey, x:Math.round(p.x), y:Math.round(p.y)};
+}
+setInterval(rememberSpot, 3000);
+// раньше сохранения на сервер (его отправляет обработчик ниже по коду): место выхода уходит вместе с ним
+document.addEventListener("visibilitychange", () => { if(document.hidden){ rememberSpot(); save(); } });
+window.addEventListener("pagehide", () => { rememberSpot(); save(); });
+resize();
+// через такт: к этому моменту скрипт выполнен целиком и все локации (Фарм зона, Сезон, Мир) уже описаны
+setTimeout(() => {
+  const at = S.lastSpot, ok = at && RESUME_LOCS.includes(at.loc) && LOCS[at.loc] && isFinite(at.x) && isFinite(at.y);
+  resumeAt = ok ? {loc:at.loc, x:+at.x, y:+at.y} : null;
+  travel(ok ? at.loc : "lobby");
+  setTimeout(() => { resumeAt = null; spotHold = false; }, 1000);    // вход состоялся (или не состоялся) — запоминаем место
+}, 0);
 requestAnimationFrame(loop);
 
 // ---- бонусы комплекта одного поколения ----
