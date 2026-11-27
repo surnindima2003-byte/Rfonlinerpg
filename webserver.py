@@ -37,6 +37,7 @@ import saveguard
 import mobworld
 import seasonpts
 import skillfx
+import quests
 import worldboss
 import worldthrone            # босс трона в Мире: правило общего моба, таймер возвращения, запись в базу
 import tower
@@ -3323,6 +3324,7 @@ async def start_web(port: int):
     gram.setup(app)
     items.setup(app)
     vip.setup(app, read_auth)                              # награды уровней VIP — через сервер
+    quests.setup(app, read_auth)                           # награды сюжетных и ежедневных квестов — через сервер
     pvp.setup(app)
     stats.setup(app)
     special_quests.setup(app, read_auth, push_to_player, grant_dict)

@@ -92,7 +92,13 @@ class QuestBadgeContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(handler)
         claim_branch = handler.group(1)
-        self.assertRegex(claim_branch, r"save\(\); qBadge\(\);.*?renderQuests\(\);")
+        # награду теперь выдаёт сервер (quests.py): кнопка зовёт qDailyClaim / qBonusClaim с перерисовкой экрана,
+        # а они обновляют значок (qBadge) до перерисовки (redraw)
+        self.assertIn("qDailyClaim(+b.dataset.qc, () => renderQuests())", claim_branch)
+        self.assertIn("qBonusClaim(() => renderQuests())", claim_branch)
+        for fn in ("qDailyClaim", "qBonusClaim"):
+            body = re.search(r"async function " + fn + r"\(.*?\n\}\n", GAME, re.S).group(0)
+            self.assertRegex(body, r"(?s)save\(\); qBadge\(\);.*?redraw\(\);", fn)
 
 
 
