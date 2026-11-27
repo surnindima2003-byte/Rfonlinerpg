@@ -2859,6 +2859,7 @@ $("skAuto").addEventListener("click", () => {
 setInterval(() => { renderAutoBtn(); if(auto && !autoAllowed()) setAuto(false); }, 1000);
 // состояние автобоя: цель, застревание, «плохие» цели (за стеной, недостижимые)
 const autoS = {tgt:null, stuckT:0, lastD:0, losT:0, bad:new Map()};
+const AUTO_ROAM = 540;              // дальше 560 АВТО цель бросает (см. update) — ищем чуть ближе
 function autoPick(radius){
   const nowT = performance.now()/1000;
   let best = null, bestScore = Infinity;
@@ -3107,7 +3108,10 @@ function update(dt){
   // АВТО сам берёт цель в таргет (видна в рамке цели) и держит её до смерти, а не прыгает между мобами
   if(auto && locKey !== "lobby" && !(typeof tgtPlayer === "function" && tgtPlayer())){
     if(lockedNow && Math.hypot(lockedNow.x - p.x, lockedNow.y - p.y) > 560) { autoDrop(lockedNow, 3); lockedNow = null; }   // убежали слишком далеко
-    if(!lockedNow){ const n = autoPick(Math.max(RANGE, 240) + 80); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); lockedNow = n; autoS.stuckT = 0; autoS.losT = 0; autoS.lastD = Infinity; } }
+    // в открытых полях (не подземелья, не Мир с его кругом АВТО) рядом никого — АВТО ищет дальше, в пределах
+    // экрана, и сам едет к врагу: раньше после зачистки ближних мобов робот просто стоял
+    if(!lockedNow){ const L0 = LOCS[locKey] || {}, roam = !L0.dungeon && !L0.arena && !L0.world && !L0.safe && (L0.npcs || []).length > 0;
+      const n = autoPick(Math.max(RANGE, 240) + 80) || (roam ? autoPick(AUTO_ROAM) : null); if(n){ tgt = {kind:"enemy", e:n}; renderTargetFrame(); lockedNow = n; autoS.stuckT = 0; autoS.losT = 0; autoS.lastD = Infinity; } }
   }
   const t = locKey === "lobby" ? null : lockedNow ? (auto || Math.hypot(lockedNow.x-p.x, lockedNow.y-p.y) < Math.max(RANGE, 240) + 160 ? lockedNow : null) : null; p.target = t;
   const tDist = t ? Math.hypot(t.x-p.x, t.y-p.y) : 0, tLos = t ? los(p.x, p.y, t.x, t.y) && canReach(t) : false;   // АВТО сам заходит в комнату
