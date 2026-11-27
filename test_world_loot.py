@@ -156,7 +156,7 @@ class Blueprints(unittest.TestCase):
         self.assertIn('"чертежей" if item["id"] in BLUEPRINTS', ITEMS_SRC)
         self.assertIn('"монет удачи" if item["id"] == LUCK', ITEMS_SRC)
         self.assertIn('["bp", "Чертежи"]', GAME)
-        self.assertIn('...SHARD_IDS, ...GEM_IDS, ...BP_IDS]', GAME)
+        self.assertIn('...SHARD_IDS, ...GEM_IDS, ...BP_IDS, ...BOOK_IDS]', GAME)
 
 
 class LuckyCoin(unittest.TestCase):
@@ -500,7 +500,7 @@ class Translated(unittest.TestCase):
     def test_server_texts_are_the_ones_translated(self):
         for s in ("Нет учтённых монет: сдать можно только выпавшие в Мире или купленные на маркете",
                   "Нет учтённого чертежа: он должен выпасть в Мире или быть куплен на маркете",
-                  "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы и чертежи с мобов, руны, дронов, артефакты, крылья и плащи"):
+                  "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы, чертежи и книги с мобов, руны, дронов, артефакты, крылья и плащи"):
             self.assertIn(s, ITEMS_SRC)
             self.assertIn(f'"{s}": [', GAME)
 

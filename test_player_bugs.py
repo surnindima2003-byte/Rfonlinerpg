@@ -288,11 +288,11 @@ class Market(unittest.TestCase):
         harness = (ROOT / "tools" / "stat_caps.js").read_text(encoding="utf-8").split("\nconst out = JSON.parse")[0]
         js = ("process.argv[2] = " + json.dumps(str(ROOT / "game.html")) + ";\n" + harness +
               "\nconsole.log(run(`JSON.stringify({cats:MK_CATS.map(c => c[0]), sell:[...GEAR_IDS, ...REG_IDS].map(id => [id, mkCatOf(id)]),"
-              " notSell:[...BOOK_IDS.slice(0, 3), 'wire', 'chip', 'plate'].map(id => mkCatOf(id))})`));")
+              " notSell:['wire', 'chip', 'plate'].map(id => mkCatOf(id))})`));")
         out = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=120)
         self.assertEqual(out.returncode, 0, out.stderr[-1500:])
         d = json.loads(out.stdout.strip().splitlines()[-1])
-        self.assertNotIn("book", d["cats"])
+        self.assertIn("book", d["cats"])                                  # книги чужого класса продаются (решение владельца 28.11)
         self.assertNotIn("mat", d["cats"])
         bad = [(i, c) for i, c in d["sell"] if c not in d["cats"]]
         self.assertEqual(bad, [])                                         # дроны, крылья, плащи — в своих разделах

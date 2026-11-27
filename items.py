@@ -457,6 +457,59 @@ BOOKS_PAS = (
     "bp_cyclotron", "bp_fieldrep", "bp_triage", "bp_hunter", "bp_shade", "bp_monolith", "bp_weave", "bp_swift",
     "bp_vital", "bp_fury", "bp_servo", "bp_cold", "bp_selfrepair", "bp_looter",
 )
+# Книги учитываются сервером, как осколки (решение владельца 28.11): падают по решению сервера, продаются на маркете
+# за GRAM и разбираются на ресурсы (op "salvage"). Изучать и улучшать умения можно любыми — учтёнными и нет.
+BOOKS = BOOKS_SKILL + BOOKS_PAS
+REG_IDS = REG_IDS + BOOKS
+# id в таблице балансов — не длиннее 12 символов (String(12)); длинным даём короткий ключ хранения
+COL_ALIAS = {"bp_selfrepair": "bp_selfrep"}
+_COL_BACK = {v: k for k, v in COL_ALIAS.items()}
+
+
+def _col(sid):
+    return COL_ALIAS.get(sid, sid)
+
+
+def _uncol(key):
+    return _COL_BACK.get(key, key)
+
+
+# Разборка книги (решение владельца 28.11): лом за каждую и с шансом — один материал для крафта.
+# Числа — здесь и в game.html → BOOK_SALVAGE (сверяет test_books.py).
+BOOK_SALVAGE_SCRAP = 100
+BOOK_SALVAGE_MAT = 0.2
+SALVAGE_MATS = ("wire", "plate", "chip")
+SALVAGE_MAX = 50
+
+
+def salvage_in_save(S, item_id, n, rnd=random.random, pick=random.choice):
+    """Разобрать n книг в данных сохранения: книги списываются (сначала из сумки, потом со склада), лом и материалы
+    добавляются. Возвращает (что получено {"scrap": .., материал: ..}, текст ошибки или None). S меняется только без ошибки."""
+    if item_id not in BOOKS:
+        return None, "Разобрать можно только книгу"
+    if _have_any(S, item_id) < n:
+        return None, "Сервер не видит этих книг. Подожди пару секунд и попробуй ещё раз"
+    got = {"scrap": BOOK_SALVAGE_SCRAP * n}
+    for _ in range(n):
+        if rnd() < BOOK_SALVAGE_MAT:
+            m = pick(SALVAGE_MATS)
+            got[m] = got.get(m, 0) + 1
+    inv = S.setdefault("inv", [])
+    mats_new = sum(1 for m in got if m != "scrap" and not any(isinstance(x, dict) and x.get("id") == m for x in inv))
+    after = len(inv) - (1 if _inv_count(S, item_id) and _inv_count(S, item_id) <= n else 0)
+    if after + mats_new > INV_MAX_SRV:
+        return None, "Освободи место в сумке"
+    _take_any(S, item_id, n)
+    S["scrap"] = S.get("scrap", 0) + got["scrap"]
+    for m, k in got.items():
+        if m == "scrap":
+            continue
+        stack = next((x for x in inv if isinstance(x, dict) and x.get("id") == m), None)
+        if stack:
+            stack["n"] = int(stack.get("n", 1) or 0) + k
+        else:
+            inv.append({"id": m, "n": k})
+    return got, None
 
 
 def soft_table(mob, loc):
@@ -562,9 +615,10 @@ async def mint_gear(s, owner, item_id, g, e=0, source="drop"):
 
 async def sph_row(s, owner, sid):
     """Строка баланса сфер. Если из-за старой гонки строк стало несколько — сливаем их в одну."""
-    rows = (await s.execute(select(SphereBal).where(SphereBal.owner == owner, SphereBal.item == sid).order_by(SphereBal.id))).scalars().all()
+    key = _col(sid)
+    rows = (await s.execute(select(SphereBal).where(SphereBal.owner == owner, SphereBal.item == key).order_by(SphereBal.id))).scalars().all()
     if not rows:
-        row = SphereBal(owner=owner, item=sid, n=0)
+        row = SphereBal(owner=owner, item=key, n=0)
         s.add(row)
         await s.flush()                                  # нужен id для атомарных изменений
         return row
@@ -717,7 +771,9 @@ async def api_items(request):
     async with SessionLocal() as s:
         if op == "state":
             items = (await s.execute(select(ItemInst).where(ItemInst.owner == uid, ItemInst.status == "inv"))).scalars().all()
-            sph = {r.item: r.n for r in (await s.execute(select(SphereBal).where(SphereBal.owner == uid))).scalars().all()}
+            sph = {}
+            for r in (await s.execute(select(SphereBal).where(SphereBal.owner == uid))).scalars().all():
+                sph[_uncol(r.item)] = sph.get(_uncol(r.item), 0) + (r.n or 0)
             gemcx = {k: min(gem_cap(k), sph.get(GEM_CX + k, 0) or 0) for k in GEMS}
             remember_gems(uid, gemcx)
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
@@ -805,6 +861,49 @@ async def api_items(request):
                 await s.commit()
             metrics.inc("craft." + ("drone" if item_id in DRONES else "artifact" if item_id in ARTIFACTS else "wings" if item_id in WINGS else "cloak" if item_id in CLOAKS else "rune"))
             return web.json_response({"ok": True, "id": item_id, "scrap": S.get("scrap", 0), "cores": S.get("cores", 0), "craftN": craft_n})
+
+        if op == "salvage":
+            # разборка книги: книги списываются в сохранении (учтённые — и с учёта), лом и материалы — в сохранение
+            item_id = str(body.get("id", ""))
+            try:
+                n = max(1, min(SALVAGE_MAX, int(body.get("n", 1))))
+            except (TypeError, ValueError, OverflowError):
+                n = 1
+            if item_id not in BOOKS:
+                return web.json_response({"ok": False, "error": "Разобрать можно только книгу"})
+            import saveguard
+            async with saveguard.player_lock(uid):
+                row = (await s.execute(select(GameSave).where(GameSave.tg_id == uid))).scalar_one_or_none()
+                try:
+                    data = json.loads(row.data) if row and row.data else None
+                except ValueError:
+                    data = None
+                S = data.get("S") if isinstance(data, dict) else None
+                if not isinstance(S, dict):
+                    return web.json_response({"ok": False, "error": "Сохранение не найдено, попробуй через минуту"})
+                got, err = salvage_in_save(S, item_id, n)
+                if err:
+                    return web.json_response({"ok": False, "error": err})
+                try:
+                    craft_n = int(S.get("craftN", 0) or 0) + 1
+                except (TypeError, ValueError, OverflowError):
+                    craft_n = 1
+                S["craftN"] = craft_n                    # сохранения, собранные до разборки, сервер больше не примет
+                res = await s.execute(update(GameSave).where(GameSave.tg_id == uid, GameSave.updated == row.updated)
+                                      .values(data=json.dumps(data, ensure_ascii=False), updated=int(time.time()))
+                                      .execution_options(synchronize_session=False))
+                if res.rowcount != 1:
+                    await s.rollback()
+                    return web.json_response({"ok": False, "error": "Сохранение как раз обновлялось, нажми ещё раз"})
+                # учтённых книг не больше, чем их осталось в сохранении (разбираются сначала неучтённые)
+                bal = await sph_row(s, uid, item_id)
+                left = _have_any(S, item_id)
+                if (bal.n or 0) > left:
+                    await drop_spheres(s, uid, item_id, (bal.n or 0) - left)
+                await s.commit()
+                reg_left = min(bal.n or 0, left)
+            metrics.inc("book.salvage", n)
+            return web.json_response({"ok": True, "got": got, "scrap": S.get("scrap", 0), "craftN": craft_n, "reg": reg_left})
 
         if op in ("socket", "unsocket"):
             # руна вставлена в вещь или вынута: её учёт переходит в «гнездо» (s:<id>) и обратно.
@@ -955,10 +1054,10 @@ async def escrow_for_market(s, uid, item):
         n = max(1, min(999, int(item.get("n", 1))))
         ok, row = await take_spheres(s, uid, item["id"], n)
         if not ok:
-            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "монет удачи" if item["id"] == LUCK else "самоцветов" if item["id"] in GEMS else "чертежей" if item["id"] in BLUEPRINTS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "рун"
+            what = "сфер" if item["id"] in SPHERES else "осколков" if item["id"] in SHARDS else "монет удачи" if item["id"] == LUCK else "самоцветов" if item["id"] in GEMS else "чертежей" if item["id"] in BLUEPRINTS else "дронов" if item["id"] in DRONES else "артефактов" if item["id"] in ARTIFACTS else "крыльев" if item["id"] in WINGS else "плащей" if item["id"] in CLOAKS else "книг" if item["id"] in BOOKS else "рун"
             return None, f"Учтённых {what} только {row.n or 0}: остальные нельзя продать за GRAM"
         return {"id": item["id"], "g": 0, "e": 0, "n": n, "reg": True}, None
-    return None, "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы и чертежи с мобов, руны, дронов, артефакты, крылья и плащи"
+    return None, "За GRAM можно продавать только снаряжение, сферы, осколки, самоцветы, чертежи и книги с мобов, руны, дронов, артефакты, крылья и плащи"
 
 
 async def market_transfer(s, item, to_uid, status="inv"):
@@ -1038,7 +1137,12 @@ async def process_kills(s, uid, me, kills, exp_out=None):
             ledger.add(uid, {d["id"]: d["n"]})                          # учёт зелий: законный приход в сохранении
         soft_mult = vip.drop_mult(vip_lv) * dup * (1.6 if ticket else 1) * SEASON_DROP.get(loc, 1)
         for d in roll_soft(mob, loc, soft_mult):                        # материалы, ремкомплект, ядра, книги
-            drops.append({"id": d["id"], "n": d["n"], "i": i})
+            if d["id"] in BOOKS:                                        # книги — в учёт: их можно продать на маркете
+                item = await add_spheres(s, uid, d["id"], d["n"])
+                item["i"] = i
+                drops.append(item)
+            else:
+                drops.append({"id": d["id"], "n": d["n"], "i": i})
         if mob == mobguard.THRONE_BOSS:                                 # босс трона: ещё и камни заточки
             for d in roll_throne():
                 item = await add_spheres(s, uid, d["id"], d["n"])

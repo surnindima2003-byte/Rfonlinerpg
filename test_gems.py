@@ -74,7 +74,7 @@ class ServerMatchesGame(unittest.TestCase):
     def test_registered_and_tradeable(self):
         for gid in items.GEMS:
             self.assertIn(gid, items.REG_IDS)                                  # учёт штуками: маркет и Кодекс
-        self.assertIn("...SHARD_IDS, ...GEM_IDS, ...BP_IDS]", GAME)            # и у телефона (REG_IDS игры)
+        self.assertIn("...SHARD_IDS, ...GEM_IDS, ...BP_IDS, ...BOOK_IDS]", GAME)            # и у телефона (REG_IDS игры)
         self.assertIn('["gem", "Самоцветы"]', GAME)                             # раздел маркета
 
     def test_ids_fit_balance_column(self):

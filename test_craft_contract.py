@@ -43,7 +43,8 @@ class CraftContract(unittest.TestCase):
     def test_ids_fit_balance_column(self):
         # таблица балансов хранит id в String(12): и сами вещи, и руны в гнёздах («s:<id>»)
         for rid in items.REG_IDS:
-            self.assertLessEqual(len(rid), 12, rid)
+            self.assertLessEqual(len(items._col(rid)), 12, rid)            # длинным id — короткий ключ хранения (COL_ALIAS)
+        self.assertEqual(len({items._col(r) for r in items.REG_IDS}), len(items.REG_IDS))   # ключи не совпадают
         for rid in items.RUNES:
             self.assertLessEqual(len(items.SOCKET_PREFIX + rid), 12, rid)
 
