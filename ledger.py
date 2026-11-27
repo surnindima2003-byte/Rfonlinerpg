@@ -48,6 +48,7 @@ ELITE_RANGE, ELITE_LOOT = (26, 36), 2          # элитные монстры e
 COOP_STAGES = (10, 15, 20, 25, 30, 40, 50, 60)
 COOP_BASE = ("scrap_crawler", "rogue_drone", "sentry_bot", "war_walker", "scrap_crawler", "rogue_drone", "sentry_bot", "war_walker")
 COOP_BOSS = 40
+THRONE_BOSS, THRONE_LVL = "wt60", 60   # босс трона в Мире (worldthrone.py) — как главарь подземелья 60 ур. (NPCS.wt60 в игре)
 WORLD_RANGE = (40, 59)         # «Мир»: монстры wm40…wm59 — как моб подземелья того же уровня (как mobguard.WORLD_RANGE)
 LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6}
 LOC_CORES = {"reactor_ruins", "iron_canyon"}   # локации с флагом cores в LOCS
@@ -85,6 +86,10 @@ def mob_info(mob):
         return L, (L + 1, 2 * L + 4), loot, False
     if mob == f"cb{COOP_BOSS}":                                # босс «Сотрудничества» — как главарь подземелья 40 ур.
         L = COOP_BOSS
+        loot = {k: round(v * 0.6, 3) for k, v in NPCS[DG_BASE[(L - 1) % 4]][2].items()}
+        return L, ((L + 1) * 10, (2 * L + 4) * 10), loot, True
+    if mob == THRONE_BOSS:                                     # босс трона: лом ×10 и шансы главаря
+        L = THRONE_LVL
         loot = {k: round(v * 0.6, 3) for k, v in NPCS[DG_BASE[(L - 1) % 4]][2].items()}
         return L, ((L + 1) * 10, (2 * L + 4) * 10), loot, True
     if mob.startswith("wm") and mob[2:].isdigit():             # «Мир»: лом и материалы как у моба подземелья того же уровня

@@ -38,6 +38,7 @@ import mobworld
 import seasonpts
 import skillfx
 import worldboss
+import worldthrone            # босс трона в Мире: правило общего моба, таймер возвращения, запись в базу
 import tower
 import fear
 import elite
@@ -2447,6 +2448,28 @@ chat_mutes = {}              # tg_id -> {"until": unix, "by": ник модер�
 MUTE_CHOICES = {5, 15, 60, 180, 1440}
 
 
+# ---------- босс трона «Железный Наместник» (worldthrone.py): время возвращения хранится в meta ----------
+async def save_throne(value):
+    from db_atomic import insert_ignore
+    try:
+        async with SessionLocal() as s_:
+            await s_.execute(insert_ignore(Meta.__table__, key=worldthrone.META_KEY, value=value))
+            await s_.execute(update(Meta).where(Meta.key == worldthrone.META_KEY).values(value=value).execution_options(synchronize_session=False))
+            await s_.commit()
+    except Exception:
+        log.exception("босс трона: не удалось сохранить время возвращения")
+
+
+async def load_throne():
+    """После перезапуска босс, убитый до него, остаётся мёртвым до своего срока."""
+    try:
+        async with SessionLocal() as s_:
+            row = (await s_.execute(select(Meta).where(Meta.key == worldthrone.META_KEY))).scalar_one_or_none()
+        worldthrone.restore(row.value if row else None)
+    except Exception:
+        log.exception("босс трона: не удалось загрузить время возвращения — босс доступен сразу")
+
+
 async def load_mutes():
     try:
         async with SessionLocal() as s_:
@@ -2904,6 +2927,7 @@ async def ws_handler(request):
                                            "muted": int(muted_until(user["id"]) * 1000), "kr": info["kr"],
                                            # мировой чат и чат своей гильдии (гильдию сервер узнал выше, из базы)
                                            "history": list(chat_history) + list(guild_history.get(info["gid"], ()))}))
+                conn.push(realtime.encode(worldthrone.view()))      # таймер босса трона: карта и портал Мира
                 funnel.mark(user["id"], "world")
                 metrics.observe("ws.h.auth", (time.perf_counter() - t0) * 1000)
                 continue
@@ -3202,6 +3226,7 @@ async def world_loop():
                 log.exception("coop pump")
                 metrics.inc("coop.pump_error")
             worldboss.tick(hub)                             # мировой босс: расписание, удары по площади
+            worldthrone.tick(hub)                           # босс трона в Мире: вернулся — сказать всем
             if tick % 5 == 0:
                 await tower.tick(hub, seasonpts, push_to_player)   # Кровавая башня: запись, старт, итоги
             world_tick(keepalive=tick % WORLD_HZ == 0,      # раз в секунду шлём даже без изменений
@@ -3310,12 +3335,21 @@ async def start_web(port: int):
             hub.to_all({"t": "pinfo", "text": worldboss.ANNOUNCE})
         return web.json_response({"ok": True, **worldboss.view()})
     app.router.add_post("/api/wboss", api_wboss)
+    async def api_wthrone(request):
+        """Таймер босса трона; админ может вернуть босса сразу (?respawn=1) для проверки."""
+        body, user = await read_auth(request)
+        if body.get("respawn") and user["admin"]:
+            worldthrone.respawn_now(hub)
+        return web.json_response({"ok": True, **worldthrone.view()})
+    app.router.add_post("/api/wthrone", api_wthrone)
     tower.setup(app, read_auth, online)
     seasonpts.setup_rating(app, read_auth, push_to_player)
     app.router.add_get("/ws", ws_handler)
     # закрепления ролей — ДО приёма запросов: раньше сервер сначала открывал порт, и в это окно ник админа
     # мог закрепиться за чужим id (пустой словарь закреплений = «первый вошедший получает роль»)
     await load_role_pins()
+    worldthrone.persist = save_throne                     # время возвращения босса трона — в базу
+    await load_throne()                                    # до тиков мира: убитый босс не воскреснет после перезапуска
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
