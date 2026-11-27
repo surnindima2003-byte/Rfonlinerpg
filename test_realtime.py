@@ -66,8 +66,11 @@ class RealtimeTest(unittest.TestCase):
             hub.add(ok, {"id": 2, "loc": "a"})
             for i in range(realtime.MAX_Q_MSGS + 5):
                 hub.to_all({"t": "chat", "i": i})
-                if i % 50 == 0:
-                    await asyncio.sleep(0)               # между сообщениями отправители успевают работать
+                if i % 10 == 0:
+                    # между сообщениями отправители успевают работать. Раньше пауза была раз в 50 сообщений:
+                    # на Python 3.10 (wait_for там создаёт отдельную задачу) здоровый клиент не успевал разгрести
+                    # очередь, сам переполнялся и закрывался — тест падал, хотя на сервере (Python 3.13) всё в порядке
+                    await asyncio.sleep(0.001)
             await asyncio.sleep(0.05)
             self.assertTrue(c_slow.closing)
             self.assertEqual(len(ok.sent), realtime.MAX_Q_MSGS + 5)
