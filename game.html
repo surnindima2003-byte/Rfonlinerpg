@@ -40,6 +40,11 @@ html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;height:100%;background:var(--bg);color:var(--text);font:400 15px/1.45 Rubik,system-ui,sans-serif;-webkit-tap-highlight-color:transparent;overflow:hidden}
 .app{max-width:520px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+/* компьютер: игра на всю ширину окна; карточка пилота и чат остаются удобной ширины */
+:root.wide .app{max-width:none}
+:root.wide .hud{right:auto;width:min(560px,calc(100% - 116px))}
+:root.wide .chatpanel{right:auto;width:min(600px,100%);border-right:1px solid #2A3846}
+:root.wide .nav{justify-content:center;gap:clamp(8px,4vw,56px)}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .screen{flex:1;min-height:0;position:relative}
@@ -5360,6 +5365,7 @@ var FS = (() => {
   const desktop = tg ? ["tdesktop", "macos", "web", "weba", "webk", "unigram"].includes(String(TG.platform || ""))
                      : !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches);
   const api = {tg, desktop, can: tgOk || docOk, manualExit: false};
+  if(desktop) document.documentElement.classList.add("wide");   // на компьютере — на всю ширину, а не телефонной полосой
   api.on = () => tgOk ? !!TG.isFullscreen : !!document.fullscreenElement;
   api.set = v => {
     try{
