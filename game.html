@@ -5936,21 +5936,84 @@ function useSkill(i){
 function classUpdate(dt){
   for(let i = 0; i < 4; i++) CB.cd[i] = Math.max(0, CB.cd[i] - dt);
   for(const k in CB.buffs) CB.buffs[k].t -= dt;
-  for(const q of CB.queue){ q.t -= dt; if(q.t <= 0 && !q.done){ q.done = true; hitEnemy(q.e, q.dmg, "beam"); Sfx.play("shot"); } }
+  for(const q of CB.queue){ q.t -= dt; if(q.t <= 0 && !q.done){ q.done = true; VFX.cast = true; try{ hitEnemy(q.e, q.dmg, "beam"); } finally { VFX.cast = false; } Sfx.play("shot"); } }
   CB.queue = CB.queue.filter(q => !q.done);
 }
 
 // ---- эффекты на карте ----
+// Эффекты умений (28.11, «в разы лучше»): ударная волна вместо плоского кольца — расходится с замедлением,
+// с градиентной заливкой, светящейся кромкой и второй волной; рывки и лучи — свечение с белой сердцевиной;
+// взмахи — двойная дуга. На старте эффекта и при попадании умением — искры (аддитивное свечение «lighter»).
+// Режим «Оптимизация» (lowfx): без градиентов и с меньшим числом искр.
+var VFX = {parts:[], cast:false};
+const vfxRGB = c => { const m = /^#([0-9a-f]{6})$/i.exec(c || ""); if(!m) return null; const n = parseInt(m[1], 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+const vfxA = (c, a) => { const r = vfxRGB(c); return r ? `rgba(${r[0]},${r[1]},${r[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})` : c; };
+function vfxBurst(x, y, c, n, spd, life, size, spread){
+  if(S.settings && S.settings.lowfx) n = Math.ceil(n/3);
+  if(VFX.parts.length > 420) return;
+  for(let i = 0; i < n; i++){
+    const a = Math.random()*Math.PI*2, v = spd*(0.35 + Math.random()*0.65), r0 = spread ? Math.random()*spread : 0;
+    VFX.parts.push({x:x + Math.cos(a)*r0, y:y + Math.sin(a)*r0, vx:Math.cos(a)*v, vy:Math.sin(a)*v - 20, life:life*(0.6 + Math.random()*0.4), max:life, c:Math.random() < .3 ? "#ffffff" : c, s:size*(0.6 + Math.random()*0.6)});
+  }
+}
+// попадание умением по врагу: вспышка и искры цвета класса
+function vfxImpact(x, y, c){
+  CB.fx.push({type:"hit", x, y, r:26, life:.28, max:.28, c});
+  vfxBurst(x, y, c, 9, 170, .38, 2.6, 6);
+}
 function drawClassFx(dt){
+  const low = !!(S.settings && S.settings.lowfx);
   for(const f of CB.fx){
-    f.life -= dt; const k = Math.max(0, f.life/f.max);
-    ctx.save(); ctx.globalAlpha = k;
-    if(f.type === "ring"){ ctx.strokeStyle = f.c; ctx.lineWidth = 6*k + 2; circle(f.x, f.y, f.r*(1.1 - k*0.5)); ctx.stroke(); ctx.globalAlpha = k*0.15; ctx.fillStyle = f.c; circle(f.x, f.y, f.r*(1.1 - k*0.5)); ctx.fill(); }
-    else if(f.type === "slash"){ ctx.strokeStyle = f.c; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.beginPath(); ctx.arc(f.x, f.y, 22, f.a - 1.1 + (1-k)*0.6, f.a + 0.5 + (1-k)*0.6); ctx.stroke(); }
-    else if(f.type === "trail"){ ctx.strokeStyle = f.c; ctx.lineWidth = 10*k; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke(); }
+    f.life -= dt; const k = Math.max(0, f.life/f.max), e = 1 - k, ease = 1 - Math.pow(1 - e, 3);
+    if(!f._b){ f._b = 1;                                                     // искры — один раз, на старте эффекта
+      if(f.type === "ring") for(let i = 0, n = Math.min(26, 8 + Math.round(f.r/9)); i < n; i++){ const a = i/n*Math.PI*2 + Math.random()*.3;
+        vfxBurst(f.x + Math.cos(a)*f.r*.35, f.y + Math.sin(a)*f.r*.35, f.c, 1, f.r*1.6, .5, 2.4, 0); }
+      else if(f.type === "trail"){ for(let i = 0; i < 10; i++){ const q = Math.random(); vfxBurst(f.x1 + (f.x2 - f.x1)*q, f.y1 + (f.y2 - f.y1)*q, f.c, 1, 60, .45, 2.2, 4); } }
+      else if(f.type === "slash") vfxBurst(f.x + Math.cos(f.a)*20, f.y + Math.sin(f.a)*20, f.c, 3, 110, .25, 2, 0);
+    }
+    ctx.save();
+    if(f.type === "ring"){
+      const R = Math.max(1, f.r*(0.3 + 0.8*ease));
+      if(low){ ctx.globalAlpha = k*0.15; ctx.fillStyle = f.c; circle(f.x, f.y, R); ctx.fill(); }
+      else { const g = ctx.createRadialGradient(f.x, f.y, R*0.45, f.x, f.y, R); g.addColorStop(0, vfxA(f.c, 0)); g.addColorStop(0.8, vfxA(f.c, 0.26*k)); g.addColorStop(1, vfxA(f.c, 0.05*k));
+        ctx.fillStyle = g; circle(f.x, f.y, R); ctx.fill(); }
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = vfxA(f.c, 0.55*k); ctx.lineWidth = 12*k + 2; circle(f.x, f.y, R); ctx.stroke();          // светящаяся кромка
+      ctx.strokeStyle = vfxA("#ffffff", 0.75*k); ctx.lineWidth = 2.2; circle(f.x, f.y, R); ctx.stroke();          // яркая сердцевина
+      ctx.strokeStyle = vfxA(f.c, 0.45*k); ctx.lineWidth = 2; circle(f.x, f.y, Math.max(1, f.r*(0.15 + 0.62*ease))); ctx.stroke();   // вторая волна
+    }
+    else if(f.type === "slash"){
+      ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
+      const a0 = f.a - 1.25 + e*0.7, a1 = f.a + 0.6 + e*0.7;
+      ctx.strokeStyle = vfxA(f.c, 0.5*k); ctx.lineWidth = 11; ctx.beginPath(); ctx.arc(f.x, f.y, 24, a0, a1); ctx.stroke();
+      ctx.strokeStyle = vfxA("#ffffff", 0.85*k); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(f.x, f.y, 24, a0 + 0.15, a1); ctx.stroke();
+      ctx.strokeStyle = vfxA(f.c, 0.35*k); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(f.x, f.y, 32, a0 + 0.3, a1 - 0.1); ctx.stroke();
+    }
+    else if(f.type === "trail"){
+      ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
+      const line = (w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke(); };
+      line(20*k + 4, vfxA(f.c, 0.28*k)); line(8*k + 2, vfxA(f.c, 0.8*k)); line(2.5*k + 1, vfxA("#ffffff", 0.9*k));
+    }
+    else if(f.type === "hit"){
+      ctx.globalCompositeOperation = "lighter";
+      const R = f.r*(0.4 + 0.8*ease);
+      if(!low){ const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R); g.addColorStop(0, vfxA("#ffffff", 0.8*k)); g.addColorStop(0.35, vfxA(f.c, 0.55*k)); g.addColorStop(1, vfxA(f.c, 0));
+        ctx.fillStyle = g; circle(f.x, f.y, R); ctx.fill(); }
+      ctx.strokeStyle = vfxA("#ffffff", 0.8*k); ctx.lineWidth = 2; ctx.lineCap = "round";                          // лучи-звезда
+      for(let i = 0; i < 4; i++){ const a = i*Math.PI/2 + 0.4, r1 = R*0.3, r2 = R*1.1;
+        ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a)*r1, f.y + Math.sin(a)*r1); ctx.lineTo(f.x + Math.cos(a)*r2, f.y + Math.sin(a)*r2); ctx.stroke(); }
+    }
     ctx.restore();
   }
   CB.fx = CB.fx.filter(f => f.life > 0);
+  // искры
+  if(VFX.parts.length){
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for(const q of VFX.parts){ q.life -= dt; q.x += q.vx*dt; q.y += q.vy*dt; q.vx *= 0.9; q.vy = q.vy*0.9 + 30*dt;
+      const k = Math.max(0, q.life/q.max); ctx.fillStyle = vfxA(q.c, k); circle(q.x, q.y, Math.max(0.5, q.s*(0.4 + 0.6*k))); ctx.fill(); }
+    ctx.restore();
+    VFX.parts = VFX.parts.filter(q => q.life > 0);
+  }
 }
 const BUFF_COLOR = {def:"#5FD4E8", atk:"#E0694A", rate:"#7BC98A", steal:"#9B7BFF"};
 function drawBuffAura(x, y, t){ drawAuraRings(x, y, t, Object.keys(CB.buffs).filter(k => CB.buffs[k].t > 0)); }
@@ -16180,6 +16243,9 @@ function sfxFlush(){
   netSend(msg);
 }
 // снимаем каждое умение (самая внешняя обёртка — после всех остальных) и выстрелы, отложенные в очередь
+// умение идёт: попадания во время него получают вспышку (VFX). Обёртка — до захвата эффектов для других игроков (sfx):
+// та должна оставаться самой внешней (test_skillfx)
+{ const _useVfx = useSkill; useSkill = function(i){ VFX.cast = true; try{ return _useVfx(i); } finally { VFX.cast = false; } }; }
 {
   const _useSfx = useSkill;
   useSkill = function(i){
@@ -18227,6 +18293,19 @@ function setLang(l, chosen){
 // (Object.assign(SKILL_ART, …)). Им доставалась запасная иконка «Плазменного шара» — четыре одинаковых значка,
 // пока игрок не сменит класс или не улучшит умение. Здесь весь код уже загружен: перерисовываем с настоящими иконками.
 renderSkillButtons();
+
+// ---- эффекты попаданий умениями (VFX): обёртки поверх всех остальных ----
+{
+  const _hitVfx = hitEnemy;
+  hitEnemy = function(e, dmg, kind){
+    const was = e && !e.dead && e.hp, r = _hitVfx(e, dmg, kind);
+    if(e && was && (VFX.cast || kind === "aoe" || kind === "strike-m" || kind === "plasma")){
+      const C = typeof clsOf === "function" && clsOf(S.cls);
+      vfxImpact(e.x, e.y - 14, (C && C.color) || "#5FD4E8");
+    }
+    return r;
+  };
+}
 
 // первый вход из Telegram: язык берём из приложения игрока
 (() => {
