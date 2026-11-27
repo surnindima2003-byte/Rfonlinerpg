@@ -53,6 +53,12 @@ GUIDE_FILE = Path(__file__).parent / "guide.html"
 MAX_SAVE_BYTES = 300_000
 LOCS = {"lobby", "sector1", "sector2", "scrapfields", "reactor_ruins", "iron_canyon", "arena_fear", "tower", "farm1", "season1", "wboss", "world"}
 SEASON_LOC = "season1"                                   # сезонная зона: вход только с билетом сезона
+# С какого уровня пускать в локацию (min в LOCS игры; Страх, элитная зона и «Сотрудничество» проверяют своё сами).
+# Раньше сервер принимал любую локацию: подделанный телефон 1-го уровня заходил в Мир (PvP-зона 35+) и т. п.
+# Сравниваем с допустимым сервером уровнем (progress: с запасом) — честного игрока это не задевает.
+LOC_MIN_LVL = {"reactor_ruins": 3, "iron_canyon": 6, "sector2": 20, "tower": 10, "farm1": 20, "season1": 20, "world": 35}
+LOC_TITLE = {"reactor_ruins": "Руины реактора", "iron_canyon": "Железный каньон", "sector2": "Глубинные цеха", "tower": "Кровавая башня",
+             "farm1": "Фарм зона", "season1": "Сезонная зона", "world": "Мир"}
 SAFE_LOCS = {"lobby", "arena_fear", "tower"}          # здесь PvP нет никогда (в логове мирового босса wboss — есть)
 LOCS |= set(elite.LOCS)                                # экземпляры элитной фарм-зоны (по одному на группу)
 SAFE_LOCS |= set(elite.LOCS)                           # в зоне только своя группа — PvP нет
@@ -2972,12 +2978,25 @@ async def handle_ws_message(d, t, info, conn):
                 info["lf_t"] = time.time()
                 conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
                                            "text": f"В бою локацию не покинуть ещё {pvp_combat_left(info)} с"}))
+        nl = d.get("loc")
+        if nl in LOC_MIN_LVL and nl != old_loc and not info.get("admin"):
+            cap = progress.cached_cap(info["id"]) or info.get("lvl_cap") or 1
+            if cap < LOC_MIN_LVL[nl]:
+                d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+                metrics.inc("loc.lvl_denied")
+                if time.time() - info.get("lvl_warn", 0) > 2:
+                    info["lvl_warn"] = time.time()
+                    conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
+                                               "text": f"«{LOC_TITLE[nl]}»: нужен {LOC_MIN_LVL[nl]} уровень"}))
         if d.get("loc") == SEASON_LOC and old_loc != SEASON_LOC and not info.get("admin"):
             if not await seasonpts.has_ticket(info["id"]):           # без билета в сезонную зону не пускаем
-                d = {**d, "loc": old_loc}
-                if time.time() - info.get("sz_warn", 0) > 10:
+                # раньше телефон об отказе не узнавал: он «стоял» в сезонной зоне, а сервер считал его в старой
+                # локации — убийства там молча не засчитывались. Теперь возвращаем его, как в других отказах.
+                d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}
+                if time.time() - info.get("sz_warn", 0) > 2:
                     info["sz_warn"] = time.time()
-                    conn.push(realtime.encode({"t": "pinfo", "text": "Сезонная зона: нужен билет сезона"}))
+                    conn.push(realtime.encode({"t": "loc_fix", "loc": old_loc, "x": info["x"], "y": info["y"],
+                                               "text": "Сезонная зона: нужен билет сезона"}))
         if d.get("loc") in elite.LOCS and d.get("loc") != old_loc and not info.get("admin") and not elite.member_of(d.get("loc"), info["id"]):
             d = {**d, "loc": old_loc, "x": info["x"], "y": info["y"]}         # в экземпляр зоны — только его группа
             if time.time() - info.get("el_warn", 0) > 2:
