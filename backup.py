@@ -20,6 +20,8 @@ MONEY_TABLES = ("gram_wallets", "gram_tx", "gram_withdrawals", "star_payments", 
                 "season_prizes")
 KEEP_DAYS = 14
 KEEP_FULL_DAYS = 3           # полные выгрузки большие (все сохранения) — храним меньше
+KEEP_FULL_MAX = 4            # и не больше стольких штук: диск Railway — 500 МБ
+FRESH_HOURS = 20             # копия свежее этого — после перезапуска новую не делаем
 
 
 def dump_all(prefix="full", tables=None):
@@ -70,13 +72,7 @@ def make_backup():
     if IS_PG:
         # у SQLite выше уже есть полная копия файла; на PostgreSQL — выгрузка всех таблиц (сохранения, гильдии, вещи)
         made.append(dump_all("full"))
-    # старые копии удаляем (копии перед вайпом — тоже по сроку, как полные)
-    now = datetime.datetime.utcnow()
-    for name in os.listdir(BACKUP_DIR):
-        p = os.path.join(BACKUP_DIR, name)
-        days = KEEP_FULL_DAYS if name.startswith("full-") else KEEP_DAYS
-        if os.path.isfile(p) and datetime.datetime.utcfromtimestamp(os.path.getmtime(p)) < now - datetime.timedelta(days=days):
-            os.remove(p)
+    prune()                                          # старые копии — по сроку и числу
     return made
 
 
@@ -104,8 +100,43 @@ async def send_to_admins(made):
             log.warning("Не удалось отправить копию админу %s: %s", chat, e)
 
 
+def last_backup_age(now=None):
+    """Сколько секунд назад сделана последняя ежедневная копия (по файлу money-*), None — копий нет."""
+    try:
+        names = [n for n in os.listdir(BACKUP_DIR) if n.startswith("money-")]
+    except OSError:
+        return None
+    if not names:
+        return None
+    newest = max(os.path.getmtime(os.path.join(BACKUP_DIR, n)) for n in names)
+    return (now or datetime.datetime.utcnow().timestamp()) - newest
+
+
+def prune(now=None):
+    """Старые копии — прочь: по сроку (полные KEEP_FULL_DAYS, остальные KEEP_DAYS) и полные — не больше
+    KEEP_FULL_MAX штук (самые новые остаются). Копии перед вайпом (wipe-*) — только по сроку."""
+    now = now or datetime.datetime.utcnow()
+    files = [(n, os.path.join(BACKUP_DIR, n)) for n in os.listdir(BACKUP_DIR)]
+    files = [(n, p) for n, p in files if os.path.isfile(p) and not n.endswith(".part")]
+    for n, p in files:
+        days = KEEP_FULL_DAYS if n.startswith(("full-", "wipe-")) else KEEP_DAYS
+        if datetime.datetime.utcfromtimestamp(os.path.getmtime(p)) < now - datetime.timedelta(days=days):
+            os.remove(p)
+    full = sorted((p for n, p in files if n.startswith("full-") and os.path.exists(p)), key=os.path.getmtime)
+    for p in full[:-KEEP_FULL_MAX]:
+        os.remove(p)
+
+
 async def backup_loop():
     await asyncio.sleep(60)
+    # Раньше копия делалась через минуту после КАЖДОГО запуска сервера, а сервер перезапускается при каждой
+    # загрузке кода на GitHub: в день набиралось много полных выгрузок, и диск (500 МБ) мог переполниться.
+    # Теперь после перезапуска ждём, пока последней копии не исполнится сутки.
+    age = last_backup_age()
+    if age is not None and age < FRESH_HOURS * 3600:
+        wait = 24 * 3600 - age
+        log.info("Резервная копия свежая (%.1f ч назад) — следующая через %.1f ч", age / 3600, wait / 3600)
+        await asyncio.sleep(max(60, wait))
     while True:
         try:
             made = await asyncio.get_event_loop().run_in_executor(None, make_backup)

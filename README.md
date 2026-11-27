@@ -5,6 +5,15 @@ Telegram WebApp-игра с HTTP API и живым миром поверх WebSo
 ## Эксплуатация
 
 * [План устойчивости сервера при 100 одновременных игроках](docs/server-load-plan.md)
+## Резервные копии и восстановление
+
+* Раз в сутки (`backup.py`): денежные таблицы (`money-*.json.gz`, 14 дней, копия уходит админам в Telegram) и полная выгрузка всех таблиц (`full-*.jsonl.gz`, 3 дня, не больше 4 штук) в `/data/backups` на томе Railway. После перезапуска сервера новая копия не делается, если последней меньше 20 часов.
+* Перед вайпом — полная выгрузка `wipe-*.jsonl.gz`.
+* Восстановление — Railway → сервис Rfonlinerpg → Console:
+  * `python tools/restore.py --list` — какие копии есть;
+  * `python tools/restore.py /data/backups/full-….jsonl.gz` — что в копии и сколько строк сейчас (ничего не меняет);
+  * `python tools/restore.py ФАЙЛ --tables game_saves,docs --apply` или `--all --apply` — вернуть таблицы. Перед записью текущее состояние выгружается в `pre-restore-*.jsonl.gz`, запись — одной транзакцией. После — Restart сервиса.
+
 ## Экономика и события
 
 Переменные в Railway → Variables (все необязательные):

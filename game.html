@@ -5463,8 +5463,10 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     });
     setTimeout(() => location.reload(), 5000);
   }
-  const api = NET.api = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData, ...(body || {})})})
-    .then(r => r.ok ? r.json() : r.text().then(t => { if(r.status === 401 && t.includes("session expired")) sessionExpired(); return {ok:false, error:t}; }));
+  // keepalive — запрос, который браузер доведёт до сервера, даже если игру закрыли (лимит ~64 КБ на тело)
+  const api = NET.api = (path, body, closing) => { const js = JSON.stringify({initData, ...(body || {})});
+    return fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:js, keepalive:!!closing && js.length < 60000})
+    .then(r => r.ok ? r.json() : r.text().then(t => { if(r.status === 401 && t.includes("session expired")) sessionExpired(); return {ok:false, error:t}; })); };
 
   // ---- сохранения ----
   let lastPushed = "";
@@ -5485,7 +5487,8 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
     const potN = k => [...S.inv, ...S.store].reduce((a, x) => a + (x.id === k ? (+x.n || 1) : 0), 0);
     const sentPots = {pot_hp:potN("pot_hp"), pot_atk:potN("pot_atk"), pot_xp:potN("pot_xp")};
     try{
-      const r = await api("/api/state/save", {epoch:serverEpoch, data});
+      // игру сворачивают или закрывают: сохранение уходит с keepalive, чтобы последние секунды не потерялись
+      const r = await api("/api/state/save", {epoch:serverEpoch, data}, document.hidden);
       // сервер срезал лишний лом или ядра (больше, чем можно было набрать за это время) — применяем у себя,
       // считая от отправленного: за время запроса игрок мог набрать ещё
       if(r && r.ok && r.fix){
@@ -5523,6 +5526,7 @@ setTimeout(dbgAllow, 0);       // права на панель отладки: �
   setInterval(() => push(false), 10000);
   NET.push = push;                                    // крафт на сервере: сначала отправляем свежее сохранение
   document.addEventListener("visibilitychange", () => { if(document.hidden) push(true); });
+  window.addEventListener("pagehide", () => push(true));          // закрытие окна (не все телефоны шлют visibilitychange)
 
   // ---- выдачи от администратора ----
   const GRANT_NAME = {scrap:"лома", cores:"ядер", exp:"опыта", level:"уровней"};
