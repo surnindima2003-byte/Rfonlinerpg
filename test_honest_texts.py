@@ -95,7 +95,11 @@ class ShopAndRate(unittest.TestCase):
         self.assertNotIn("до конца сезона:", GAME)
         self.assertNotIn("SHOP_SALE", GAME)
         self.assertIn("const saleFromServer = v => v && v.left > 0 ? {pct:+v.pct, tabs:v.tabs || [], end:Date.now() + v.left", GAME)
-        self.assertIn("${shopSaleOn() && G.sale.tabs.includes(shopTab) ?", GAME)     # плашка и таймер — только во время распродажи
+        # плашка с таймером — только во время распродажи и только во вкладке, где есть раздел со скидкой
+        # (магазин теперь из 3 вкладок с разделами внутри; у раздела со скидкой — свой значок)
+        self.assertIn("const saleIn = shopSaleOn() ? grp.secs.filter(([k]) => G.sale.tabs.includes(k))", GAME)
+        self.assertIn("${shopSaleOn() && saleIn.length ? `<div class=\"sale-bar\">", GAME)
+        self.assertIn("${shopSaleOn() && G.sale.tabs.includes(k) ? ` <span class=\"sale-tag\">", GAME)
         self.assertIn('<span class="sale-tag">−${G.sale.pct}%</span>', GAME)
         gram = (ROOT / "gram.py").read_text(encoding="utf-8")
         self.assertIn('"sale": sale_view(sale)', gram)
