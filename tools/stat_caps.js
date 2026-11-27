@@ -6,6 +6,8 @@
 // плащ, зелье прочности, пассивки «Живучесть» 10 и «Монолит» 10 (Глифоносец) и полный кодекс. Очки улучшений u — отдельно: на выходе
 // для уровня L пара [a, b], где наибольшая прочность при u очках в «Прочность» не больше a + b·u
 // (то же для брони и очков в «Броню»). Сервер знает уровень и купленные очки, а остальное берёт по максимуму.
+// Самоцветы Кодекса в таблицы не входят: их сервер знает у каждого игрока сам. gemK — наибольший множитель плоского бонуса
+// самоцветов к прочности и броне (класс, «Живучесть», руны, дрон, зелье…): pvpguard.GEM_K, прибавка = GEM_K × бонус игрока.
 // После правок баланса в game.html перезапусти и перенеси числа в pvpguard.py (test_pvp_caps.py это проверяет).
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const html = fs.readFileSync(process.argv[2] || path.join(__dirname, "..", "game.html"), "utf8");
@@ -46,6 +48,8 @@ const out = JSON.parse(run(`(() => {
   const SLOTS = ["weapon","head","armor","module","core","legs"];
   const UMAX = 300;
   const hpAB = [], defAB = [];
+  const GFULL = Object.fromEntries(GEM_IDS.map(id => [id, GEM_MAX])); S.gemCx = GFULL; const GB = gemBonus(); S.gemCx = {};
+  let kh = 0, kd = 0;
   for(let L = 1; L <= LEVEL_CAP; L++){
     let a = 0, b = 0, da = 0, db = 0;
     for(const cls of Object.keys(CLASSES)){
@@ -70,11 +74,13 @@ const out = JSON.parse(run(`(() => {
         S.up = {hp:UMAX, def:UMAX}; const s1 = stat();
         a = Math.max(a, s0.maxhp); b = Math.max(b, (s1.maxhp - s0.maxhp)/UMAX);
         da = Math.max(da, s0.def); db = Math.max(db, (s1.def - s0.def)/UMAX);
+        S.up = {}; S.gemCx = GFULL; const sg = stat(); S.gemCx = {};
+        kh = Math.max(kh, (sg.maxhp - s0.maxhp)/GB.hp); kd = Math.max(kd, (sg.def - s0.def)/GB.def);
       }
     }
     hpAB.push([a, Math.ceil(b*1000)/1000]); defAB.push([da, Math.ceil(db*1000)/1000]);
   }
-  return JSON.stringify({hp:hpAB, def:defAB, upMax:UMAX, cpPer:UPGRADES.find(u => u.id === "cpup").per, levelCap:LEVEL_CAP,
+  return JSON.stringify({hp:hpAB, def:defAB, gemK:[Math.ceil(kh*1000)/1000, Math.ceil(kd*1000)/1000], gemFlat:[GB.hp, GB.def], upMax:UMAX, cpPer:UPGRADES.find(u => u.id === "cpup").per, levelCap:LEVEL_CAP,
     ptsPerLevel:3, packPts:Object.fromEntries(PACKS.filter(p => (p.rew||[]).some(r => r.id === "pts")).map(p => [p.id, p.rew.find(r => r.id === "pts").n]))});
 })()`));
 process.stdout.write(JSON.stringify(out) + "\n");
