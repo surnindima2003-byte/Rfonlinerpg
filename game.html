@@ -15609,10 +15609,22 @@ function drawCloak(g, x, y, o){
   g.restore();
 }
 const cloakIconCache = new Map();
+// Значок плаща: спрайт с запасом по краям (плащ на роботе развевается), поэтому сам плащ занимал малую часть клетки
+// и терялся на тёмном фоне. Обрезаем пустые края, вписываем в квадрат и даём мягкое свечение цветом плаща.
+function cropAlpha(cv){
+  const w = cv.width, h = cv.height, d = cv.getContext("2d").getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for(let y = 0; y < h; y++) for(let x = 0; x < w; x++) if(d[(y*w + x)*4 + 3] > 8){ if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; }
+  if(x1 < 0) return cv;
+  const o = document.createElement("canvas"); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+  o.getContext("2d").drawImage(cv, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+  return o;
+}
 function cloakIcon(id, size){
   const key = id + "|" + size; if(cloakIconCache.has(key)) return cloakIconCache.get(key);
-  const k = Math.max(2, Math.ceil(size*2/CKW)), spr = cloakSprite(id, 1, k, false);
-  const html = `<img src="${spr.toDataURL()}" alt="" style="width:${size}px;height:auto;image-rendering:pixelated">`;
+  const Cd = CLOAKS[id], k = Math.max(2, Math.ceil(size*2/CKW)), spr = cropAlpha(cloakSprite(id, 1, k, false));
+  const glow = Cd && Cd.lt ? `filter:drop-shadow(0 0 2px ${Cd.lt}88)` : "";
+  const html = `<img src="${spr.toDataURL()}" alt="" style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated;${glow}">`;
   cloakIconCache.set(key, html); return html;
 }
 function cloakIconFill(id){
