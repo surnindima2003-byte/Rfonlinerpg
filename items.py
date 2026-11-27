@@ -846,8 +846,6 @@ async def api_items(request):
                 vals, result = ({"e": e0 - 1} if e0 > 0 else {}), "fail"          # безопасная заточка: при неудаче −1, не ниже +0
             else:
                 vals, result = {"status": "gone"}, "broken"
-                import ledger                                                    # обломки: половина цены продажи, не меньше 5
-                ledger.add(uid, {"scrap": max(5, round(ledger.gear_sell(x.item, x.g, e0) * 0.5))})
             if vals:
                 # вещь меняется, только если с момента чтения её никто не тронул (двойное нажатие, другая вкладка)
                 res = await s.execute(update(ItemInst).where(ItemInst.uid == x.uid, ItemInst.owner == uid, ItemInst.status == "inv", ItemInst.e == e0)
@@ -857,6 +855,10 @@ async def api_items(request):
                     return web.json_response({"ok": False, "error": "Вещь уже изменилась, попробуй ещё раз"})
                 _sync(x, "e", (vals.get("e", x.e),))
             await s.commit()
+            if result == "broken":
+                # обломки: половина цены продажи, не меньше 5 — в учёт ресурсов только после записи (раньше и при откате)
+                import ledger
+                ledger.add(uid, {"scrap": max(5, round(ledger.gear_sell(x.item, x.g, e0) * 0.5))})
             return web.json_response({"ok": True, "result": result, "e": x.e, "sph": sph.n})
 
         if op == "gone":

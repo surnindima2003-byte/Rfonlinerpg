@@ -8619,7 +8619,7 @@ function renderEnchant(){
   body().innerHTML = `
     <div class="enchbox">
       <div class="ench-item" id="enchItem" style="border-color:${gc}">${icon(x.id, x.g)}${encBadge(x)}</div>
-      <div data-notr style="color:${gc};font-weight:700">${e ? "+" + e + " " : ""}</div><div style="color:${gc};font-weight:700;margin-top:-6px">${it.name}</div>
+      <div style="color:${gc};font-weight:700">${it.name}</div>
       ${max ? `<div class="ench-lv">Максимальная заточка <b>+${ENCH_MAX}</b></div>` : `
       <div class="ench-lv">+${e} → <b>+${e + 1}</b></div>
       <div class="ench-chance">Шанс успеха: <b style="color:${chCol}">${ch}%</b></div>
@@ -12423,23 +12423,49 @@ function regTradable(x){
 
 // ---- заточка: вещь с номером точится на сервере учтённой сферой ----
 const _doEnchantLocal = doEnchant;
+// Пока сервер точит, второй запрос не уходит: раньше нажатие на другую сферу во время ожидания отправляло ещё одну
+// заточку — сервер выполнял обе, а телефон показывал одну (вещь, разрушенную второй, у игрока оставалась).
+let enchReq = false;
 doEnchant = async function(){
-  const x = enchGet(); if(!x || enchBusy) return;
+  const x = enchGet(); if(!x || enchBusy || enchReq) return;
   if(!(REG.on && x.uid)) { _doEnchantLocal(); regClampSph(); return; }
   if((REG.sph[enchSph] || 0) < 1){
     // учтённых сфер нет: заточка пройдёт как обычно, но вещь станет привязанной
     if(!doEnchant._warned || doEnchant._warned !== x.uid){ doEnchant._warned = x.uid; toast("Учтённых сфер нет: после заточки вещь нельзя будет продать за GRAM. Нажми ещё раз"); return; }
     regGone([x.uid]); delete x.uid; save(); _doEnchantLocal(); regClampSph(); return;
   }
-  const b = body().querySelector(`[data-ench-go="${enchSph}"]`); if(b) b.disabled = true;
+  const sph = enchSph;                                                          // сфера этого запроса (выбор могут сменить)
+  const btns = [...body().querySelectorAll("[data-ench-go], [data-sph]")]; btns.forEach(b => { b.disabled = true; });
+  enchReq = true;
   let r;
-  try{ r = await regApi("enchant", {uid:x.uid, sphere:enchSph}); }catch(e){ r = null; }
-  if(b) b.disabled = false;
+  try{ r = await regApi("enchant", {uid:x.uid, sphere:sph}); }catch(e){ r = null; }
+  finally{ enchReq = false; }
+  btns.forEach(b => { if(b.isConnected) b.disabled = false; });
   if(!r || !r.ok){ toast((r && r.error) || "Сервер не ответил, попробуй ещё раз"); return; }
-  REG.sph[enchSph] = r.sph;
+  REG.sph[sph] = r.sph;
+  if(enchGet() !== x){ enchApplyQuiet(x, sph, r); return; }                    // окно уже о другой вещи — итог применяем к этой
+  enchSph = sph;
   _doEnchantLocal(r.result === "ok" ? "ok" : "fail");
   x.e = r.e;                                                                   // сервер решает итог: +1 или −1 на титане
 };
+// итог серверной заточки, когда окно закрыли или переключили на другую вещь, пока ждали ответа
+function enchApplyQuiet(x, sph, r){
+  removeItem(S.inv, sph, 1);
+  const name = ITEMS[x.id].name;
+  if(r.result === "broken"){
+    const scrap = Math.max(5, Math.round(sellPrice(x)*0.5));
+    runesBack(x);
+    const i = S.inv.indexOf(x); if(i >= 0) S.inv.splice(i, 1);
+    for(const sl of Object.keys(S.eq || {})) if(S.eq[sl] === x) S.eq[sl] = null;
+    S.scrap += scrap; S.hp = Math.min(S.hp, stat().maxhp);
+    toast("Неудача: предмет разрушен. Из обломков получено " + scrap + " лома");
+  } else {
+    x.e = r.e;
+    toast(r.result === "ok" ? "Успех! " + name + " +" + x.e : "Неудача: предмет цел, заточка снизилась до +" + x.e);
+    if(r.result === "ok" && typeof seasonAddXp === "function") seasonAddXp(5);
+  }
+  save();
+}
 
 // ---- подсказка в карточке вещи: можно ли продать за GRAM ----
 function regBadge(x){
