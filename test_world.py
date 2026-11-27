@@ -139,7 +139,7 @@ class PagesDescribeTheWorld(unittest.TestCase):
         self.assertIn("Самоцветы падают и в Мире", sec)
 
     def test_guide(self):
-        self.assertIn('<b>Мир</b><small>Открытая локация: 10 спотов с монстрами 40–59, опыт ×3</small></div><em class="lv">УР. 35+</em>', GUIDE)
+        self.assertIn('<b>Мир</b><small>Открытая локация: 10 спотов с монстрами 40–59, опыт ×3, чертежи классов и Монета удачи, на троне — босс 60 ур.</small></div><em class="lv">УР. 35+</em>', GUIDE)
         self.assertIn('<div class="point p6"><span>Мир</span></div>', GUIDE)
 
     def test_codex_says_where_gems_drop(self):
@@ -164,8 +164,9 @@ const out = run(`(() => {
   for(let L = 40; L <= 59; L++){ const k = NPCS["wm" + L]; r.npcs["wm" + L] = {lvl:k.lvl, hp:k.hp, exp:k.exp, scrap:k.scrap, loot:k.loot, name:k.name, world:!!k.world}; }
   r.spots = W_SPOTS.map(s => ({id:s.id, tier:s.tier, lo:s.lo, hi:s.hi, packs:s.packs}));
   r.tiers = W_TIERS.map(t => ({name:t.name, pack:t.pack, aggro:t.aggro}));
-  r.count = enemies.length;
-  const packs = {}; for(const e of enemies) (packs[e.pack] = packs[e.pack] || []).push(e);
+  const mobs = enemies.filter(e => e.type.startsWith("wm"));         // монстры спотов; последним в раскладке стоит босс трона (test_world_boss)
+  r.count = mobs.length; r.boss = enemies.findIndex(e => e.type === "wt60"); r.total = enemies.length;
+  const packs = {}; for(const e of mobs) (packs[e.pack] = packs[e.pack] || []).push(e);
   r.packs = Object.values(packs).map(l => ({n:l.length, spot:l[0].spot.id, types:[...new Set(l.map(e => e.type))].length, lv:NPCS[l[0].type].lvl}));
   r.idx = enemies.every((e, i) => e.idx === i);
   let stuck = 0; for(const e of enemies){ const o = {x:e.x, y:e.y}; pushOut(o, NPCS[e.type].r); if(Math.hypot(o.x - e.x, o.y - e.y) > 0.5) stuck++; }
@@ -286,6 +287,7 @@ process.stdout.write(out + "\n");
         by_id = {s["id"]: s for s in r["spots"]}
         self.assertEqual(len(r["packs"]), sum(s["packs"] for s in r["spots"]))     # на каждом споте — все его пачки
         self.assertEqual(r["count"], sum(s["packs"] * r["tiers"][s["tier"]]["pack"] for s in r["spots"]))
+        self.assertEqual((r["boss"], r["total"]), (r["count"], r["count"] + 1))   # босс трона — сразу после монстров спотов, как у сервера (worldthrone.IDX)
         for pk in r["packs"]:
             s = by_id[pk["spot"]]
             self.assertEqual(pk["n"], r["tiers"][s["tier"]]["pack"])
