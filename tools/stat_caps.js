@@ -80,7 +80,44 @@ const out = JSON.parse(run(`(() => {
     }
     hpAB.push([a, Math.ceil(b*1000)/1000]); defAB.push([da, Math.ceil(db*1000)/1000]);
   }
-  return JSON.stringify({hp:hpAB, def:defAB, gemK:[Math.ceil(kh*1000)/1000, Math.ceil(kd*1000)/1000], gemFlat:[GB.hp, GB.def], upMax:UMAX, cpPer:UPGRADES.find(u => u.id === "cpup").per, levelCap:LEVEL_CAP,
+  // Наибольшая честная скорость атаки (ударов в секунду) по классам — для предела частоты ударов по пилотам
+  // (webserver.PVP_APS_MAX): всё, что ускоряет, по максимуму — «Скорость атаки» 120, пассивки, руны, самоцветы,
+  // снаряжение и уникальный сет, дрон, артефакт, крылья, плащ — и самый сильный бафф скорости умения 10 уровня.
+  const aps = {}, skills = {};
+  const bestRune = (() => { let bid = null, bv = -1; for(const id of RUNE_IDS){ const v = (RUNES[id].b || {}).rate || 0; if(v > bv){ bv = v; bid = id; } } return bid; })();
+  for(const cls of [...Object.keys(CLASSES), ""]){
+    S.cls = cls; S.level = LEVEL_CAP; S.max_hp = 50 + 10*(LEVEL_CAP - 1); S.attack = 6 + 2*(LEVEL_CAP - 1); S.defense = 2 + (LEVEL_CAP - 1);
+    S.pas = Object.fromEntries(PASSIVES.map(p => [p.id, PAS_MAX])); S.gemCx = GFULL; S.pots = {};
+    S.up = {aspd:UPGRADES.find(u => u.id === "aspd").max};
+    S.inv = []; S.store = []; S.drone = S.art = S.wing = S.cloak = null; S.eq = {};
+    const slot = (sl, id) => ({id, n:1, g:3, e:15, r:bestRune ? [bestRune] : []});
+    for(const sl of SLOTS){
+      const cand = [...GEAR_IDS, ...UNIQ_IDS].filter(id => { const it = ITEMS[id]; return it.slot === sl && (!it.cls || it.cls === cls) && (!it.uniq || it.set === cls); });
+      let bid = null, bv = -1;
+      for(const id of cand){ S.eq[sl] = slot(sl, id); const v = stat().rate; if(v > bv){ bv = v; bid = id; } }
+      S.eq[sl] = bid ? slot(sl, bid) : null;
+    }
+    const own = UNIQ_IDS.filter(id => ITEMS[id].set === cls);           // весь уникальный сет — с бонусом комплекта
+    if(own.length){ const keep = S.eq, before = stat().rate; S.eq = {...keep}; own.forEach(id => { S.eq[ITEMS[id].slot] = slot(ITEMS[id].slot, id); }); if(stat().rate < before) S.eq = keep; }
+    for(const [k, table] of [["drone", DRONES], ["art", ARTS], ["wing", WINGS], ["cloak", CLOAKS]]){
+      let bid = null, bv = stat().rate;
+      for(const id of Object.keys(table)){ S.inv = [...S.inv.filter(x => x.k !== k), {id, n:1, k}]; S[k] = id; const v = stat().rate; if(v > bv){ bv = v; bid = id; } }
+      S.inv = S.inv.filter(x => x.k !== k); if(bid) S.inv.push({id:bid, n:1, k}); S[k] = bid;
+    }
+    const C = cls ? CLASSES[cls] : NO_CLASS;
+    let buff = 0;
+    for(const sk of (C.skills || [])){ const a = skillAt(sk, SKILL_MAX); if(a.buff === "rate") buff = Math.max(buff, a.v || 0); if(a.buff2 === "rate") buff = Math.max(buff, a.v2 || 0); }
+    aps[cls || "-"] = Math.ceil(C.rate*stat().rate*(1 + buff)*100)/100;
+    // умения, которые бьют пилота (как в game.html → useSkill для PvP: PVP_SKILLS по pvpAs || type), и их
+    // самая короткая честная перезарядка: 10 уровень умения и наибольшее сокращение перезарядки (пассивки, сет)
+    if(cls){
+      const keep = S.eq; S.eq = {...keep}; own.forEach(id => { S.eq[ITEMS[id].slot] = slot(ITEMS[id].slot, id); });
+      const cdr = Math.max(stat().cdr, (() => { const t = S.eq; S.eq = keep; const v = stat().cdr; S.eq = t; return v; })()); S.eq = keep;
+      skills[cls] = C.skills.map(sk => skillAt(sk, SKILL_MAX)).filter(a => PVP_SKILLS.includes(a.pvpAs || a.type))
+        .map(a => [Math.floor(a.cd*(1 - cdr)*100)/100, a.pstun ? 1 : 0, a.slow ? 1 : 0]);
+    }
+  }
+  return JSON.stringify({hp:hpAB, def:defAB, aps, skills, gemK:[Math.ceil(kh*1000)/1000, Math.ceil(kd*1000)/1000], gemFlat:[GB.hp, GB.def], upMax:UMAX, cpPer:UPGRADES.find(u => u.id === "cpup").per, levelCap:LEVEL_CAP,
     ptsPerLevel:3, packPts:Object.fromEntries(PACKS.filter(p => (p.rew||[]).some(r => r.id === "pts")).map(p => [p.id, p.rew.find(r => r.id === "pts").n]))});
 })()`));
 process.stdout.write(JSON.stringify(out) + "\n");

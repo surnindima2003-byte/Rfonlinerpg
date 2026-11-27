@@ -23,6 +23,8 @@ import math
 import os
 import time
 
+from collections import deque
+
 import metrics
 from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
 
@@ -41,6 +43,70 @@ def def_mult(df, lvl):
     return k / (k + max(0.0, float(df or 0)))
 MOVE_RATE = env_float("MOVE_RATE", 460)     # пикселей в секунду (быстрейший класс с бонусами ~300)
 MOVE_BURST = env_float("MOVE_BURST", 650)   # запас на рывок (1150 px/с × 0,15 с) и телепорт 360
+
+# Частота обычных ударов по пилотам. Наибольшая честная скорость атаки класса (ударов в секунду) со всем, что ускоряет,
+# и самым сильным баффом скорости умения 10 уровня — считает tools/stat_caps.js (aps), сверяет test_pvp_caps.py.
+# Раньше был один предел на всех — удар не чаще раза в 0,3 с (3,3 в секунду): сильный Снайпер с «Разгоном» честно
+# бьёт до 6,7 раза в секунду, и сервер срезал его удары, а медленному Стражу читер мог ускорить удары почти вдвое.
+APS_MAX = {"guard": 3.61, "reaper": 4.92, "sniper": 6.73, "techno": 3.27, "ghost": 4.57, "glyph": 4.12, "medic": 3.44, "-": 6.24}
+APS_SLACK = 1.15           # запас на колебания времени (кадры, сеть)
+HIT_BURST = 3.0            # удары, пришедшие пачкой после задержки сети, не теряются
+
+
+def hit_rate_ok(info, now=None):
+    """Обычный удар по пилоту не чаще, чем честно бьёт самый быстрый робот этого класса (ведро токенов в info)."""
+    now = _now() if now is None else now
+    rate = APS_MAX.get(info.get("cls") or "-", APS_MAX["-"]) * APS_SLACK
+    tok = min(HIT_BURST, info.get("hit_tok", HIT_BURST) + (now - info.get("hit_tt", now)) * rate)
+    info["hit_tt"] = now
+    if tok < 1:
+        info["hit_tok"] = tok
+        return False
+    info["hit_tok"] = tok - 1
+    return True
+
+
+# Удары умениями по пилотам. Раньше сервер проверял только «не чаще раза в 0,8 с» и не знал перезарядок умений:
+# изменённый телефон слал «Шоковый удар» каждые 0,8 с — урон ×4 без перерыва и оглушение, из которого не выйти.
+# Для каждого класса — умения, которые бьют пилота: [самая короткая честная перезарядка (10 ур. умения и наибольшее
+# сокращение перезарядки), оглушает, замедляет]. Считает tools/stat_caps.js (skills), сверяет test_pvp_caps.py.
+SKILLS = {
+    "guard": [[7.84, 1, 0], [5.92, 0, 1], [8.56, 1, 0]],
+    "reaper": [[7.2, 0, 0], [8.56, 0, 1]],
+    "sniper": [[4.56, 0, 0], [5.92, 0, 0]],
+    "techno": [[2.04, 0, 0], [4.09, 1, 0]],
+    "ghost": [[5.28, 0, 0], [7.84, 0, 1]],
+    "glyph": [[8.02, 0, 1], [5.55, 0, 0]],
+    "medic": [[4.56, 0, 0]],
+}
+SKILL_WIN = 30.0           # окно учёта: за 30 с честно — каждое умение раз в перезарядку и ещё раз в начале боя
+SKILL_CD_SLACK = 0.95      # запас на колебания времени прихода сообщений
+
+
+def _allowed(cds):
+    return sum(int(SKILL_WIN // (cd * SKILL_CD_SLACK)) + 1 for cd in cds)
+
+
+def skill_check(info, want_stun, want_slow, now=None):
+    """Удар умением по пилоту: (принят, оглушение разрешено, замедление разрешено).
+    За последние SKILL_WIN секунд ударов умениями (и отдельно оглушений, замедлений) не больше, чем честно позволяют
+    перезарядки умений класса. Без класса умений нет."""
+    now = _now() if now is None else now
+    sk = SKILLS.get(info.get("cls") or "")
+    if not sk:
+        return False, False, False
+    log = info.get("sk_log")
+    if log is None:
+        log = info["sk_log"] = deque()
+    while log and now - log[0][0] > SKILL_WIN:
+        log.popleft()
+    if len(log) >= _allowed([x[0] for x in sk]):
+        return False, False, False
+    stun = bool(want_stun) and sum(1 for e in log if e[1]) < _allowed([x[0] for x in sk if x[1]])
+    slow = bool(want_slow) and sum(1 for e in log if e[2]) < _allowed([x[0] for x in sk if x[2]])
+    log.append((now, stun, slow))
+    return True, stun, slow
+
 
 _state = {}                # uid -> {"hp", "cp", "t", "heal", "heal_t"}
 
@@ -167,6 +233,13 @@ def _heal_budget(st, mhp):
     return st["heal"]
 
 
+CP_CREDIT_SEC = 3.0         # столько секунд сервер принимает рост CP от полученного лечения (см. heal)
+
+
+def _cp_credit(st):
+    return st.get("cpc", 0.0) if _now() - st.get("cpc_t", 0.0) < CP_CREDIT_SEC else 0.0
+
+
 def on_report(info):
     """Вызывать после разбора pos. В бою отчёт телефона принимается только в пределах правил."""
     uid = info["id"]
@@ -186,7 +259,13 @@ def on_report(info):
             metrics.inc("pvpguard.hp_clamped")
     # CP в бою растут только от лечения: в 10 раз больше прироста прочности (баланс 4 сезона)
     healed = max(0.0, st["hp"] - st.get("hp_prev", st["hp"]))
-    st["cp"] = min(rep_cp, st["cp"] + healed * 10) if rep_cp > st["cp"] else rep_cp
+    if rep_cp > st["cp"]:
+        credit = _cp_credit(st)
+        grow = min(rep_cp - st["cp"], healed * 10 + credit)
+        st["cpc"] = credit - max(0.0, grow - healed * 10)
+        st["cp"] += grow
+    else:
+        st["cp"] = rep_cp
     st["hp_prev"] = st["hp"]
     st["hp"] = min(st["hp"], mhp)
     info["hp"], info["cp"] = int(st["hp"]), int(st["cp"])
@@ -212,11 +291,24 @@ def on_hit(victim, dmg):
     return False
 
 
-def heal(uid, amount, mhp):
-    """Подхил от союзника сервер видит сам — сразу добавляем к своей прочности."""
+def heal(uid, amount, mhp, mcp=0, cp_k=10):
+    """Лечение Ремонтника сервер видит сам: добавляем к своей прочности и к CP (от союзника ×10, себе в PvP ×1 —
+    как healCP на телефоне). Раньше добавлялась только прочность, а она в бою почти всегда полная (удары сначала
+    съедают CP), поэтому лечение в PvP сервер не засчитывал и мог «убить» вылеченного раньше, чем он погиб у себя."""
     st = _state.get(uid)
-    if st:
-        st["hp"] = min(float(mhp), st["hp"] + amount)
+    if not st or amount <= 0:
+        return
+    grow = max(0.0, min(float(amount), float(mhp) - st["hp"]))
+    st["hp"] += grow
+    st["hp_prev"] = st.get("hp_prev", st["hp"] - grow) + grow   # этот прирост уже засчитан — on_report не удвоит CP
+    gain = float(amount) * cp_k
+    st["cp"] += gain
+    if mcp and mcp > 0:
+        st["cp"] = min(float(mcp), st["cp"])
+    # Отчёт телефона может прийти раньше, чем телефон узнал о лечении: тогда сервер опустит CP до отчёта,
+    # а следующий отчёт (уже с лечением) примет только в пределах этого «кредита» (живёт CP_CREDIT_SEC).
+    st["cpc"] = _cp_credit(st) + gain
+    st["cpc_t"] = _now()
 
 
 def clear(uid):

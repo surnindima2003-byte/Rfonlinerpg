@@ -46,6 +46,8 @@ class TablesMatchGame(unittest.TestCase):
         self.assertEqual(pvpguard.PACK_PTS, d["packPts"], msg)
         self.assertEqual(list(pvpguard.GEM_K), d["gemK"], msg)          # множители бонуса самоцветов (прочность, броня)
         self.assertEqual((pvpguard.UP_MAX, pvpguard.CP_PER_POINT, pvpguard.PTS_PER_LEVEL), (d["upMax"], d["cpPer"], d["ptsPerLevel"]))
+        self.assertEqual(pvpguard.APS_MAX, d["aps"], msg)                 # честная скорость атаки по классам
+        self.assertEqual(pvpguard.SKILLS, d["skills"], msg)               # умения по пилотам и их честные перезарядки
 
 
 class Caps(unittest.TestCase):

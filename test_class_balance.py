@@ -136,6 +136,13 @@ class ServerMirrorsGame(unittest.TestCase):
                     self.assertLessEqual(every, fastest - 0.5, f"{s['id']}: честный повтор через {fastest:.2f} с")
                     self.assertGreaterEqual(every, fastest * 0.75)               # но и не спам
 
+    def test_class_not_swapped_in_pvp_fight(self):
+        """От класса зависят пределы удара, оглушения и перезарядки умений — посреди PvP-боя сервер класс не меняет."""
+        self.assertIn('if new_cls != info.get("cls") and info.get("cls") and in_pvp_combat(info):', WEB)
+        self.assertIn("pvpguard.skill_check(info,", WEB)
+        self.assertIn("pvpguard.hit_rate_ok(info)", WEB)
+        self.assertNotIn('time.time() - info.get("pvp_t", 0) < 0.3', WEB)          # старый общий предел 3,3 удара/с
+
     def test_armor_share_is_the_same(self):
         self.assertEqual(pvpguard.DEF_K, int(re.search(r"const PVP_DEF_K = (\d+);", GAME).group(1)))
         for df, lvl, mult in self.g["defMult"]:

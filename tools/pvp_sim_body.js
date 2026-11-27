@@ -26,6 +26,6 @@ const SIM = run(`(() => {
   }
   const out = {};
   for(const L of [20, 35, 50]) out[L] = Object.keys(CLASSES).map(c => build(c, L));
-  return JSON.stringify({builds:out, defK:PVP_DEF_K, medPvp:MED_PVP, medSelf:MED_PVP_SELF, shieldMax:MED_SHIELD_MAX, siphonMax:MED_SIPHON_MAX});
+  return JSON.stringify({builds:out, defK:PVP_DEF_K, medPvp:MED_PVP, medSelf:MED_PVP_SELF, cpAlly:CP_HEAL, cpSelf:CP_HEAL_PVP_SELF, shieldMax:MED_SHIELD_MAX, siphonMax:MED_SIPHON_MAX});
 })()`);
 module.exports = {SIM:JSON.parse(SIM)};

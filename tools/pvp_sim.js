@@ -32,10 +32,13 @@ function hit(att, vic, raw, skill, crit, log){
   if(vic.hp <= 0){ vic.dead = true; }
   return eff;
 }
+// лечение как в игре: прочность до максимума и CP — от союзника ×10 (healCP), себе в бою с пилотами ×1 (CP_HEAL_PVP_SELF)
 function heal(src, tgt, amount, self){
   if(tgt.dead) return;
   const a = self ? amount*SIM.medSelf : amount;
-  const got = Math.min(a, tgt.b.hp - tgt.hp); tgt.hp += got; src.healed += got;
+  const got = Math.min(a, tgt.b.hp - tgt.hp); tgt.hp += got;
+  const gotCp = Math.min(a*(tgt === src ? SIM.cpSelf : SIM.cpAlly), tgt.b.cp - tgt.cp); tgt.cp += gotCp;
+  src.healed += got + gotCp;
 }
 function pickFoe(f, foes){ return foes.filter(x => !x.dead).sort((a, b) => (a.hp + a.cp) - (b.hp + b.cp))[0]; }
 function pickAlly(f, allies){ return allies.filter(x => !x.dead).sort((a, b) => a.hp/a.b.hp - b.hp/b.b.hp)[0]; }

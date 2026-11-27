@@ -1565,18 +1565,19 @@ med_bucket = {}              # tg_id Ремонтника -> [запас леч�
 med_shield = {}              # tg_id Ремонтника -> время последнего щита
 MED_RANGE = 460              # с запасом к дальности умений на телефоне (380) и задержке позиций
 MED_PVP = 0.6                # лечение по цели в PvP-бою слабее на 40%
+MED_PVP_SELF = 0.45          # самолечение Ремонтника в PvP-бою — зеркало game.html (телефон присылает число до урезания)
 # ---------- баланс классов в PvP (зеркало game.html → CLASSES, сверяет test_class_balance.py) ----------
 # Множитель класса в бою с пилотами: предел урона удара (и обычного, и умения) умножается на него, сам удар телефон
 # умножает на √множителя. Раньше предел был один на всех: с хорошим снаряжением удар упирался в него у любого класса,
 # урон выравнивался, а прочность и броня — нет, и «танки» выигрывали почти все дуэли. Подобрано моделью дуэлей.
-PVP_HIT_K = {"guard": 0.74, "reaper": 1.1, "sniper": 1.13, "techno": 1.07, "ghost": 1.45, "glyph": 0.8, "medic": 0.88}
+PVP_HIT_K = {"guard": 0.6, "reaper": 1.04, "sniper": 1.3, "techno": 1.12, "ghost": 1.5, "glyph": 0.88, "medic": 0.94}
 # Наибольшее оглушение пилота умением (сек) и замедление умением (доля) у класса; у остальных классов не пропускаем.
 PVP_SKILL_STUN = {"guard": 0.9, "techno": 0.7}
 PVP_SKILL_SLOW = {"guard": 0.3, "reaper": 0.4, "ghost": 0.3, "glyph": 0.4}
 # Щит на себя от умений (Броневой контур, Печать отражения, Силовое поле): (наибольшее снижение урона, длительность, не чаще раза в N сек).
 # Снижение применяет сервер, как у Щит-контура Ремонтника, — иначе он считал бы урон без щита и «добивал» живого.
 # N — чуть меньше самой короткой честной перезарядки (10 уровень умения, «Холодный расчёт», «Циклотрон», сет): чаще — только подделка.
-SELF_SHIELD = {"guard": (0.25, 10.0, 11.0), "glyph": (0.25, 7.0, 10.5), "techno": (0.2, 7.0, 6.0)}
+SELF_SHIELD = {"guard": (0.18, 10.0, 11.0), "glyph": (0.25, 7.0, 10.5), "techno": (0.2, 7.0, 6.0)}
 self_shield = {}             # tg_id -> время последнего щита на себя
 
 
@@ -2273,9 +2274,11 @@ async def handle_party(d, info):
             if amount < 1:
                 return
             b[0] -= amount
+            selfh = tgt is info
             if pvpguard.in_combat(tgt["id"]):
-                amount = max(1, int(amount * MED_PVP))
-            pvpguard.heal(tgt["id"], amount, mhp)
+                amount = max(1, int(amount * (MED_PVP_SELF if selfh else MED_PVP)))
+            # CP: лечение от союзника ×10 (healCP), себе в бою с пилотами ×1 (CP_HEAL_PVP_SELF) — как на телефоне
+            pvpguard.heal(tgt["id"], amount, mhp, tgt.get("mcp", 0), 1 if selfh else 10)
             if tgt is not info:
                 await push_to_player(tgt["id"], {"t": "healed", "from": info["nick"], "amount": amount, "q": 1})
         else:
@@ -2380,7 +2383,13 @@ def clean_pos(d, info):
         eq = d.get("eq") or {}
         info["eq"] = {k: int(v) for k, v in eq.items() if k in {"head", "weapon", "module", "armor", "core", "legs"} and v in (0, 1, 2, 3)}
         info["wpn"] = str(d.get("wpn", ""))[:12]
-        info["cls"] = d.get("cls") if isinstance(d.get("cls"), str) and d.get("cls") in CLASSES else ""
+        new_cls = d.get("cls") if isinstance(d.get("cls"), str) and d.get("cls") in CLASSES else ""
+        # класс меняют в ангаре; посреди PvP-боя сервер его не меняет — от класса зависят пределы удара, оглушения
+        # и перезарядки умений (pvpguard.SKILLS), и подменой класса нельзя было бы обойти их
+        if new_cls != info.get("cls") and info.get("cls") and in_pvp_combat(info):
+            metrics.inc("pvp.class_swap_drop")
+        else:
+            info["cls"] = new_cls
         # гильдия над головой: тег, название, эмблема
         info["hp"] = max(0, min(100000, int(d.get("hp", 0))))
         info["mhp"] = max(1, min(100000, int(d.get("mhp", 1))))
@@ -2670,7 +2679,8 @@ async def handle_chat(d, info):
 
 
 async def handle_pvp(d, info):
-    # удар по игроку: та же PvP-локация, рядом, не чаще 3 раз в секунду, урон не выше предела по уровню
+    # удар по игроку: та же PvP-локация, рядом, не чаще честной скорости атаки класса, умения — не чаще их перезарядок,
+    # урон не выше предела по уровню
     try:
         to, dmg = int(d.get("to")), int(d.get("dmg", 0))
     except (TypeError, ValueError):
@@ -2684,10 +2694,6 @@ async def handle_pvp(d, info):
     if ((tgt["x"] - info["x"]) ** 2 + (tgt["y"] - info["y"]) ** 2) ** 0.5 > 460:
         return
     skill = bool(d.get("skill"))
-    # у обычного удара и умения раздельные перезарядки: умение сразу после удара больше не теряется
-    if not skill and time.time() - info.get("pvp_t", 0) < 0.3:
-        metrics.inc("pvp.cooldown_drop")
-        return
     if info.get("srv_dead_until", 0) > time.time() or tgt.get("srv_dead_until", 0) > time.time():
         return                                   # сервер уже засчитал смерть одного из них
     pid = member_party.get(info["id"])
@@ -2698,12 +2704,30 @@ async def handle_pvp(d, info):
     if skill and time.time() - info.get("pvp_sk", 0) < 0.8:
         metrics.inc("pvp.skill_cooldown_drop")
         return                                   # умения по игрокам — не чаще раза в 0,8 с
+    # у обычного удара и умения раздельные пределы: умение сразу после удара не теряется;
+    # обычные удары — не чаще честной скорости атаки класса (pvpguard.hit_rate_ok)
+    if not skill and not pvpguard.hit_rate_ok(info):
+        metrics.inc("pvp.cooldown_drop")
+        return
+    cls = info.get("cls")
+    stn = sls = sld = 0.0
+    if skill:
+        try:
+            stn, sls, sld = float(d.get("stn") or 0), float(d.get("sls") or 0), float(d.get("sld") or 0)
+        except (TypeError, ValueError):
+            stn = sls = sld = 0.0
+        # не больше ударов умениями (и оглушений, замедлений), чем честно позволяют перезарядки умений класса
+        ok, stun_ok, slow_ok = pvpguard.skill_check(info, stn > 0 and bool(PVP_SKILL_STUN.get(cls)), sls > 0 and bool(PVP_SKILL_SLOW.get(cls)))
+        if not ok:
+            metrics.inc("pvp.skill_budget_drop")
+            return
+        stn = stn if stun_ok else 0.0
+        sls = sls if slow_ok else 0.0
     if skill:
         info["pvp_sk"] = time.time()
     else:
         info["pvp_t"] = time.time()
     info["pvp_last"] = time.time()
-    cls = info.get("cls")
     # предел урона: по уровню, ×множитель класса, у умения — ещё ×4
     cap = (40 + info["lvl"] * 8) * PVP_HIT_K.get(cls, 1.0) * (4 if skill else 1)
     dmg = max(1, min(dmg, int(cap)))
@@ -2725,10 +2749,6 @@ async def handle_pvp(d, info):
         hit["br"] = 1
     # оглушение и замедление умением — только у классов, у которых такие умения есть, и не сильнее, чем в игре
     if skill:
-        try:
-            stn, sls, sld = float(d.get("stn") or 0), float(d.get("sls") or 0), float(d.get("sld") or 0)
-        except (TypeError, ValueError):
-            stn = sls = sld = 0.0
         if stn > 0 and PVP_SKILL_STUN.get(cls):
             hit["stn"] = round(min(stn, PVP_SKILL_STUN[cls]), 2)
         if sls > 0 and PVP_SKILL_SLOW.get(cls):
