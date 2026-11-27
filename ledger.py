@@ -54,6 +54,14 @@ LOC_MIN = {"scrapfields": 1, "reactor_ruins": 3, "iron_canyon": 6}
 LOC_CORES = {"reactor_ruins", "iron_canyon"}   # локации с флагом cores в LOCS
 TIER_LVL = {1: 1, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45}
 GRADE_SELL = (1, 2, 4, 10)
+# Продажа торговцу всего, кроме снаряжения: цена ITEMS[id].sell в игре (сверяет test_ledger_sell.py).
+# Сервер не видит саму продажу (её делает телефон), но видит, что вещь пропала из сумки и склада между
+# сохранениями. Пропавшее можно было продать — столько лома и разрешаем. Потратить (заточка, крафт) тоже можно,
+# но тогда лома не будет: допуск лишь не мешает честной продаже, а подделка не даёт больше цены пропавшего.
+SELL = {"kit_s": 5, "kit_l": 20, "wire": 3, "plate": 4, "chip": 8, "pot_hp": 30, "pot_atk": 40, "pot_xp": 75,
+        "sph_cu": 40, "sph_ti": 200,
+        **{r: 400 for r in ("r_atk", "r_def", "r_hp", "r_crit", "r_spd", "r_aspd", "r_cpow", "r_regen")},
+        **{r: 2000 for r in ("r_war", "r_bastion", "r_storm", "r_fortune")}}
 
 
 def mob_info(mob):
@@ -186,6 +194,11 @@ def reset(uid):
     a["t"] = time.time()
 
 
+def sold_value(oldS, newS):
+    """Сколько лома можно было выручить у торговца за вещи (не снаряжение), которые пропали между сохранениями."""
+    return sum(max(0, _mats(oldS, k) - _mats(newS, k)) * price for k, price in SELL.items())
+
+
 def _mats(S, mid):
     n = 0
     for bag in ("inv", "store"):
@@ -236,6 +249,7 @@ def check(uid, nick, oldS, newS, granted):
         return []                                   # после перезапуска прихода нет — сверяет старая проверка
     a["_snap"] = {k: v for k, v in a.items() if k not in ("t", "_snap")}
     out = []
+    sold = sold_value(oldS, newS)                   # продажа торговцу материалов, зелий, сфер, рун и ремкомплектов
     for k in ("scrap", "cores") + MATS + POTS:
         if k in MATS or k in POTS:
             gain = _mats(newS, k) - _mats(oldS, k)
@@ -244,7 +258,7 @@ def check(uid, nick, oldS, newS, granted):
             if not (_num(o) and _num(n)):
                 continue
             gain = n - o
-        allowed = a.get(k, 0.0) + granted.get(k, 0) + SLACK[k]
+        allowed = a.get(k, 0.0) + granted.get(k, 0) + SLACK[k] + (sold if k == "scrap" else 0)
         if gain > allowed:
             out.append((k, int(gain), int(allowed)))
     metrics.inc("ledger.checked")

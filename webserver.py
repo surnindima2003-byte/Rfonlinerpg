@@ -527,7 +527,7 @@ async def api_save(request):
                             lg[k] = lg.get(k, 0) + bought.get(k, 0)
                     lnotes = ledger.check(user["id"], user["username"] or user["name"], base.get("S"), s_, lg)
                     if lnotes:
-                        log.info("Учёт ресурсов uid=%s (%s): %s", user["id"], ledger.MODE, "; ".join(f"{k} +{g} при приходе {a}" for k, g, a in lnotes))
+                        log.warning("Учёт ресурсов uid=%s (%s): %s", user["id"], ledger.MODE, "; ".join(f"{k} +{g} при приходе {a}" for k, g, a in lnotes))
                         bad = ledger.enforce(base.get("S"), s_, lnotes, fix)
                         if bad:
                             names = {"chip": "микросхемы", "wire": "провода", "plate": "бронепластины"}
