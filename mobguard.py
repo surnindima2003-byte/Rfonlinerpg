@@ -15,12 +15,15 @@
   on     — отклонять неправдоподобные убийства.
 Сначала смотри /metrics в режиме shadow: у честных игроков отказов почти не должно быть.
 """
+import logging
 import os
 import re
 import time
 
 import metrics
 from config import env_int, env_float      # пустая переменная в Railway не роняет сервер
+
+log = logging.getLogger("mobguard")
 
 MODE = os.getenv("MOB_GUARD", "shadow").strip().lower()
 SEEN_MIN = env_float("MOB_SEEN_MIN", 0.85)       # доля прочности моба, которую сервер должен увидеть ударами
@@ -235,6 +238,11 @@ def allow_kill(uid, iid, mob, now=None):
         _reject_day[0] = day
         _rejects.clear()
     _rejects[uid] = _rejects.get(uid, 0) + 1
+    # в лог Railway — первые отказы игрока за сутки и дальше каждый 50-й: по логам видно, не ловит ли проверка
+    # честных игроков, ещё до включения MOB_GUARD=on (счётчики в памяти пропадают при перезапуске)
+    n = _rejects[uid]
+    if n <= 3 or n % 50 == 0:
+        log.warning("mobguard %s: отказ uid=%s моб=%s причина=%s (за сутки: %s)", MODE, uid, mob, reason, n)
     if MODE == "on":
         return False
     if is_boss(mob) and reason != "boss_respawn":
