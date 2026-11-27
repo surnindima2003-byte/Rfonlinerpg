@@ -283,7 +283,8 @@ class ProcessKills(unittest.TestCase):
             "pvp": types.SimpleNamespace(mob_killed=a_none),
             "funnel": types.SimpleNamespace(mark=lambda *a: None),
             "vip": types.SimpleNamespace(level=lambda *a: a_val(0), LEVELS=[], drop_mult=lambda lv: 1),
-            "seasonpts": types.SimpleNamespace(kill_counter=lambda loc: None, add=a_none, has_ticket=lambda uid: a_val(False)),
+            "seasonpts": types.SimpleNamespace(kill_counter=lambda loc: None, add=a_none, has_ticket=lambda uid: a_val(False),
+                                           pass_add=a_none, PASS_KILL=1, PASS_BOSS=20),
             "ledger": types.SimpleNamespace(add=lambda *a: None, kill_income=lambda *a, **k: {}),
         }
         session = types.SimpleNamespace(commit=a_none)

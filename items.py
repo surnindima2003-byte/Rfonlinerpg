@@ -840,6 +840,8 @@ async def api_items(request):
             e0 = x.e
             if random.random() * 100 < ENCH_CHANCE[e0]:
                 vals, result = {"e": e0 + 1}, "ok"
+                import seasonpts
+                await seasonpts.pass_add(uid, seasonpts.PASS_ENCH)      # удачная заточка: опыт пропуска, как в игре
             elif sid == "sph_ti":
                 vals, result = ({"e": e0 - 1} if e0 > 0 else {}), "fail"          # безопасная заточка: при неудаче −1, не ниже +0
             else:
@@ -1007,6 +1009,7 @@ async def process_kills(s, uid, me, kills, exp_out=None):
         ctr = seasonpts.kill_counter(loc)
         if ctr:
             await seasonpts.add(uid, ctr, 1)                # задания сезона: убийства на этажах и в полях
+        await seasonpts.pass_add(uid, seasonpts.PASS_BOSS if boss else seasonpts.PASS_KILL)   # опыт пропуска сезона
         before = await count_loot_kill(s, uid, 10 if boss else 1)
         lf = loot_factor(before)
         if vip_lv is None:

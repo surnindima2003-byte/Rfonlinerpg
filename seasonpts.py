@@ -278,6 +278,142 @@ def setup(app, read_auth, push_to_player):
     app.router.add_post("/api/season/state", api_state)
     app.router.add_post("/api/season/event", api_event)
 
+    async def api_pass(request):
+        """Пропуск сезона: {} — опыт и полученные награды; {lv, prem} — забрать награду уровня lv."""
+        body, user = await read_auth(request)
+        uid, admin = user["id"], bool(user.get("admin"))
+        import saveguard
+        async with saveguard.player_lock(uid):                  # заодно с сохранением — по очереди
+            st = await _load(uid)
+            p = await _pass_state(uid, st)
+            if body.get("lv") is not None:
+                try:
+                    lv = int(body.get("lv"))
+                except (TypeError, ValueError):
+                    lv = -1
+                err = pass_claim(uid, st, lv, bool(body.get("prem")), admin or await has_ticket(uid))
+                if err:
+                    return web.json_response({"ok": False, "error": err, **pass_view(p)})
+                await flush()                                   # награда — сразу в базу, не через 20 с
+        return web.json_response({"ok": True, **pass_view(p)})
+
+    app.router.add_post("/api/season/pass", api_pass)
+
+
+# ===================== ПРОПУСК СЕЗОНА =====================
+# Раньше опыт пропуска и награды за его уровни (до 6 000 лома за уровень, ядра, сферы) считал только телефон:
+# сервер о них не знал — их можно было подделать, а учёт ресурсов (RES_LEDGER=on) срезал бы их честным игрокам.
+# Теперь опыт копит сервер (за убийства, которые он подтвердил, и за удачную заточку на сервере), награду игрок
+# забирает через /api/season/pass, а сервер записывает приход в учёт ресурсов и проверку сохранений.
+# Зеркало seasonNeed / seasonReward из game.html (сверяет test_season_pass.py).
+PASS_LV = 30
+PASS_KILL, PASS_BOSS, PASS_ENCH = 1, 20, 5      # опыт пропуска: враг, главарь, удачная заточка (как в игре)
+
+
+def pass_need(n):
+    return 300 + 100 * (n - 1)
+
+
+PASS_MAX = sum(pass_need(i) for i in range(1, PASS_LV + 1))
+
+
+def pass_level(xp):
+    lv, left = 0, xp
+    while lv < PASS_LV and left >= pass_need(lv + 1):
+        left -= pass_need(lv + 1)
+        lv += 1
+    return lv
+
+
+def pass_reward(lv, prem):
+    """Награда уровня lv (как seasonReward в игре): {id: число}. Лом, ядра и сферы сервер учитывает."""
+    if not prem:
+        return ({"sph_cu": 1 + lv // 10} if lv % 5 == 0 else {"kit_l": 2} if lv % 3 == 0
+                else {"cores": 5 + lv} if lv % 4 == 0 else {"scrap": 200 * lv})
+    return ({"g_core_5": 1} if lv == 30 else {"wcls": 1} if lv == 15 else {"sph_ti": 1} if lv % 5 == 0
+            else {"bookcls": 1} if lv % 2 == 0 else {"cores": 10 + lv})
+
+
+def _same_season(client_id, key):
+    """Сезон в сохранении телефона («2026-1») и на сервере («2026-01»)."""
+    try:
+        return tuple(int(x) for x in str(client_id).split("-")) == tuple(int(x) for x in key.split("-"))
+    except ValueError:
+        return False
+
+
+async def _pass_state(uid, st):
+    """Пропуск игрока в текущем сезоне. Первый раз — переносим из сохранения то, что телефон уже насчитал
+    в ЭТОМ сезоне (опыт и полученные награды): иначе честный игрок потерял бы прогресс при обновлении."""
+    p = st["data"].get("pass")
+    if isinstance(p, dict):
+        return p
+    p = {"xp": 0, "f": [], "p": []}
+    try:
+        from models import GameSave
+        async with SessionLocal() as s:
+            raw = (await s.execute(select(GameSave.data).where(GameSave.tg_id == uid))).scalar_one_or_none()
+        S = (json.loads(raw) or {}).get("S") if raw else None
+        old = S.get("season") if isinstance(S, dict) else None
+        if isinstance(old, dict) and _same_season(old.get("id"), st["season"]):
+            xp = old.get("xp")
+            p["xp"] = int(min(PASS_MAX, max(0, xp))) if isinstance(xp, (int, float)) and not isinstance(xp, bool) else 0
+            for k, src in (("f", "free"), ("p", "prem")):
+                p[k] = sorted({x for x in (old.get(src) or []) if isinstance(x, int) and not isinstance(x, bool) and 1 <= x <= PASS_LV})
+    except Exception:
+        log.exception("пропуск: не удалось перенести прогресс из сохранения uid=%s", uid)
+    cur = st["data"].get("pass")                 # пока ждали базу, пропуск мог создать другой запрос
+    if isinstance(cur, dict):
+        return cur
+    st["data"]["pass"] = p
+    _dirty.add(uid)
+    metrics.inc("season.pass_migrated")
+    return p
+
+
+def pass_view(p):
+    return {"xp": p["xp"], "lv": pass_level(p["xp"]), "free": list(p["f"]), "prem": list(p["p"])}
+
+
+async def pass_add(uid, n):
+    """Опыт пропуска за событие, которое сервер подтвердил сам."""
+    if not uid or n <= 0:
+        return
+    try:
+        st = await _load(uid)
+        p = await _pass_state(uid, st)
+    except Exception:
+        log.exception("пропуск: не удалось загрузить uid=%s", uid)
+        return
+    if p["xp"] < PASS_MAX:
+        p["xp"] = min(PASS_MAX, p["xp"] + n)
+        _dirty.add(uid)
+
+
+def pass_claim(uid, st, lv, prem, ticket):
+    """Забрать награду уровня lv. Возвращает текст ошибки или None. Приход — в учёт ресурсов и проверку сохранений."""
+    p = st["data"]["pass"]
+    if not 1 <= lv <= PASS_LV:
+        return "Нет такой награды"
+    if pass_level(p["xp"]) < lv:
+        return f"Награда откроется на {lv} уровне пропуска"
+    if prem and not ticket:
+        return "Премиум-награды — только с билетом сезона"
+    box = p["p" if prem else "f"]
+    if lv in box:
+        return "Награда уже получена"
+    box.append(lv)
+    box.sort()
+    _dirty.add(uid)
+    rew = pass_reward(lv, prem)
+    import ledger
+    import saveguard
+    money = {k: v for k, v in rew.items() if k in ("scrap", "cores")}
+    ledger.add(uid, money)
+    saveguard.note_grant(uid, {**money, "sph": rew.get("sph_cu", 0) + rew.get("sph_ti", 0)})
+    metrics.inc("season.pass_claim")
+    return None
+
 
 # ===================== РЕЙТИНГ СЕЗОНА И ПРИЗЫ =====================
 # Топ-20 по очкам сезона. После конца сезона итоги фиксируются (таблица season_prizes),
