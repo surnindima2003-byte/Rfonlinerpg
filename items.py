@@ -777,7 +777,9 @@ async def api_items(request):
             gemcx = {k: min(gem_cap(k), sph.get(GEM_CX + k, 0) or 0) for k in GEMS}
             remember_gems(uid, gemcx)
             return web.json_response({"ok": True, "items": [{"uid": x.uid, "id": x.item, "g": x.g, "e": x.e} for x in items],
-                                      "sph": {k: sph.get(k, 0) for k in REG_IDS}, "gemcx": gemcx})
+                                      "sph": {k: sph.get(k, 0) for k in REG_IDS}, "gemcx": gemcx,
+                                      # учтённые руны в гнёздах вещей: по ним телефон возвращает руны, потерянные старой ошибкой
+                                      "sock": {k: sph.get(SOCKET_PREFIX + k, 0) for k in RUNES if sph.get(SOCKET_PREFIX + k, 0) > 0}})
 
         if op == "gem":
             # Кодекс → «Самоцветы»: сданные камни списываются с учёта игрока и навсегда прибавляются к счётчику

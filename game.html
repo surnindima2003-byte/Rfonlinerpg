@@ -2579,7 +2579,9 @@ function droneMigrate(){
   for(const id of S.drones) if(DRONES[id] && !droneOwned(id)) addItem(S.inv, id, 1, INV_MAX) || addItem(S.store, id, 1, STORE_MAX);
   delete S.drones;
 }
-function addItem(list, id, n, max, g, e, uid){
+// src — вещь, которую переносят (надеть, снять, склад): у неё есть гнездо руны (r, rg), и оно едет вместе с вещью.
+// Раньше вещь пересоздавалась только из id, грейда, заточки и номера — вставленная руна пропадала навсегда.
+function addItem(list, id, n, max, g, e, uid, src){
   const stackable = ITEMS[id].type !== "gear";
   if(stackable){
     const ex = list.find(x => x.id === id);
@@ -2588,9 +2590,18 @@ function addItem(list, id, n, max, g, e, uid){
     list.push({id, n}); return n;
   }
   let added = 0;
-  while(added < n && list.length < max){ const it = {id, n:1, g:g||0, e:e||0}; if(uid) it.uid = uid; list.push(it); added++; }
+  while(added < n && list.length < max){ const it = {id, n:1, g:g||0, e:e||0}; if(uid) it.uid = uid; gearRunes(it, src); list.push(it); added++; }
   return added;
 }
+// сколько учтённых рун этого вида стоит в гнёздах вещей (надетых, в сумке и на складе)
+function runeSocketedReg(id){
+  let n = 0;
+  for(const x of [...Object.values(S.eq || {}), ...(S.inv || []), ...(S.store || [])])
+    if(x && Array.isArray(x.r)) x.r.forEach((r, k) => { if(r === id && x.rg && x.rg[k]) n++; });
+  return n;
+}
+// перенести гнездо руны с одной записи вещи на другую
+function gearRunes(to, from){ if(from && Array.isArray(from.r) && from.r.some(Boolean)){ to.r = from.r.slice(); if(Array.isArray(from.rg)) to.rg = from.rg.slice(); } return to; }
 function removeItem(list, id, n){
   for(let i = list.length-1; i >= 0 && n > 0; i--){
     if(list[i].id !== id) continue;
@@ -3992,7 +4003,7 @@ function transferItem(i, k){
   const from = stTab === "inv" ? S.inv : S.store, to = stTab === "inv" ? S.store : S.inv, max = stTab === "inv" ? STORE_MAX : INV_MAX;
   const x = from[i]; if(!x) return;
   k = Math.max(1, Math.min(x.n || 1, k || x.n || 1));
-  if(!addItem(to, x.id, k, max, x.g, x.e, x.uid)){ toast(stTab === "inv" ? "Хранилище заполнено" : "Инвентарь заполнен"); return; }
+  if(!addItem(to, x.id, k, max, x.g, x.e, x.uid, x)){ toast(stTab === "inv" ? "Хранилище заполнено" : "Инвентарь заполнен"); return; }
   if(ITEMS[x.id].type === "gear" || k >= x.n) from.splice(i, 1); else x.n -= k;
   toast((stTab === "inv" ? "В хранилище: " : "В инвентарь: ") + ITEMS[x.id].name + (k > 1 ? " ×" + k : ""));
 }
@@ -4031,14 +4042,14 @@ function equipAt(i){
   const x = S.inv[i]; if(!x) return false; const it = ITEMS[x.id];
   if(it.cls && it.cls !== S.cls){ toast((it.uniq ? "Это сет класса «" : "Это оружие класса «") + CLASSES[it.cls].name + "»"); return false; }
   const old = S.eq[it.slot];
-  S.inv.splice(i, 1); S.eq[it.slot] = {id:x.id, g:x.g||0, e:x.e||0, ...(x.uid ? {uid:x.uid} : {})};
-  if(old) S.inv.splice(i, 0, {id:old.id, n:1, g:old.g, e:old.e||0, ...(old.uid ? {uid:old.uid} : {})});
+  S.inv.splice(i, 1); S.eq[it.slot] = gearRunes({id:x.id, g:x.g||0, e:x.e||0, ...(x.uid ? {uid:x.uid} : {})}, x);
+  if(old) S.inv.splice(i, 0, gearRunes({id:old.id, n:1, g:old.g, e:old.e||0, ...(old.uid ? {uid:old.uid} : {})}, old));
   S.hp = Math.min(S.hp, stat().maxhp);
   toast("Надето: " + it.name); save(); return true;
 }
 function unequip(slot){
   const e = S.eq[slot]; if(!e) return false;
-  if(!addItem(S.inv, e.id, 1, INV_MAX, e.g, e.e, e.uid)){ toast("Сумка заполнена"); return false; }
+  if(!addItem(S.inv, e.id, 1, INV_MAX, e.g, e.e, e.uid, e)){ toast("Сумка заполнена"); return false; }
   S.eq[slot] = null; S.hp = Math.min(S.hp, stat().maxhp); toast("Снято: " + ITEMS[e.id].name); save(); return true;
 }
 
@@ -12370,6 +12381,12 @@ async function regSync(){
       let miss = (REG.sph[id] || 0) - (count(S.inv, id) + count(S.store, id));
       while(miss-- > 0){ if(addItem(S.inv, id, 1, INV_MAX) || addItem(S.store, id, 1, STORE_MAX)) back.push(ITEMS[id].name); else break; }
     }
+    // учтённые руны, которые сервер числит в гнёздах, а на телефоне их там нет: их стирала старая ошибка — при
+    // надевании, снятии и переносе на склад вещь теряла руну. Возвращаем в сумку, учёт — из гнезда обратно
+    if(r.sock) for(const id of RUNE_IDS){
+      let miss = (+r.sock[id] || 0) - runeSocketedReg(id);
+      while(miss-- > 0){ if(!addItem(S.inv, id, 1, INV_MAX) && !addItem(S.store, id, 1, STORE_MAX)) break; runeUnsocketReg(id); back.push(RUNES[id].name); }
+    }
     if(back.length){ if(S.drone && !droneOn()) S.drone = ""; if(!droneOn()){ const d = DRONE_IDS.find(droneOwned); if(d) S.drone = d; }
       toast("Возвращено: " + back.join(", ")); }
     const byUid = Object.fromEntries(r.items.map(x => [x.uid, x]));
@@ -14839,7 +14856,7 @@ function stBulk(kind){
   let moved = 0, left = 0;
   for(let i = from.length - 1; i >= 0; i--){
     const x = from[i]; if(stCatOf(x.id) !== kind) continue;
-    if(addItem(to, x.id, x.n, max, x.g, x.e, x.uid)){ moved += x.n; from.splice(i, 1); } else left++;
+    if(addItem(to, x.id, x.n, max, x.g, x.e, x.uid, x)){ moved += x.n; from.splice(i, 1); } else left++;
   }
   toast(moved ? (kind === "res" ? "В хранилище сложено: " : "В инвентарь забрано: ") + moved + " шт." + (left ? " Не поместилось: " + left : "") : "Нечего переносить");
   if(moved){ Sfx.play("pick"); save(); }
